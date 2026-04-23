@@ -1,5 +1,5 @@
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQLERRSfAPahteMekMH-fmJ9hr8XQAsuV1cTO8L0yTu7pjIkuUZu4w_uGEz2lEIcfktl1cy9dys6JAb/pub?output=csv";
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwuji-3n6W2ib54HefkeaO0RIKk8koaoL7yX094ldWadieyApG9IUR6ngrz-D6NkFjI/exec";
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby3UW0UeyEotv-YMsEc8tG4JfHEYtjOS3RIxEqcmi5imoTMOTGBAzs2nu1OtI22XFIw/exec";
 
 function json(statusCode, payload) {
   return {
