@@ -30,10 +30,16 @@
       <label for="filtroStatus">Filtrar por status</label>
       <select id="filtroStatus">
         <option value="todos">Todos</option>
+        <option value="SEM STATUS">SEM STATUS</option>
         <option value="PENDENTE">PENDENTE</option>
         <option value="CONCLUIDO">CONCLUIDO</option>
-        <option value="Cadastrado">Cadastrado</option>
+        <option value="CADASTRADO">CADASTRADO</option>
       </select>
+    </div>
+
+    <div class="field">
+      <label for="filtroAgente">Filtrar por agente</label>
+      <input id="filtroAgente" type="text" placeholder="Digite o nome do agente...">
     </div>
 
     <div class="field field-small">
@@ -52,7 +58,7 @@
       <strong id="statTotal">0</strong>
     </div>
     <div class="stat-card">
-      <span>Cadastrado</span>
+      <span>CADASTRADO</span>
       <strong id="statTreinamento">0</strong>
     </div>
     <div class="stat-card">
@@ -63,6 +69,10 @@
       <span>CONCLUIDO</span>
       <strong id="statProducao">0</strong>
     </div>
+    <div class="stat-card">
+      <span>SEM STATUS</span>
+      <strong id="statSemStatus">0</strong>
+    </div>
   </section>
 
   <div class="table-wrapper">
@@ -70,6 +80,7 @@
       <thead>
         <tr>
           <th>Máquina</th>
+          <th>Agente</th>
           <th>Status</th>
           <th>Ações</th>
         </tr>
@@ -101,9 +112,10 @@
       <div class="field">
         <label for="modalStatus">Status</label>
         <select id="modalStatus" name="status" required>
+          <option value="SEM STATUS">SEM STATUS</option>
           <option value="PENDENTE">PENDENTE</option>
           <option value="CONCLUIDO">CONCLUIDO</option>
-          <option value="Cadastrado">Cadastrado</option>
+          <option value="CADASTRADO">CADASTRADO</option>
         </select>
       </div>
       <input id="modalMaquinaAtual" type="hidden">

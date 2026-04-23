@@ -82,7 +82,7 @@ h1 {
 .toolbar {
   margin-bottom: 18px;
   display: grid;
-  grid-template-columns: 2fr 1.3fr 1fr;
+  grid-template-columns: 1.6fr 1.2fr 1.6fr 1fr;
   gap: 12px;
 }
 
@@ -110,7 +110,7 @@ select {
 
 .stats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
   gap: 10px;
   margin-bottom: 16px;
 }

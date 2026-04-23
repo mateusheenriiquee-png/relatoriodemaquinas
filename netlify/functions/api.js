@@ -1,6 +1,15 @@
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQLERRSfAPahteMekMH-fmJ9hr8XQAsuV1cTO8L0yTu7pjIkuUZu4w_uGEz2lEIcfktl1cy9dys6JAb/pub?output=csv";
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw0LcctEgB5o9xKZv5VQpQ7L3strG88hIMJfrfHG41nUXAr1HNOJOGXCO4AJ16umSpn/exec";
 
+function normalizeStatus(value) {
+  const status = String(value || "").trim().toUpperCase();
+  if (!status) return "SEM STATUS";
+  if (status === "CADASTRADO" || status === "CADASTRADA") return "CADASTRADO";
+  if (status === "CONCLUIDO" || status === "CONCLUÍDO") return "CONCLUIDO";
+  if (status === "PENDENTE") return "PENDENTE";
+  return status;
+}
+
 function json(statusCode, payload) {
   return {
     statusCode,
@@ -59,6 +68,7 @@ function parseCsv(csvText) {
 
   const header = parsed[headerIndex].map((cell) => cell.toUpperCase());
   const maquinaIdx = header.findIndex((cell) => cell === "MAQUINA");
+  const agenteIdx = header.findIndex((cell) => cell === "AGENTE");
   const situacaoIdx = header.findIndex((cell) => cell === "SITUAÇÃO" || cell === "SITUACAO");
 
   if (maquinaIdx < 0 || situacaoIdx < 0) return [];
@@ -67,7 +77,8 @@ function parseCsv(csvText) {
     .slice(headerIndex + 1)
     .map((row) => ({
       maquina: (row[maquinaIdx] || "").trim(),
-      status: (row[situacaoIdx] || "").trim() || "PENDENTE"
+      agente: (row[agenteIdx] || "").trim(),
+      status: normalizeStatus(row[situacaoIdx] || "")
     }))
     .filter((item) => item.maquina);
 }

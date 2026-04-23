@@ -1,11 +1,12 @@
 const apiURL = "/.netlify/functions/api";
-const STATUS_OPTIONS = ["PENDENTE", "CONCLUIDO", "Cadastrado"];
+const STATUS_OPTIONS = ["SEM STATUS", "PENDENTE", "CONCLUIDO", "CADASTRADO"];
 const PAGE_SIZE = 8;
 
 const state = {
   maquinas: [],
   filtroTexto: "",
   filtroStatus: "todos",
+  filtroAgente: "",
   ordenacao: "nome-asc",
   paginaAtual: 1,
   modalModo: "adicionar"
@@ -14,6 +15,7 @@ const state = {
 const tbody = document.getElementById("tbody");
 const filtroTextoEl = document.getElementById("filtroTexto");
 const filtroStatusEl = document.getElementById("filtroStatus");
+const filtroAgenteEl = document.getElementById("filtroAgente");
 const ordenacaoEl = document.getElementById("ordenacao");
 const paginationInfo = document.getElementById("paginationInfo");
 const modal = document.getElementById("modalMaquina");
@@ -33,6 +35,15 @@ function fromKey(value) {
 
 function normalizarNome(nome) {
   return (nome || "").trim().toLowerCase();
+}
+
+function normalizarStatus(status) {
+  const valor = String(status || "").trim().toUpperCase();
+  if (!valor) return "SEM STATUS";
+  if (valor === "CONCLUÍDO") return "CONCLUIDO";
+  if (valor === "CADASTRADO" || valor === "CADASTRADA") return "CADASTRADO";
+  if (valor === "PENDENTE") return "PENDENTE";
+  return valor;
 }
 
 function compararNomeNatural(a, b) {
@@ -67,7 +78,7 @@ async function carregar() {
 
 function getStatusClass(status) {
   if (status === "CONCLUIDO") return "status-Produção";
-  if (status === "Cadastrado") return "status-Treinamento";
+  if (status === "CADASTRADO") return "status-Treinamento";
   return "status-Pendente";
 }
 
@@ -80,7 +91,12 @@ function getMaquinasFiltradas() {
   }
 
   if (state.filtroStatus !== "todos") {
-    dados = dados.filter((item) => item.status === state.filtroStatus);
+    dados = dados.filter((item) => normalizarStatus(item.status) === state.filtroStatus);
+  }
+
+  if (state.filtroAgente) {
+    const termoAgente = state.filtroAgente.toLowerCase();
+    dados = dados.filter((item) => String(item.agente || "").toLowerCase().includes(termoAgente));
   }
 
   if (state.ordenacao === "nome-asc") {
@@ -109,14 +125,16 @@ function calcularPaginacao(totalItens) {
 
 function atualizarEstatisticas() {
   const total = state.maquinas.length;
-  const treinamento = state.maquinas.filter((m) => m.status === "Cadastrado").length;
-  const pendente = state.maquinas.filter((m) => m.status === "PENDENTE").length;
-  const producao = state.maquinas.filter((m) => m.status === "CONCLUIDO").length;
+  const semStatus = state.maquinas.filter((m) => normalizarStatus(m.status) === "SEM STATUS").length;
+  const pendente = state.maquinas.filter((m) => normalizarStatus(m.status) === "PENDENTE").length;
+  const concluido = state.maquinas.filter((m) => normalizarStatus(m.status) === "CONCLUIDO").length;
+  const cadastrado = state.maquinas.filter((m) => normalizarStatus(m.status) === "CADASTRADO").length;
 
   document.getElementById("statTotal").textContent = String(total);
-  document.getElementById("statTreinamento").textContent = String(treinamento);
+  document.getElementById("statTreinamento").textContent = String(cadastrado);
   document.getElementById("statPendente").textContent = String(pendente);
-  document.getElementById("statProducao").textContent = String(producao);
+  document.getElementById("statProducao").textContent = String(concluido);
+  document.getElementById("statSemStatus").textContent = String(semStatus);
 }
 
 function render() {
@@ -127,7 +145,7 @@ function render() {
 
   if (!dadosPaginados.length) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td colspan="3" class="empty">Nenhum registro encontrado para os filtros selecionados.</td>`;
+    tr.innerHTML = `<td colspan="4" class="empty">Nenhum registro encontrado para os filtros selecionados.</td>`;
     tbody.appendChild(tr);
     atualizarEstatisticas();
     atualizarRodapePaginacao(0, 0, totalPaginas);
@@ -137,18 +155,20 @@ function render() {
   dadosPaginados.forEach((item) => {
     const tr = document.createElement("tr");
     const maquinaKey = toKey(item.maquina);
+    const statusAtual = normalizarStatus(item.status);
     const options = STATUS_OPTIONS.map(
-      (status) => `<option value="${status}" ${status === item.status ? "selected" : ""}>${status}</option>`
+      (status) => `<option value="${status}" ${status === statusAtual ? "selected" : ""}>${status}</option>`
     ).join("");
 
     tr.innerHTML = `
       <td>${item.maquina}</td>
-      <td><span class="status-pill ${getStatusClass(item.status)}">${item.status}</span></td>
+      <td>${item.agente || "-"}</td>
+      <td><span class="status-pill ${getStatusClass(statusAtual)}">${statusAtual}</span></td>
       <td>
         <div class="table-actions">
           <select data-maquina-key="${maquinaKey}" class="statusSelect">${options}</select>
           <button class="btn btn-small btn-success" data-action="salvar" data-maquina-key="${maquinaKey}">Salvar</button>
-          <button class="btn btn-small btn-warning" data-action="editar" data-maquina-key="${maquinaKey}" data-status="${item.status}">Editar</button>
+          <button class="btn btn-small btn-warning" data-action="editar" data-maquina-key="${maquinaKey}" data-status="${statusAtual}">Editar</button>
           <button class="btn btn-small btn-danger" data-action="excluir" data-maquina-key="${maquinaKey}">Excluir</button>
         </div>
       </td>
@@ -183,7 +203,7 @@ async function chamarAPI(payload) {
 }
 
 async function atualizar(maquina, status) {
-  await chamarAPI({ acao: "atualizarStatus", maquina, status });
+  await chamarAPI({ acao: "atualizarStatus", maquina, status: normalizarStatus(status) });
   await carregar();
 }
 
@@ -196,7 +216,7 @@ function abrirModalAdicionar() {
   state.modalModo = "adicionar";
   modalTitulo.textContent = "Nova Máquina";
   modalNome.value = "";
-  modalStatus.value = "PENDENTE";
+  modalStatus.value = "SEM STATUS";
   modalMaquinaAtual.value = "";
   modal.classList.remove("hidden");
 }
@@ -260,6 +280,12 @@ filtroStatusEl.addEventListener("change", (e) => {
   render();
 });
 
+filtroAgenteEl.addEventListener("input", (e) => {
+  state.filtroAgente = e.target.value.trim();
+  state.paginaAtual = 1;
+  render();
+});
+
 ordenacaoEl.addEventListener("change", (e) => {
   state.ordenacao = e.target.value;
   state.paginaAtual = 1;
@@ -275,14 +301,14 @@ formMaquina.addEventListener("submit", async (e) => {
   try {
     validarFormulario(nome, maquinaAtual);
     if (state.modalModo === "adicionar") {
-      await chamarAPI({ acao: "adicionar", maquina: nome, status });
+      await chamarAPI({ acao: "adicionar", maquina: nome, status: normalizarStatus(status) });
       alert("Máquina adicionada com sucesso.");
     } else {
       await chamarAPI({
         acao: "editar",
         maquinaAtual,
         novaMaquina: nome,
-        novoStatus: status
+        novoStatus: normalizarStatus(status)
       });
       alert("Máquina editada com sucesso.");
     }
