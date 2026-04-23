@@ -1,5 +1,5 @@
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQLERRSfAPahteMekMH-fmJ9hr8XQAsuV1cTO8L0yTu7pjIkuUZu4w_uGEz2lEIcfktl1cy9dys6JAb/pub?output=csv";
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwUP7JuHLgRCvl0gG3o68K09sndNZYbJ-sPFHrW-s27oUiw9Oh9lQLeGT27rjTUFoL7/exec";
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwuji-3n6W2ib54HefkeaO0RIKk8koaoL7yX094ldWadieyApG9IUR6ngrz-D6NkFjI/exec";
 
 function json(statusCode, payload) {
   return {
@@ -11,19 +11,64 @@ function json(statusCode, payload) {
   };
 }
 
+function parseCsvLine(line) {
+  const cells = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i += 1) {
+    const char = line[i];
+    const next = line[i + 1];
+
+    if (char === '"' && inQuotes && next === '"') {
+      current += '"';
+      i += 1;
+      continue;
+    }
+
+    if (char === '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+
+    if (char === "," && !inQuotes) {
+      cells.push(current.trim());
+      current = "";
+      continue;
+    }
+
+    current += char;
+  }
+
+  cells.push(current.trim());
+  return cells;
+}
+
 function parseCsv(csvText) {
-  return csvText
+  const lines = csvText
     .split("\n")
-    .slice(1)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const columns = line.split(",");
-      return {
-        maquina: (columns[0] || "").trim(),
-        status: (columns[1] || "").trim()
-      };
-    })
+    .map((line) => line.replace(/\r/g, ""))
+    .filter((line) => line.trim().length > 0);
+
+  const parsed = lines.map(parseCsvLine);
+  const headerIndex = parsed.findIndex((row) =>
+    row.some((cell) => cell.toUpperCase() === "MAQUINA")
+  );
+
+  if (headerIndex < 0) return [];
+
+  const header = parsed[headerIndex].map((cell) => cell.toUpperCase());
+  const maquinaIdx = header.findIndex((cell) => cell === "MAQUINA");
+  const situacaoIdx = header.findIndex((cell) => cell === "SITUAÇÃO" || cell === "SITUACAO");
+
+  if (maquinaIdx < 0 || situacaoIdx < 0) return [];
+
+  return parsed
+    .slice(headerIndex + 1)
+    .map((row) => ({
+      maquina: (row[maquinaIdx] || "").trim(),
+      status: (row[situacaoIdx] || "").trim() || "PENDENTE"
+    }))
     .filter((item) => item.maquina);
 }
 

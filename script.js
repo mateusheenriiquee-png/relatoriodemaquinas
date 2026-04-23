@@ -1,5 +1,5 @@
 const apiURL = "/.netlify/functions/api";
-const STATUS_OPTIONS = ["Treinamento", "Pendente Configuração", "Produção"];
+const STATUS_OPTIONS = ["PENDENTE", "CONCLUIDO", "Cadastrado"];
 const PAGE_SIZE = 8;
 
 const state = {
@@ -46,8 +46,8 @@ async function carregar() {
 }
 
 function getStatusClass(status) {
-  if (status === "Produção") return "status-Produção";
-  if (status === "Treinamento") return "status-Treinamento";
+  if (status === "CONCLUIDO") return "status-Produção";
+  if (status === "Cadastrado") return "status-Treinamento";
   return "status-Pendente";
 }
 
@@ -89,9 +89,9 @@ function calcularPaginacao(totalItens) {
 
 function atualizarEstatisticas() {
   const total = state.maquinas.length;
-  const treinamento = state.maquinas.filter((m) => m.status === "Treinamento").length;
-  const pendente = state.maquinas.filter((m) => m.status === "Pendente Configuração").length;
-  const producao = state.maquinas.filter((m) => m.status === "Produção").length;
+  const treinamento = state.maquinas.filter((m) => m.status === "Cadastrado").length;
+  const pendente = state.maquinas.filter((m) => m.status === "PENDENTE").length;
+  const producao = state.maquinas.filter((m) => m.status === "CONCLUIDO").length;
 
   document.getElementById("statTotal").textContent = String(total);
   document.getElementById("statTreinamento").textContent = String(treinamento);
@@ -176,7 +176,7 @@ function abrirModalAdicionar() {
   state.modalModo = "adicionar";
   modalTitulo.textContent = "Nova Máquina";
   modalNome.value = "";
-  modalStatus.value = "Treinamento";
+  modalStatus.value = "PENDENTE";
   modalMaquinaAtual.value = "";
   modal.classList.remove("hidden");
 }
@@ -290,7 +290,7 @@ tbody.addEventListener("click", async (e) => {
     }
 
     if (action === "editar") {
-      abrirModalEditar(maquina, botao.dataset.status || "Treinamento");
+      abrirModalEditar(maquina, botao.dataset.status || "PENDENTE");
     }
 
     if (action === "excluir") {
