@@ -35,6 +35,26 @@ function normalizarNome(nome) {
   return (nome || "").trim().toLowerCase();
 }
 
+function compararNomeNatural(a, b) {
+  const pattern = /^(.*?)-(\d+)$/i;
+  const matchA = String(a || "").trim().match(pattern);
+  const matchB = String(b || "").trim().match(pattern);
+
+  if (matchA && matchB) {
+    const baseA = matchA[1].toLowerCase();
+    const baseB = matchB[1].toLowerCase();
+    if (baseA !== baseB) {
+      return baseA.localeCompare(baseB, "pt-BR");
+    }
+    return Number(matchA[2]) - Number(matchB[2]);
+  }
+
+  return String(a || "").localeCompare(String(b || ""), "pt-BR", {
+    numeric: true,
+    sensitivity: "base"
+  });
+}
+
 async function carregar() {
   const res = await fetch(`${apiURL}?acao=listar`);
   if (!res.ok) throw new Error("Falha ao carregar dados.");
@@ -64,9 +84,9 @@ function getMaquinasFiltradas() {
   }
 
   if (state.ordenacao === "nome-asc") {
-    dados.sort((a, b) => a.maquina.localeCompare(b.maquina, "pt-BR"));
+    dados.sort((a, b) => compararNomeNatural(a.maquina, b.maquina));
   } else if (state.ordenacao === "nome-desc") {
-    dados.sort((a, b) => b.maquina.localeCompare(a.maquina, "pt-BR"));
+    dados.sort((a, b) => compararNomeNatural(b.maquina, a.maquina));
   } else if (state.ordenacao === "status") {
     dados.sort((a, b) => a.status.localeCompare(b.status, "pt-BR"));
   }
