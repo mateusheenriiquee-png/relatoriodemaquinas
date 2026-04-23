@@ -1,23 +1,32 @@
 function doPost(e) {
-  var sheet = SpreadsheetApp.openById("12bTm7cAwlxKmW1qzaGr-dGpBAacUmNJmoC8ONLUqGHs").getSheets()[0];
+  var context = getSheetContext();
+  if (!context.ok) return jsonResponse(false, context.message);
+
+  var sheet = context.sheet;
+  var headerRow = context.headerRow;
+  var COL_MAQUINA = context.colMaquina;
+  var COL_STATUS = context.colStatus;
   var data = JSON.parse(e.postData.contents);
   var acao = data.acao || "atualizarStatus";
   var values = sheet.getDataRange().getValues();
-  var COL_MAQUINA = 2; // Coluna B
-  var COL_STATUS = 7;  // Coluna G (SITUAÇÃO)
 
   if (acao === "adicionar") {
-    for (var j = 1; j < values.length; j++) {
+    for (var j = headerRow; j < values.length; j++) {
       if (String(values[j][COL_MAQUINA - 1]).toLowerCase() === String(data.maquina).toLowerCase()) {
         return jsonResponse(false, "Já existe uma máquina com esse nome.");
       }
     }
-    sheet.appendRow(["", data.maquina, "", "", "", "", data.status]);
+    var lastCol = Math.max(sheet.getLastColumn(), COL_STATUS);
+    var newRow = new Array(lastCol);
+    for (var n = 0; n < lastCol; n++) newRow[n] = "";
+    newRow[COL_MAQUINA - 1] = data.maquina;
+    newRow[COL_STATUS - 1] = data.status;
+    sheet.appendRow(newRow);
     return jsonResponse(true, "ADICIONADO");
   }
 
   if (acao === "excluir") {
-    for (var x = 1; x < values.length; x++) {
+    for (var x = headerRow; x < values.length; x++) {
       if (values[x][COL_MAQUINA - 1] == data.maquina) {
         sheet.deleteRow(x + 1);
         return jsonResponse(true, "EXCLUIDO");
@@ -26,10 +35,10 @@ function doPost(e) {
     return jsonResponse(false, "Máquina não encontrada para exclusão.");
   }
 
-  for (var i = 1; i < values.length; i++) {
+  for (var i = headerRow; i < values.length; i++) {
     if (values[i][COL_MAQUINA - 1] == data.maquina || values[i][COL_MAQUINA - 1] == data.maquinaAtual) {
       if (acao === "editar") {
-        for (var k = 1; k < values.length; k++) {
+        for (var k = headerRow; k < values.length; k++) {
           var mesmoNome = String(values[k][COL_MAQUINA - 1]).toLowerCase() === String(data.novaMaquina).toLowerCase();
           var linhaAtual = String(values[k][COL_MAQUINA - 1]).toLowerCase() === String(data.maquinaAtual).toLowerCase();
           if (mesmoNome && !linhaAtual) {
@@ -51,6 +60,42 @@ function doPost(e) {
 
 function doGet() {
   return jsonResponse(true, "API online. Use POST para atualizar dados.");
+}
+
+function getSheetContext() {
+  var spreadsheet = SpreadsheetApp.openById("12bTm7cAwlxKmW1qzaGr-dGpBAacUmNJmoC8ONLUqGHs");
+  var sheets = spreadsheet.getSheets();
+
+  for (var i = 0; i < sheets.length; i++) {
+    var sheet = sheets[i];
+    var values = sheet.getDataRange().getValues();
+    if (!values || !values.length) continue;
+
+    for (var r = 0; r < Math.min(values.length, 10); r++) {
+      var row = values[r].map(function(cell) {
+        return String(cell || "").trim().toUpperCase();
+      });
+
+      var colMaquina = row.indexOf("MAQUINA") + 1;
+      var colStatus = row.indexOf("SITUAÇÃO") + 1;
+      if (colStatus === 0) colStatus = row.indexOf("SITUACAO") + 1;
+
+      if (colMaquina > 0 && colStatus > 0) {
+        return {
+          ok: true,
+          sheet: sheet,
+          headerRow: r + 1,
+          colMaquina: colMaquina,
+          colStatus: colStatus
+        };
+      }
+    }
+  }
+
+  return {
+    ok: false,
+    message: "Não encontrei os cabeçalhos MAQUINA e SITUAÇÃO na planilha."
+  };
 }
 
 function jsonResponse(ok, message) {
