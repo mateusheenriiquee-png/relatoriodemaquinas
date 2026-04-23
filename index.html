@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Controle de Máquinas</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="container">
+  <header class="header">
+    <div>
+      <h1>Controle de Máquinas</h1>
+      <p class="subtitle">Gestão rápida de status e cadastro de máquinas</p>
+    </div>
+    <div class="actions">
+      <button id="btnAdicionar" class="btn btn-primary">+ Adicionar Máquina</button>
+      <button id="btnRecarregar" class="btn btn-ghost">Atualizar Lista</button>
+    </div>
+  </header>
+
+  <section class="toolbar">
+    <div class="field">
+      <label for="filtroTexto">Buscar máquina</label>
+      <input id="filtroTexto" type="text" placeholder="Digite o nome da máquina...">
+    </div>
+
+    <div class="field">
+      <label for="filtroStatus">Filtrar por status</label>
+      <select id="filtroStatus">
+        <option value="todos">Todos</option>
+        <option value="Treinamento">Treinamento</option>
+        <option value="Pendente Configuração">Pendente Configuração</option>
+        <option value="Produção">Produção</option>
+      </select>
+    </div>
+
+    <div class="field field-small">
+      <label for="ordenacao">Ordenar</label>
+      <select id="ordenacao">
+        <option value="nome-asc">Nome (A-Z)</option>
+        <option value="nome-desc">Nome (Z-A)</option>
+        <option value="status">Status</option>
+      </select>
+    </div>
+  </section>
+
+  <section class="stats">
+    <div class="stat-card">
+      <span>Total</span>
+      <strong id="statTotal">0</strong>
+    </div>
+    <div class="stat-card">
+      <span>Treinamento</span>
+      <strong id="statTreinamento">0</strong>
+    </div>
+    <div class="stat-card">
+      <span>Pendente Configuração</span>
+      <strong id="statPendente">0</strong>
+    </div>
+    <div class="stat-card">
+      <span>Produção</span>
+      <strong id="statProducao">0</strong>
+    </div>
+  </section>
+
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>Máquina</th>
+          <th>Status</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+  <footer class="table-footer">
+    <span id="paginationInfo">Mostrando 0 de 0</span>
+    <div class="pagination-actions">
+      <button id="btnPrevPage" class="btn btn-ghost btn-small">Anterior</button>
+      <button id="btnNextPage" class="btn btn-ghost btn-small">Próxima</button>
+    </div>
+  </footer>
+</div>
+
+<div id="modalMaquina" class="modal hidden">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2 id="modalTitulo">Nova Máquina</h2>
+      <button id="btnFecharModal" class="btn btn-ghost btn-small" type="button">Fechar</button>
+    </div>
+    <form id="formMaquina" class="modal-form">
+      <div class="field">
+        <label for="modalNome">Nome da máquina</label>
+        <input id="modalNome" name="nome" type="text" required maxlength="100">
+      </div>
+      <div class="field">
+        <label for="modalStatus">Status</label>
+        <select id="modalStatus" name="status" required>
+          <option value="Treinamento">Treinamento</option>
+          <option value="Pendente Configuração">Pendente Configuração</option>
+          <option value="Produção">Produção</option>
+        </select>
+      </div>
+      <input id="modalMaquinaAtual" type="hidden">
+      <div class="modal-actions">
+        <button id="btnSalvarModal" class="btn btn-primary" type="submit">Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
