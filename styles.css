@@ -1,43 +1,18 @@
 
-/* === TABLE ACTIONS - MODIFIED === */
-
+/* Mantém layout original, apenas muda orientação */
 .table-actions {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  align-items: stretch;
 }
 
-/* Hide buttons by default */
+/* Botões escondidos inicialmente */
 .table-actions button {
   opacity: 0;
-  transform: translateY(5px);
-  transition: all 0.2s ease;
-  pointer-events: none;
+  transition: opacity 0.2s ease;
 }
 
-/* Show on row hover */
+/* Aparecem apenas ao passar o mouse na linha */
 tr:hover .table-actions button {
   opacity: 1;
-  transform: translateY(0);
-  pointer-events: auto;
-}
-
-/* OPTIONAL: hide inputs/selects too */
-.table-actions select,
-.table-actions input {
-  opacity: 0;
-  transition: 0.2s;
-  pointer-events: none;
-}
-
-tr:hover .table-actions select,
-tr:hover .table-actions input {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-/* Improve spacing for action column */
-td:last-child {
-  min-width: 140px;
 }
