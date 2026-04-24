@@ -188,21 +188,23 @@ tbody tr:last-child td {
 
 .table-actions {
   display: flex;
-  flex-direction: column; /* Altera a disposição de linha (padrão) para coluna */
+  flex-direction: column; /* Mantém os botões em formato de coluna */
   gap: 8px;
-  
-  /* Oculta os botões por padrão, mas mantém o espaço deles na tabela reservado */
-  opacity: 0; 
-  visibility: hidden; 
-  transition: opacity 0.2s ease, visibility 0.2s ease; /* Adiciona uma transição suave */
+  /* A coluna em si não tem mais opacity 0, ela fica 100% à mostra */
 }
 
-/* Faz o grupo de ações aparecer assim que o mouse passar por cima da linha correspondente */
-tr:hover .table-actions {
+/* Esconde APENAS os botões dentro do grupo de ações */
+.table-actions .btn {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+
+/* Revela os botões suavemente quando o mouse passar por cima da linha da tabela */
+tr:hover .table-actions .btn {
   opacity: 1;
   visibility: visible;
 }
-
 .pixInput {
   min-width: 170px;
 }
