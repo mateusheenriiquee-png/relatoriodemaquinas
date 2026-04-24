@@ -186,65 +186,74 @@ tbody tr:last-child td {
   color: #166534;
 }
 
-.table-actions {
-  display: flex;
-  flex-direction: column; /* Mantém os botões em formato de coluna */
-  gap: 8px;
-  /* A coluna em si não tem mais opacity 0, ela fica 100% à mostra */
+/* -------------------------------------------
+   AÇÕES DA TABELA (Hover e Menu Flutuante)
+------------------------------------------- */
+
+/* Prepara a célula para segurar o menu flutuante */
+.actions-cell {
+  position: relative; 
 }
 
-/* Esconde APENAS os botões dentro do grupo de ações */
-.table-actions {
-  /* Define o contêiner e empilha os botões ocultos */
-  position: relative;
+/* Botões Iniciais (Invisíveis até passar o mouse) */
+.action-buttons {
+  display: flex;
+  gap: 8px;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+
+tr:hover .action-buttons {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Menu Flutuante (Caixinha com Selects e Inputs) */
+.quick-edit-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  width: 220px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.15);
+  z-index: 50; /* Garante que fique por cima de tudo */
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  min-width: 90px; /* Mantém a largura da coluna fixa */
-  justify-content: center;
-}
-
-/* -------------------------------------------
-   BOTÃO PRINCIPAL
-   Fica flutuando no centro da célula por padrão
-------------------------------------------- */
-.table-actions .btn:first-child {
-  position: absolute;
-  top: 50%;
-  left: 0;
-  width: 100%;
-  transform: translateY(-50%);
-  z-index: 5; /* Mantém ele na frente para o clique */
-  opacity: 1;
-  visibility: visible;
-  transition: opacity 0.2s ease, visibility 0.2s ease;
-}
-
-/* -------------------------------------------
-   BOTÕES SECUNDÁRIOS (Salvar, Editar, Excluir)
-   Invisíveis, mas mantêm a altura da linha estável
-------------------------------------------- */
-.table-actions .btn:nth-child(n+2) {
-  font-size: 0.72rem;     /* Reduz a fonte dos botões */
-  padding: 6px 8px;       /* Reduz o tamanho físico */
+  gap: 10px;
+  
+  /* Oculto e levemente subido por padrão */
   opacity: 0;
   visibility: hidden;
-  transition: opacity 0.2s ease, visibility 0.2s ease;
+  transform: translateY(-10px);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* -------------------------------------------
-   AÇÃO AO PASSAR O MOUSE NA LINHA DA TABELA (tr)
-------------------------------------------- */
-/* 1. Oculta e desativa o botão principal */
-tr:hover .table-actions .btn:first-child {
-  opacity: 0;
-  visibility: hidden;
-}
-
-/* 2. Revela e ativa os botões menores */
-tr:hover .table-actions .btn:nth-child(n+2) {
+/* Quando o JavaScript adiciona a classe "active", o menu aparece */
+.quick-edit-menu.active {
   opacity: 1;
   visibility: visible;
+  transform: translateY(0); /* Desliza suavemente para o lugar */
+}
+
+.quick-edit-menu label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-weight: 600;
+  margin-bottom: -6px; /* Aproxima o título do seu respectivo select/input */
+}
+
+.quick-edit-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.quick-edit-actions .btn {
+  flex: 1; /* Faz os botões de Salvar/Cancelar dividirem o espaço meio a meio */
 }
 
 .btn-small {

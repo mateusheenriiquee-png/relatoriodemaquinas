@@ -218,14 +218,26 @@ function render() {
       <td><span class="status-pill ${getSituacaoClass(item.situacao)}">${item.situacao}</span></td>
       <td><span class="status-pill ${getSituacaoClass(item.pagamentoStatus === "NAO_PENDENTE" ? "PRODUCAO" : "OUTRO")}">${item.pagamentoStatus}</span></td>
       <td>${item.pixParceiro || "-"}</td>
-      <td>
-        <div class="table-actions">
-          <select data-id-key="${idKey}" class="situacaoSelect">${situacaoOptions}</select>
-          <select data-id-key="${idKey}" class="pagamentoSelect">${pagamentoOptions}</select>
-          <input data-id-key="${idKey}" class="pixInput" type="text" value="${item.pixParceiro || ""}" placeholder="PIX">
-          <button class="btn btn-small btn-success" data-action="salvar" data-id-key="${idKey}">Salvar</button>
-          <button class="btn btn-small btn-warning" data-action="editar" data-id-key="${idKey}">Editar</button>
+      <td class="actions-cell">
+        <div class="action-buttons">
+          <button class="btn btn-small btn-warning" data-action="toggle-menu" data-id-key="${idKey}">Editar</button>
           <button class="btn btn-small btn-danger" data-action="excluir" data-id-key="${idKey}">Excluir</button>
+        </div>
+        
+        <div class="quick-edit-menu" id="menu-${idKey}">
+          <label>Situação:</label>
+          <select data-id-key="${idKey}" class="situacaoSelect">${situacaoOptions}</select>
+          
+          <label>Pagamento:</label>
+          <select data-id-key="${idKey}" class="pagamentoSelect">${pagamentoOptions}</select>
+          
+          <label>Chave PIX:</label>
+          <input data-id-key="${idKey}" class="pixInput" type="text" value="${item.pixParceiro || ""}" placeholder="PIX">
+          
+          <div class="quick-edit-actions">
+            <button class="btn btn-small btn-success" data-action="salvar" data-id-key="${idKey}">Salvar</button>
+            <button class="btn btn-small btn-ghost" data-action="fechar-menu" data-id-key="${idKey}">Cancelar</button>
+          </div>
         </div>
       </td>
     `;
@@ -401,17 +413,43 @@ tbody.addEventListener("click", async (e) => {
   if (!botao) return;
 
   const action = botao.dataset.action;
-  const id = fromKey(botao.dataset.idKey || "");
+  const idKey = botao.dataset.idKey || "";
+  const id = fromKey(idKey);
 
   try {
+    // ABRE OU FECHA O MENU DE EDIÇÃO RÁPIDA
+    if (action === "toggle-menu") {
+      // Opcional: Fecha outros menus abertos para não poluir a tela
+      document.querySelectorAll(".quick-edit-menu.active").forEach(m => {
+        if (m.id !== `menu-${idKey}`) m.classList.remove("active");
+      });
+      
+      const menu = document.getElementById(`menu-${idKey}`);
+      if (menu) menu.classList.toggle("active");
+      return;
+    }
+
+    // FECHA O MENU PELO BOTÃO CANCELAR
+    if (action === "fechar-menu") {
+      const menu = document.getElementById(`menu-${idKey}`);
+      if (menu) menu.classList.remove("active");
+      return;
+    }
+
+    // SALVAR DADOS DO MENU RÁPIDO
     if (action === "salvar") {
-      const idKey = botao.dataset.idKey || "";
       const situacaoEl = tbody.querySelector(`select.situacaoSelect[data-id-key="${idKey}"]`);
       const pagamentoEl = tbody.querySelector(`select.pagamentoSelect[data-id-key="${idKey}"]`);
       const pixEl = tbody.querySelector(`input.pixInput[data-id-key="${idKey}"]`);
+      
       if (!situacaoEl || !pagamentoEl || !pixEl) return;
       await atualizarRegistro(id, situacaoEl.value, pagamentoEl.value, pixEl.value);
       alert("Registro atualizado com sucesso.");
+      
+      // Esconde o menu novamente após salvar
+      const menu = document.getElementById(`menu-${idKey}`);
+      if (menu) menu.classList.remove("active");
+      return;
     }
 
     if (action === "editar") {
