@@ -195,38 +195,56 @@ tbody tr:last-child td {
 
 /* Esconde APENAS os botões dentro do grupo de ações */
 .table-actions {
+  /* Define o contêiner e empilha os botões ocultos */
+  position: relative;
   display: flex;
-  flex-wrap: wrap; /* Permite que os botões formem "linhas" ocultas dentro da célula */
+  flex-direction: column;
   gap: 6px;
-  height: 38px; /* FIXA A ALTURA: Isso impede a linha de crescer e mantém a coluna alinhada */
-  overflow: hidden; /* Esconde os botões menores que estão esperando na parte de baixo */
-  align-items: center;
+  min-width: 90px; /* Mantém a largura da coluna fixa */
+  justify-content: center;
 }
 
-/* Configuração do botão principal (o que aparece por padrão) */
+/* -------------------------------------------
+   BOTÃO PRINCIPAL
+   Fica flutuando no centro da célula por padrão
+------------------------------------------- */
 .table-actions .btn:first-child {
-  flex: 1 1 100%; /* Força ele a ocupar o espaço todo, empurrando o resto para baixo */
-  transition: margin-top 0.3s ease, opacity 0.2s ease;
-  margin-top: 0;
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 100%;
+  transform: translateY(-50%);
+  z-index: 5; /* Mantém ele na frente para o clique */
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
 }
 
-/* Configuração dos botões secundários (Salvar, Editar, Excluir) */
+/* -------------------------------------------
+   BOTÕES SECUNDÁRIOS (Salvar, Editar, Excluir)
+   Invisíveis, mas mantêm a altura da linha estável
+------------------------------------------- */
 .table-actions .btn:nth-child(n+2) {
-  font-size: 0.72rem; /* Diminui a fonte */
-  padding: 6px 8px;   /* Diminui o tamanho físico do botão */
-  opacity: 0;         /* Mantém invisível inicialmente */
-  transition: opacity 0.4s ease;
-}
-
-/* Efeito ao passar o mouse na linha da tabela */
-tr:hover .table-actions .btn:first-child {
-  margin-top: -46px; /* Faz o botão principal SUBIR fisicamente e sumir da visão */
+  font-size: 0.72rem;     /* Reduz a fonte dos botões */
+  padding: 6px 8px;       /* Reduz o tamanho físico */
   opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
 }
 
-/* Como o botão principal subiu, ele puxa os botões menores para cima e os revela */
+/* -------------------------------------------
+   AÇÃO AO PASSAR O MOUSE NA LINHA DA TABELA (tr)
+------------------------------------------- */
+/* 1. Oculta e desativa o botão principal */
+tr:hover .table-actions .btn:first-child {
+  opacity: 0;
+  visibility: hidden;
+}
+
+/* 2. Revela e ativa os botões menores */
 tr:hover .table-actions .btn:nth-child(n+2) {
-  opacity: 1; 
+  opacity: 1;
+  visibility: visible;
 }
 
 .btn-small {
