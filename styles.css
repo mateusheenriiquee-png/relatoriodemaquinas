@@ -188,8 +188,19 @@ tbody tr:last-child td {
 
 .table-actions {
   display: flex;
+  flex-direction: column; /* Altera a disposição de linha (padrão) para coluna */
   gap: 8px;
-  flex-wrap: wrap;
+  
+  /* Oculta os botões por padrão, mas mantém o espaço deles na tabela reservado */
+  opacity: 0; 
+  visibility: hidden; 
+  transition: opacity 0.2s ease, visibility 0.2s ease; /* Adiciona uma transição suave */
+}
+
+/* Faz o grupo de ações aparecer assim que o mouse passar por cima da linha correspondente */
+tr:hover .table-actions {
+  opacity: 1;
+  visibility: visible;
 }
 
 .pixInput {
