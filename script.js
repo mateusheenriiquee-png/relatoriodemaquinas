@@ -4,8 +4,6 @@ import {
   deleteDoc,
   doc,
   getDocs,
-  orderBy,
-  query,
   serverTimestamp,
   updateDoc
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
@@ -85,8 +83,7 @@ function compararNomeNatural(a, b) {
 }
 
 async function carregar() {
-  const q = query(collection(db, "maquinas"), orderBy("parceiro", "asc"), orderBy("maquina", "asc"));
-  const snap = await getDocs(q);
+  const snap = await getDocs(collection(db, "maquinas"));
   state.registros = snap.docs.map((d) => {
     const data = d.data();
     return {
@@ -424,4 +421,15 @@ tbody.addEventListener("click", async (e) => {
   }
 });
 
-carregar().catch(() => alert("Erro ao carregar dados do Firebase. Verifique firebase-config.js e regras do Firestore."));
+carregar().catch((err) => {
+  const msg = String(err?.message || err || "");
+  if (msg.includes("Missing or insufficient permissions")) {
+    alert("Erro no Firebase: sem permissão para ler o Firestore. Publique regras permitindo acesso à coleção 'maquinas'.");
+    return;
+  }
+  if (msg.toLowerCase().includes("index")) {
+    alert("Erro no Firebase: índice ausente no Firestore. Crie o índice sugerido no link do erro do console.");
+    return;
+  }
+  alert(`Erro ao carregar dados do Firebase: ${msg}`);
+});
