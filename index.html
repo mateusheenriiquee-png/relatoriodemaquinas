@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Controle de Máquinas</title>
+<title>Controle de Parceiros e Máquinas</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -11,11 +11,11 @@
 <div class="container">
   <header class="header">
     <div>
-      <h1>Controle de Máquinas</h1>
-      <p class="subtitle">Gestão rápida de status e cadastro de máquinas</p>
+      <h1>Controle de Parceiros e Máquinas</h1>
+      <p class="subtitle">Gestão por parceiro, situação e fechamento mensal</p>
     </div>
     <div class="actions">
-      <button id="btnAdicionar" class="btn btn-primary">+ Adicionar Máquina</button>
+      <button id="btnAdicionar" class="btn btn-primary">+ Novo Registro</button>
       <button id="btnRecarregar" class="btn btn-ghost">Atualizar Lista</button>
     </div>
   </header>
@@ -27,27 +27,36 @@
     </div>
 
     <div class="field">
-      <label for="filtroStatus">Filtrar por status</label>
-      <select id="filtroStatus">
+      <label for="filtroSituacao">Filtrar por situação</label>
+      <select id="filtroSituacao">
         <option value="todos">Todos</option>
-        <option value="SEM STATUS">SEM STATUS</option>
-        <option value="PENDENTE">PENDENTE</option>
-        <option value="CONCLUIDO">CONCLUIDO</option>
-        <option value="CADASTRADO">CADASTRADO</option>
+        <option value="TREINAMENTO">TREINAMENTO</option>
+        <option value="PRODUCAO">PRODUCAO</option>
       </select>
     </div>
 
     <div class="field">
-      <label for="filtroAgente">Filtrar por agente</label>
-      <input id="filtroAgente" type="text" placeholder="Digite o nome do agente...">
+      <label for="filtroFechamento">Fechamento mensal</label>
+      <select id="filtroFechamento">
+        <option value="todos">Todos</option>
+        <option value="PENDENTE">PENDENTE</option>
+        <option value="PAGO">PAGO</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="filtroParceiro">Filtrar por parceiro</label>
+      <select id="filtroParceiro">
+        <option value="todos">Todos</option>
+      </select>
     </div>
 
     <div class="field field-small">
       <label for="ordenacao">Ordenar</label>
       <select id="ordenacao">
-        <option value="nome-asc">Nome (A-Z)</option>
-        <option value="nome-desc">Nome (Z-A)</option>
-        <option value="status">Status</option>
+        <option value="parceiro-asc">Parceiro (A-Z)</option>
+        <option value="maquina-asc">Máquina (A-Z)</option>
+        <option value="maquina-desc">Máquina (Z-A)</option>
       </select>
     </div>
   </section>
@@ -58,20 +67,20 @@
       <strong id="statTotal">0</strong>
     </div>
     <div class="stat-card">
-      <span>CADASTRADO</span>
+      <span>TREINAMENTO</span>
       <strong id="statTreinamento">0</strong>
+    </div>
+    <div class="stat-card">
+      <span>PRODUCAO</span>
+      <strong id="statProducao">0</strong>
+    </div>
+    <div class="stat-card">
+      <span>PAGO</span>
+      <strong id="statPago">0</strong>
     </div>
     <div class="stat-card">
       <span>PENDENTE</span>
       <strong id="statPendente">0</strong>
-    </div>
-    <div class="stat-card">
-      <span>CONCLUIDO</span>
-      <strong id="statProducao">0</strong>
-    </div>
-    <div class="stat-card">
-      <span>SEM STATUS</span>
-      <strong id="statSemStatus">0</strong>
     </div>
   </section>
 
@@ -79,9 +88,10 @@
     <table>
       <thead>
         <tr>
+          <th>Parceiro</th>
           <th>Máquina</th>
-          <th>Agente</th>
-          <th>Status</th>
+          <th>Situação</th>
+          <th>Fechamento</th>
           <th>Ações</th>
         </tr>
       </thead>
@@ -106,19 +116,28 @@
     </div>
     <form id="formMaquina" class="modal-form">
       <div class="field">
-        <label for="modalNome">Nome da máquina</label>
+        <label for="modalParceiro">Parceiro</label>
+        <input id="modalParceiro" name="parceiro" type="text" required maxlength="120">
+      </div>
+      <div class="field">
+        <label for="modalNome">Máquina</label>
         <input id="modalNome" name="nome" type="text" required maxlength="100">
       </div>
       <div class="field">
-        <label for="modalStatus">Status</label>
-        <select id="modalStatus" name="status" required>
-          <option value="SEM STATUS">SEM STATUS</option>
-          <option value="PENDENTE">PENDENTE</option>
-          <option value="CONCLUIDO">CONCLUIDO</option>
-          <option value="CADASTRADO">CADASTRADO</option>
+        <label for="modalSituacao">Situação</label>
+        <select id="modalSituacao" name="situacao" required>
+          <option value="TREINAMENTO">TREINAMENTO</option>
+          <option value="PRODUCAO">PRODUCAO</option>
         </select>
       </div>
-      <input id="modalMaquinaAtual" type="hidden">
+      <div class="field">
+        <label for="modalFechamento">Fechamento Mensal</label>
+        <select id="modalFechamento" name="fechamento" required>
+          <option value="PENDENTE">PENDENTE</option>
+          <option value="PAGO">PAGO</option>
+        </select>
+      </div>
+      <input id="modalIdAtual" type="hidden">
       <div class="modal-actions">
         <button id="btnSalvarModal" class="btn btn-primary" type="submit">Salvar</button>
       </div>
@@ -126,6 +145,6 @@
   </div>
 </div>
 
-<script src="script.js"></script>
+<script type="module" src="script.js"></script>
 </body>
 </html>

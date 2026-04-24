@@ -1,49 +1,67 @@
-const apiURL = "/.netlify/functions/api";
-const STATUS_OPTIONS = ["SEM STATUS", "PENDENTE", "CONCLUIDO", "CADASTRADO"];
+import {
+  collection,
+  addDoc,
+  deleteDoc,
+  doc,
+  getDocs,
+  orderBy,
+  query,
+  serverTimestamp,
+  updateDoc
+} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import { db } from "./firebase-config.js";
+
+const SITUACAO_OPTIONS = ["TREINAMENTO", "PRODUCAO"];
+const FECHAMENTO_OPTIONS = ["PENDENTE", "PAGO"];
 const PAGE_SIZE = 8;
 
 const state = {
-  maquinas: [],
+  registros: [],
   filtroTexto: "",
-  filtroStatus: "todos",
-  filtroAgente: "",
-  ordenacao: "nome-asc",
+  filtroSituacao: "todos",
+  filtroFechamento: "todos",
+  filtroParceiro: "todos",
+  ordenacao: "parceiro-asc",
   paginaAtual: 1,
   modalModo: "adicionar"
 };
 
 const tbody = document.getElementById("tbody");
 const filtroTextoEl = document.getElementById("filtroTexto");
-const filtroStatusEl = document.getElementById("filtroStatus");
-const filtroAgenteEl = document.getElementById("filtroAgente");
+const filtroSituacaoEl = document.getElementById("filtroSituacao");
+const filtroFechamentoEl = document.getElementById("filtroFechamento");
+const filtroParceiroEl = document.getElementById("filtroParceiro");
 const ordenacaoEl = document.getElementById("ordenacao");
 const paginationInfo = document.getElementById("paginationInfo");
 const modal = document.getElementById("modalMaquina");
 const modalTitulo = document.getElementById("modalTitulo");
+const modalParceiro = document.getElementById("modalParceiro");
 const modalNome = document.getElementById("modalNome");
-const modalStatus = document.getElementById("modalStatus");
-const modalMaquinaAtual = document.getElementById("modalMaquinaAtual");
+const modalSituacao = document.getElementById("modalSituacao");
+const modalFechamento = document.getElementById("modalFechamento");
+const modalIdAtual = document.getElementById("modalIdAtual");
 const formMaquina = document.getElementById("formMaquina");
 
-function toKey(value) {
-  return encodeURIComponent(value);
+function toKey(id) {
+  return encodeURIComponent(id);
 }
 
 function fromKey(value) {
   return decodeURIComponent(value);
 }
 
-function normalizarNome(nome) {
-  return (nome || "").trim().toLowerCase();
+function normalizarTexto(value) {
+  return String(value || "").trim().replace(/\s+/g, " ");
 }
 
-function normalizarStatus(status) {
-  const valor = String(status || "").trim().toUpperCase();
-  if (!valor) return "SEM STATUS";
-  if (valor === "CONCLUÍDO") return "CONCLUIDO";
-  if (valor === "CADASTRADO" || valor === "CADASTRADA") return "CADASTRADO";
-  if (valor === "PENDENTE") return "PENDENTE";
-  return valor;
+function normalizarSituacao(value) {
+  const v = String(value || "").trim().toUpperCase();
+  return SITUACAO_OPTIONS.includes(v) ? v : "TREINAMENTO";
+}
+
+function normalizarFechamento(value) {
+  const v = String(value || "").trim().toUpperCase();
+  return FECHAMENTO_OPTIONS.includes(v) ? v : "PENDENTE";
 }
 
 function compararNomeNatural(a, b) {
@@ -67,44 +85,77 @@ function compararNomeNatural(a, b) {
 }
 
 async function carregar() {
-  const res = await fetch(`${apiURL}?acao=listar`);
-  if (!res.ok) throw new Error("Falha ao carregar dados.");
-  const data = await res.json();
-  if (!data.ok) throw new Error(data.message || "Erro ao carregar dados.");
-  state.maquinas = (data.data || []).filter((item) => item.maquina);
-
+  const q = query(collection(db, "maquinas"), orderBy("parceiro", "asc"), orderBy("maquina", "asc"));
+  const snap = await getDocs(q);
+  state.registros = snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      id: d.id,
+      parceiro: normalizarTexto(data.parceiro),
+      maquina: normalizarTexto(data.maquina),
+      situacao: normalizarSituacao(data.situacao),
+      fechamentoMensal: normalizarFechamento(data.fechamentoMensal)
+    };
+  });
+  atualizarFiltroParceiros();
   render();
 }
 
-function getStatusClass(status) {
-  if (status === "CONCLUIDO") return "status-Produção";
-  if (status === "CADASTRADO") return "status-Treinamento";
+function atualizarFiltroParceiros() {
+  const parceiros = Array.from(
+    new Set(
+      state.registros
+        .map((item) => normalizarTexto(item.parceiro))
+        .filter(Boolean)
+    )
+  ).sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base" }));
+
+  const valorAnterior = state.filtroParceiro;
+  filtroParceiroEl.innerHTML = '<option value="todos">Todos</option>';
+  parceiros.forEach((parceiro) => {
+    const option = document.createElement("option");
+    option.value = parceiro;
+    option.textContent = parceiro;
+    filtroParceiroEl.appendChild(option);
+  });
+
+  const aindaExiste = valorAnterior === "todos" || parceiros.includes(valorAnterior);
+  state.filtroParceiro = aindaExiste ? valorAnterior : "todos";
+  filtroParceiroEl.value = state.filtroParceiro;
+}
+
+function getSituacaoClass(situacao) {
+  if (situacao === "PRODUCAO") return "status-Produção";
+  if (situacao === "TREINAMENTO") return "status-Treinamento";
   return "status-Pendente";
 }
 
-function getMaquinasFiltradas() {
-  let dados = [...state.maquinas];
+function getRegistrosFiltrados() {
+  let dados = [...state.registros];
 
   if (state.filtroTexto) {
     const termo = state.filtroTexto.toLowerCase();
     dados = dados.filter((item) => item.maquina.toLowerCase().includes(termo));
   }
 
-  if (state.filtroStatus !== "todos") {
-    dados = dados.filter((item) => normalizarStatus(item.status) === state.filtroStatus);
+  if (state.filtroSituacao !== "todos") {
+    dados = dados.filter((item) => item.situacao === state.filtroSituacao);
   }
 
-  if (state.filtroAgente) {
-    const termoAgente = state.filtroAgente.toLowerCase();
-    dados = dados.filter((item) => String(item.agente || "").toLowerCase().includes(termoAgente));
+  if (state.filtroFechamento !== "todos") {
+    dados = dados.filter((item) => item.fechamentoMensal === state.filtroFechamento);
   }
 
-  if (state.ordenacao === "nome-asc") {
+  if (state.filtroParceiro !== "todos") {
+    dados = dados.filter((item) => item.parceiro === state.filtroParceiro);
+  }
+
+  if (state.ordenacao === "parceiro-asc") {
+    dados.sort((a, b) => a.parceiro.localeCompare(b.parceiro, "pt-BR", { sensitivity: "base" }));
+  } else if (state.ordenacao === "maquina-asc") {
     dados.sort((a, b) => compararNomeNatural(a.maquina, b.maquina));
-  } else if (state.ordenacao === "nome-desc") {
+  } else if (state.ordenacao === "maquina-desc") {
     dados.sort((a, b) => compararNomeNatural(b.maquina, a.maquina));
-  } else if (state.ordenacao === "status") {
-    dados.sort((a, b) => a.status.localeCompare(b.status, "pt-BR"));
   }
 
   return dados;
@@ -124,28 +175,28 @@ function calcularPaginacao(totalItens) {
 }
 
 function atualizarEstatisticas() {
-  const total = state.maquinas.length;
-  const semStatus = state.maquinas.filter((m) => normalizarStatus(m.status) === "SEM STATUS").length;
-  const pendente = state.maquinas.filter((m) => normalizarStatus(m.status) === "PENDENTE").length;
-  const concluido = state.maquinas.filter((m) => normalizarStatus(m.status) === "CONCLUIDO").length;
-  const cadastrado = state.maquinas.filter((m) => normalizarStatus(m.status) === "CADASTRADO").length;
+  const total = state.registros.length;
+  const treinamento = state.registros.filter((m) => m.situacao === "TREINAMENTO").length;
+  const producao = state.registros.filter((m) => m.situacao === "PRODUCAO").length;
+  const pago = state.registros.filter((m) => m.fechamentoMensal === "PAGO").length;
+  const pendente = state.registros.filter((m) => m.fechamentoMensal === "PENDENTE").length;
 
   document.getElementById("statTotal").textContent = String(total);
-  document.getElementById("statTreinamento").textContent = String(cadastrado);
+  document.getElementById("statTreinamento").textContent = String(treinamento);
+  document.getElementById("statProducao").textContent = String(producao);
+  document.getElementById("statPago").textContent = String(pago);
   document.getElementById("statPendente").textContent = String(pendente);
-  document.getElementById("statProducao").textContent = String(concluido);
-  document.getElementById("statSemStatus").textContent = String(semStatus);
 }
 
 function render() {
   tbody.innerHTML = "";
-  const dados = getMaquinasFiltradas();
+  const dados = getRegistrosFiltrados();
   const { totalPaginas, inicio, fim } = calcularPaginacao(dados.length);
   const dadosPaginados = dados.slice(inicio, fim);
 
   if (!dadosPaginados.length) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td colspan="4" class="empty">Nenhum registro encontrado para os filtros selecionados.</td>`;
+    tr.innerHTML = `<td colspan="5" class="empty">Nenhum registro encontrado para os filtros selecionados.</td>`;
     tbody.appendChild(tr);
     atualizarEstatisticas();
     atualizarRodapePaginacao(0, 0, totalPaginas);
@@ -154,22 +205,26 @@ function render() {
 
   dadosPaginados.forEach((item) => {
     const tr = document.createElement("tr");
-    const maquinaKey = toKey(item.maquina);
-    const statusAtual = normalizarStatus(item.status);
-    const options = STATUS_OPTIONS.map(
-      (status) => `<option value="${status}" ${status === statusAtual ? "selected" : ""}>${status}</option>`
+    const idKey = toKey(item.id);
+    const situacaoOptions = SITUACAO_OPTIONS.map(
+      (v) => `<option value="${v}" ${v === item.situacao ? "selected" : ""}>${v}</option>`
+    ).join("");
+    const fechamentoOptions = FECHAMENTO_OPTIONS.map(
+      (v) => `<option value="${v}" ${v === item.fechamentoMensal ? "selected" : ""}>${v}</option>`
     ).join("");
 
     tr.innerHTML = `
+      <td>${item.parceiro || "-"}</td>
       <td>${item.maquina}</td>
-      <td>${item.agente || "-"}</td>
-      <td><span class="status-pill ${getStatusClass(statusAtual)}">${statusAtual}</span></td>
+      <td><span class="status-pill ${getSituacaoClass(item.situacao)}">${item.situacao}</span></td>
+      <td><span class="status-pill ${getSituacaoClass(item.fechamentoMensal === "PAGO" ? "PRODUCAO" : "OUTRO")}">${item.fechamentoMensal}</span></td>
       <td>
         <div class="table-actions">
-          <select data-maquina-key="${maquinaKey}" class="statusSelect">${options}</select>
-          <button class="btn btn-small btn-success" data-action="salvar" data-maquina-key="${maquinaKey}">Salvar</button>
-          <button class="btn btn-small btn-warning" data-action="editar" data-maquina-key="${maquinaKey}" data-status="${statusAtual}">Editar</button>
-          <button class="btn btn-small btn-danger" data-action="excluir" data-maquina-key="${maquinaKey}">Excluir</button>
+          <select data-id-key="${idKey}" class="situacaoSelect">${situacaoOptions}</select>
+          <select data-id-key="${idKey}" class="fechamentoSelect">${fechamentoOptions}</select>
+          <button class="btn btn-small btn-success" data-action="salvar" data-id-key="${idKey}">Salvar</button>
+          <button class="btn btn-small btn-warning" data-action="editar" data-id-key="${idKey}">Editar</button>
+          <button class="btn btn-small btn-danger" data-action="excluir" data-id-key="${idKey}">Excluir</button>
         </div>
       </td>
     `;
@@ -187,46 +242,39 @@ function atualizarRodapePaginacao(inicio, fim, totalPaginas, totalItens = 0) {
   document.getElementById("btnNextPage").disabled = state.paginaAtual >= totalPaginas;
 }
 
-async function chamarAPI(payload) {
-  const res = await fetch(apiURL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
+async function atualizarRegistro(id, situacao, fechamentoMensal) {
+  await updateDoc(doc(db, "maquinas", id), {
+    situacao: normalizarSituacao(situacao),
+    fechamentoMensal: normalizarFechamento(fechamentoMensal),
+    updatedAt: serverTimestamp()
   });
-
-  if (!res.ok) throw new Error("Falha ao processar a solicitação.");
-  const data = await res.json();
-  if (!data.ok) {
-    throw new Error(data.message || "Não foi possível concluir a operação.");
-  }
-  return data;
-}
-
-async function atualizar(maquina, status) {
-  await chamarAPI({ acao: "atualizarStatus", maquina, status: normalizarStatus(status) });
   await carregar();
 }
 
-async function excluirMaquina(maquina) {
-  await chamarAPI({ acao: "excluir", maquina });
+async function excluirRegistro(id) {
+  await deleteDoc(doc(db, "maquinas", id));
   await carregar();
 }
 
 function abrirModalAdicionar() {
   state.modalModo = "adicionar";
-  modalTitulo.textContent = "Nova Máquina";
+  modalTitulo.textContent = "Novo Registro";
+  modalParceiro.value = "";
   modalNome.value = "";
-  modalStatus.value = "SEM STATUS";
-  modalMaquinaAtual.value = "";
+  modalSituacao.value = "TREINAMENTO";
+  modalFechamento.value = "PENDENTE";
+  modalIdAtual.value = "";
   modal.classList.remove("hidden");
 }
 
-function abrirModalEditar(maquinaAtual, statusAtual) {
+function abrirModalEditar(item) {
   state.modalModo = "editar";
-  modalTitulo.textContent = "Editar Máquina";
-  modalNome.value = maquinaAtual;
-  modalStatus.value = statusAtual;
-  modalMaquinaAtual.value = maquinaAtual;
+  modalTitulo.textContent = "Editar Registro";
+  modalParceiro.value = item.parceiro;
+  modalNome.value = item.maquina;
+  modalSituacao.value = item.situacao;
+  modalFechamento.value = item.fechamentoMensal;
+  modalIdAtual.value = item.id;
   modal.classList.remove("hidden");
 }
 
@@ -234,22 +282,28 @@ function fecharModal() {
   modal.classList.add("hidden");
 }
 
-function validarFormulario(nome, maquinaAtual) {
-  if (!nome || nome.length < 2) {
-    throw new Error("Informe um nome com pelo menos 2 caracteres.");
+function validarFormulario(parceiro, maquina, idAtual) {
+  if (!parceiro || parceiro.length < 2) {
+    throw new Error("Informe um parceiro com pelo menos 2 caracteres.");
+  }
+  if (!maquina || maquina.length < 2) {
+    throw new Error("Informe uma máquina com pelo menos 2 caracteres.");
   }
 
-  const nomeNormalizado = normalizarNome(nome);
-  const atualNormalizado = normalizarNome(maquinaAtual);
-  const existeLocal = state.maquinas.some((m) => {
-    const atual = normalizarNome(m.maquina);
-    if (state.modalModo === "editar" && atual === atualNormalizado) {
+  const nomeNormalizado = normalizarTexto(maquina).toLowerCase();
+  const parceiroNormalizado = normalizarTexto(parceiro).toLowerCase();
+
+  const existeLocal = state.registros.some((m) => {
+    if (state.modalModo === "editar" && m.id === idAtual) {
       return false;
     }
-    return atual === nomeNormalizado;
+    return (
+      normalizarTexto(m.maquina).toLowerCase() === nomeNormalizado &&
+      normalizarTexto(m.parceiro).toLowerCase() === parceiroNormalizado
+    );
   });
   if (existeLocal) {
-    throw new Error("Já existe uma máquina com esse nome.");
+    throw new Error("Já existe esse parceiro com essa máquina.");
   }
 }
 
@@ -274,14 +328,20 @@ filtroTextoEl.addEventListener("input", (e) => {
   render();
 });
 
-filtroStatusEl.addEventListener("change", (e) => {
-  state.filtroStatus = e.target.value;
+filtroSituacaoEl.addEventListener("change", (e) => {
+  state.filtroSituacao = e.target.value;
   state.paginaAtual = 1;
   render();
 });
 
-filtroAgenteEl.addEventListener("input", (e) => {
-  state.filtroAgente = e.target.value.trim();
+filtroFechamentoEl.addEventListener("change", (e) => {
+  state.filtroFechamento = e.target.value;
+  state.paginaAtual = 1;
+  render();
+});
+
+filtroParceiroEl.addEventListener("change", (e) => {
+  state.filtroParceiro = e.target.value;
   state.paginaAtual = 1;
   render();
 });
@@ -294,23 +354,33 @@ ordenacaoEl.addEventListener("change", (e) => {
 
 formMaquina.addEventListener("submit", async (e) => {
   e.preventDefault();
-  const nome = modalNome.value.trim();
-  const status = modalStatus.value;
-  const maquinaAtual = modalMaquinaAtual.value;
+  const parceiro = normalizarTexto(modalParceiro.value);
+  const maquina = normalizarTexto(modalNome.value);
+  const situacao = normalizarSituacao(modalSituacao.value);
+  const fechamentoMensal = normalizarFechamento(modalFechamento.value);
+  const idAtual = modalIdAtual.value;
 
   try {
-    validarFormulario(nome, maquinaAtual);
+    validarFormulario(parceiro, maquina, idAtual);
     if (state.modalModo === "adicionar") {
-      await chamarAPI({ acao: "adicionar", maquina: nome, status: normalizarStatus(status) });
-      alert("Máquina adicionada com sucesso.");
-    } else {
-      await chamarAPI({
-        acao: "editar",
-        maquinaAtual,
-        novaMaquina: nome,
-        novoStatus: normalizarStatus(status)
+      await addDoc(collection(db, "maquinas"), {
+        parceiro,
+        maquina,
+        situacao,
+        fechamentoMensal,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
       });
-      alert("Máquina editada com sucesso.");
+      alert("Registro adicionado com sucesso.");
+    } else {
+      await updateDoc(doc(db, "maquinas", idAtual), {
+        parceiro,
+        maquina,
+        situacao,
+        fechamentoMensal,
+        updatedAt: serverTimestamp()
+      });
+      alert("Registro editado com sucesso.");
     }
     fecharModal();
     await carregar();
@@ -324,30 +394,34 @@ tbody.addEventListener("click", async (e) => {
   if (!botao) return;
 
   const action = botao.dataset.action;
-  const maquina = fromKey(botao.dataset.maquinaKey || "");
+  const id = fromKey(botao.dataset.idKey || "");
 
   try {
     if (action === "salvar") {
-      const maquinaKey = botao.dataset.maquinaKey || "";
-      const select = tbody.querySelector(`select.statusSelect[data-maquina-key="${maquinaKey}"]`);
-      if (!select) return;
-      await atualizar(maquina, select.value);
-      alert("Status atualizado com sucesso.");
+      const idKey = botao.dataset.idKey || "";
+      const situacaoEl = tbody.querySelector(`select.situacaoSelect[data-id-key="${idKey}"]`);
+      const fechamentoEl = tbody.querySelector(`select.fechamentoSelect[data-id-key="${idKey}"]`);
+      if (!situacaoEl || !fechamentoEl) return;
+      await atualizarRegistro(id, situacaoEl.value, fechamentoEl.value);
+      alert("Registro atualizado com sucesso.");
     }
 
     if (action === "editar") {
-      abrirModalEditar(maquina, botao.dataset.status || "PENDENTE");
+      const item = state.registros.find((r) => r.id === id);
+      if (!item) throw new Error("Registro não encontrado.");
+      abrirModalEditar(item);
     }
 
     if (action === "excluir") {
-      const ok = confirm(`Deseja excluir a máquina "${maquina}"?`);
+      const item = state.registros.find((r) => r.id === id);
+      const ok = confirm(`Deseja excluir o registro "${item?.parceiro || "-"} / ${item?.maquina || "-"}"?`);
       if (!ok) return;
-      await excluirMaquina(maquina);
-      alert("Máquina excluída com sucesso.");
+      await excluirRegistro(id);
+      alert("Registro excluído com sucesso.");
     }
   } catch (err) {
     alert(err.message || "Não foi possível concluir a operação.");
   }
 });
 
-carregar().catch(() => alert("Erro ao carregar dados da planilha."));
+carregar().catch(() => alert("Erro ao carregar dados do Firebase. Verifique firebase-config.js e regras do Firestore."));

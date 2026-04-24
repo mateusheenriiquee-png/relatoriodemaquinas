@@ -82,7 +82,7 @@ h1 {
 .toolbar {
   margin-bottom: 18px;
   display: grid;
-  grid-template-columns: 1.6fr 1.2fr 1.6fr 1fr;
+  grid-template-columns: 1.4fr 1fr 1fr 1.2fr 1fr;
   gap: 12px;
 }
 
