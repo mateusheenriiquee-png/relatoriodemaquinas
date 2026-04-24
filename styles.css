@@ -135,7 +135,7 @@ select {
 .table-wrapper {
   border: 1px solid var(--border);
   border-radius: 14px;
-  overflow: hidden;
+  /* overflow: hidden removido para permitir que o menu flutuante apareça sobre o rodapé */
 }
 
 table {
@@ -152,6 +152,14 @@ th {
   padding: 12px;
   text-align: left;
   font-weight: 600;
+}
+
+/* Garante os cantos arredondados do cabeçalho após remover o overflow:hidden da wrapper */
+thead th:first-child {
+  border-top-left-radius: 13px;
+}
+thead th:last-child {
+  border-top-right-radius: 13px;
 }
 
 td {
@@ -190,18 +198,18 @@ tbody tr:last-child td {
    AÇÕES DA TABELA (Hover e Menu Flutuante)
 ------------------------------------------- */
 
-/* Prepara a célula para segurar o menu flutuante */
 .actions-cell {
-  position: relative; 
+  position: relative;
+  min-width: 150px;
 }
 
-/* Botões Iniciais (Invisíveis até passar o mouse) */
 .action-buttons {
   display: flex;
   gap: 8px;
   opacity: 0;
   visibility: hidden;
   transition: opacity 0.2s ease, visibility 0.2s ease;
+  justify-content: flex-end;
 }
 
 tr:hover .action-buttons {
@@ -209,41 +217,39 @@ tr:hover .action-buttons {
   visibility: visible;
 }
 
-/* Menu Flutuante (Caixinha com Selects e Inputs) */
 .quick-edit-menu {
   position: absolute;
-  top: 100%;
-  right: 0;
+  top: calc(100% - 8px); /* Posicionado levemente acima para conectar visualmente ao botão */
+  right: 12px;           /* Alinhado com o padding da célula da tabela */
   background: #ffffff;
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 16px;
-  width: 220px;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.15);
-  z-index: 50; /* Garante que fique por cima de tudo */
+  width: 240px;
+  box-shadow: 0 12px 35px rgba(15, 23, 42, 0.2);
+  z-index: 999;          /* Valor alto para ficar à frente da paginação e rodapé */
   display: flex;
   flex-direction: column;
   gap: 10px;
   
-  /* Oculto e levemente subido por padrão */
+  /* Estado inicial oculto */
   opacity: 0;
   visibility: hidden;
   transform: translateY(-10px);
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Quando o JavaScript adiciona a classe "active", o menu aparece */
 .quick-edit-menu.active {
   opacity: 1;
   visibility: visible;
-  transform: translateY(0); /* Desliza suavemente para o lugar */
+  transform: translateY(0);
 }
 
 .quick-edit-menu label {
   font-size: 0.75rem;
   color: var(--muted);
   font-weight: 600;
-  margin-bottom: -6px; /* Aproxima o título do seu respectivo select/input */
+  margin-bottom: -6px;
 }
 
 .quick-edit-actions {
@@ -253,7 +259,7 @@ tr:hover .action-buttons {
 }
 
 .quick-edit-actions .btn {
-  flex: 1; /* Faz os botões de Salvar/Cancelar dividirem o espaço meio a meio */
+  flex: 1;
 }
 
 .btn-small {
@@ -290,6 +296,8 @@ tr:hover .action-buttons {
   gap: 12px;
   color: var(--muted);
   font-size: 0.9rem;
+  position: relative; /* Mantém o rodapé no seu plano original */
+  z-index: 10;
 }
 
 .pagination-actions {
@@ -310,7 +318,7 @@ button:disabled {
   justify-content: center;
   align-items: center;
   padding: 20px;
-  z-index: 20;
+  z-index: 1000;
 }
 
 .hidden {
