@@ -10,14 +10,14 @@ import {
 import { db } from "./firebase-config.js";
 
 const SITUACAO_OPTIONS = ["TREINAMENTO", "PRODUCAO"];
-const FECHAMENTO_OPTIONS = ["PENDENTE", "PAGO"];
+const PAGAMENTO_OPTIONS = ["PENDENTE", "NAO_PENDENTE"];
 const PAGE_SIZE = 8;
 
 const state = {
   registros: [],
   filtroTexto: "",
   filtroSituacao: "todos",
-  filtroFechamento: "todos",
+  filtroPagamento: "todos",
   filtroParceiro: "todos",
   ordenacao: "parceiro-asc",
   paginaAtual: 1,
@@ -27,7 +27,7 @@ const state = {
 const tbody = document.getElementById("tbody");
 const filtroTextoEl = document.getElementById("filtroTexto");
 const filtroSituacaoEl = document.getElementById("filtroSituacao");
-const filtroFechamentoEl = document.getElementById("filtroFechamento");
+const filtroPagamentoEl = document.getElementById("filtroPagamento");
 const filtroParceiroEl = document.getElementById("filtroParceiro");
 const ordenacaoEl = document.getElementById("ordenacao");
 const paginationInfo = document.getElementById("paginationInfo");
@@ -36,7 +36,8 @@ const modalTitulo = document.getElementById("modalTitulo");
 const modalParceiro = document.getElementById("modalParceiro");
 const modalNome = document.getElementById("modalNome");
 const modalSituacao = document.getElementById("modalSituacao");
-const modalFechamento = document.getElementById("modalFechamento");
+const modalPagamento = document.getElementById("modalPagamento");
+const modalPix = document.getElementById("modalPix");
 const modalIdAtual = document.getElementById("modalIdAtual");
 const formMaquina = document.getElementById("formMaquina");
 
@@ -57,9 +58,9 @@ function normalizarSituacao(value) {
   return SITUACAO_OPTIONS.includes(v) ? v : "TREINAMENTO";
 }
 
-function normalizarFechamento(value) {
+function normalizarPagamento(value) {
   const v = String(value || "").trim().toUpperCase();
-  return FECHAMENTO_OPTIONS.includes(v) ? v : "PENDENTE";
+  return PAGAMENTO_OPTIONS.includes(v) ? v : "PENDENTE";
 }
 
 function compararNomeNatural(a, b) {
@@ -91,7 +92,8 @@ async function carregar() {
       parceiro: normalizarTexto(data.parceiro),
       maquina: normalizarTexto(data.maquina),
       situacao: normalizarSituacao(data.situacao),
-      fechamentoMensal: normalizarFechamento(data.fechamentoMensal)
+      pagamentoStatus: normalizarPagamento(data.pagamentoStatus || data.fechamentoMensal),
+      pixParceiro: normalizarTexto(data.pixParceiro || "")
     };
   });
   atualizarFiltroParceiros();
@@ -139,8 +141,8 @@ function getRegistrosFiltrados() {
     dados = dados.filter((item) => item.situacao === state.filtroSituacao);
   }
 
-  if (state.filtroFechamento !== "todos") {
-    dados = dados.filter((item) => item.fechamentoMensal === state.filtroFechamento);
+  if (state.filtroPagamento !== "todos") {
+    dados = dados.filter((item) => item.pagamentoStatus === state.filtroPagamento);
   }
 
   if (state.filtroParceiro !== "todos") {
@@ -175,8 +177,8 @@ function atualizarEstatisticas() {
   const total = state.registros.length;
   const treinamento = state.registros.filter((m) => m.situacao === "TREINAMENTO").length;
   const producao = state.registros.filter((m) => m.situacao === "PRODUCAO").length;
-  const pago = state.registros.filter((m) => m.fechamentoMensal === "PAGO").length;
-  const pendente = state.registros.filter((m) => m.fechamentoMensal === "PENDENTE").length;
+  const pago = state.registros.filter((m) => m.pagamentoStatus === "NAO_PENDENTE").length;
+  const pendente = state.registros.filter((m) => m.pagamentoStatus === "PENDENTE").length;
 
   document.getElementById("statTotal").textContent = String(total);
   document.getElementById("statTreinamento").textContent = String(treinamento);
@@ -193,7 +195,7 @@ function render() {
 
   if (!dadosPaginados.length) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td colspan="5" class="empty">Nenhum registro encontrado para os filtros selecionados.</td>`;
+    tr.innerHTML = `<td colspan="6" class="empty">Nenhum registro encontrado para os filtros selecionados.</td>`;
     tbody.appendChild(tr);
     atualizarEstatisticas();
     atualizarRodapePaginacao(0, 0, totalPaginas);
@@ -206,19 +208,21 @@ function render() {
     const situacaoOptions = SITUACAO_OPTIONS.map(
       (v) => `<option value="${v}" ${v === item.situacao ? "selected" : ""}>${v}</option>`
     ).join("");
-    const fechamentoOptions = FECHAMENTO_OPTIONS.map(
-      (v) => `<option value="${v}" ${v === item.fechamentoMensal ? "selected" : ""}>${v}</option>`
+    const pagamentoOptions = PAGAMENTO_OPTIONS.map(
+      (v) => `<option value="${v}" ${v === item.pagamentoStatus ? "selected" : ""}>${v}</option>`
     ).join("");
 
     tr.innerHTML = `
       <td>${item.parceiro || "-"}</td>
       <td>${item.maquina}</td>
       <td><span class="status-pill ${getSituacaoClass(item.situacao)}">${item.situacao}</span></td>
-      <td><span class="status-pill ${getSituacaoClass(item.fechamentoMensal === "PAGO" ? "PRODUCAO" : "OUTRO")}">${item.fechamentoMensal}</span></td>
+      <td><span class="status-pill ${getSituacaoClass(item.pagamentoStatus === "NAO_PENDENTE" ? "PRODUCAO" : "OUTRO")}">${item.pagamentoStatus}</span></td>
+      <td>${item.pixParceiro || "-"}</td>
       <td>
         <div class="table-actions">
           <select data-id-key="${idKey}" class="situacaoSelect">${situacaoOptions}</select>
-          <select data-id-key="${idKey}" class="fechamentoSelect">${fechamentoOptions}</select>
+          <select data-id-key="${idKey}" class="pagamentoSelect">${pagamentoOptions}</select>
+          <input data-id-key="${idKey}" class="pixInput" type="text" value="${item.pixParceiro || ""}" placeholder="PIX">
           <button class="btn btn-small btn-success" data-action="salvar" data-id-key="${idKey}">Salvar</button>
           <button class="btn btn-small btn-warning" data-action="editar" data-id-key="${idKey}">Editar</button>
           <button class="btn btn-small btn-danger" data-action="excluir" data-id-key="${idKey}">Excluir</button>
@@ -239,10 +243,11 @@ function atualizarRodapePaginacao(inicio, fim, totalPaginas, totalItens = 0) {
   document.getElementById("btnNextPage").disabled = state.paginaAtual >= totalPaginas;
 }
 
-async function atualizarRegistro(id, situacao, fechamentoMensal) {
+async function atualizarRegistro(id, situacao, pagamentoStatus, pixParceiro) {
   await updateDoc(doc(db, "maquinas", id), {
     situacao: normalizarSituacao(situacao),
-    fechamentoMensal: normalizarFechamento(fechamentoMensal),
+    pagamentoStatus: normalizarPagamento(pagamentoStatus),
+    pixParceiro: normalizarTexto(pixParceiro),
     updatedAt: serverTimestamp()
   });
   await carregar();
@@ -259,7 +264,8 @@ function abrirModalAdicionar() {
   modalParceiro.value = "";
   modalNome.value = "";
   modalSituacao.value = "TREINAMENTO";
-  modalFechamento.value = "PENDENTE";
+  modalPagamento.value = "PENDENTE";
+  modalPix.value = "";
   modalIdAtual.value = "";
   modal.classList.remove("hidden");
 }
@@ -270,7 +276,8 @@ function abrirModalEditar(item) {
   modalParceiro.value = item.parceiro;
   modalNome.value = item.maquina;
   modalSituacao.value = item.situacao;
-  modalFechamento.value = item.fechamentoMensal;
+  modalPagamento.value = item.pagamentoStatus;
+  modalPix.value = item.pixParceiro || "";
   modalIdAtual.value = item.id;
   modal.classList.remove("hidden");
 }
@@ -331,8 +338,8 @@ filtroSituacaoEl.addEventListener("change", (e) => {
   render();
 });
 
-filtroFechamentoEl.addEventListener("change", (e) => {
-  state.filtroFechamento = e.target.value;
+filtroPagamentoEl.addEventListener("change", (e) => {
+  state.filtroPagamento = e.target.value;
   state.paginaAtual = 1;
   render();
 });
@@ -354,7 +361,8 @@ formMaquina.addEventListener("submit", async (e) => {
   const parceiro = normalizarTexto(modalParceiro.value);
   const maquina = normalizarTexto(modalNome.value);
   const situacao = normalizarSituacao(modalSituacao.value);
-  const fechamentoMensal = normalizarFechamento(modalFechamento.value);
+  const pagamentoStatus = normalizarPagamento(modalPagamento.value);
+  const pixParceiro = normalizarTexto(modalPix.value);
   const idAtual = modalIdAtual.value;
 
   try {
@@ -364,7 +372,8 @@ formMaquina.addEventListener("submit", async (e) => {
         parceiro,
         maquina,
         situacao,
-        fechamentoMensal,
+        pagamentoStatus,
+        pixParceiro,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
@@ -374,7 +383,8 @@ formMaquina.addEventListener("submit", async (e) => {
         parceiro,
         maquina,
         situacao,
-        fechamentoMensal,
+        pagamentoStatus,
+        pixParceiro,
         updatedAt: serverTimestamp()
       });
       alert("Registro editado com sucesso.");
@@ -397,9 +407,10 @@ tbody.addEventListener("click", async (e) => {
     if (action === "salvar") {
       const idKey = botao.dataset.idKey || "";
       const situacaoEl = tbody.querySelector(`select.situacaoSelect[data-id-key="${idKey}"]`);
-      const fechamentoEl = tbody.querySelector(`select.fechamentoSelect[data-id-key="${idKey}"]`);
-      if (!situacaoEl || !fechamentoEl) return;
-      await atualizarRegistro(id, situacaoEl.value, fechamentoEl.value);
+      const pagamentoEl = tbody.querySelector(`select.pagamentoSelect[data-id-key="${idKey}"]`);
+      const pixEl = tbody.querySelector(`input.pixInput[data-id-key="${idKey}"]`);
+      if (!situacaoEl || !pagamentoEl || !pixEl) return;
+      await atualizarRegistro(id, situacaoEl.value, pagamentoEl.value, pixEl.value);
       alert("Registro atualizado com sucesso.");
     }
 

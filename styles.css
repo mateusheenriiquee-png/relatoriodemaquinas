@@ -192,6 +192,10 @@ tbody tr:last-child td {
   flex-wrap: wrap;
 }
 
+.pixInput {
+  min-width: 170px;
+}
+
 .btn-small {
   font-size: 0.82rem;
   padding: 8px 10px;

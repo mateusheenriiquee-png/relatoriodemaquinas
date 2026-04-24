@@ -12,7 +12,7 @@
   <header class="header">
     <div>
       <h1>Controle de Parceiros e Máquinas</h1>
-      <p class="subtitle">Gestão por parceiro, situação e fechamento mensal</p>
+      <p class="subtitle">Gestão por parceiro, situação, pagamento e PIX</p>
     </div>
     <div class="actions">
       <button id="btnAdicionar" class="btn btn-primary">+ Novo Registro</button>
@@ -36,11 +36,11 @@
     </div>
 
     <div class="field">
-      <label for="filtroFechamento">Fechamento mensal</label>
-      <select id="filtroFechamento">
+      <label for="filtroPagamento">Pagamento mensal</label>
+      <select id="filtroPagamento">
         <option value="todos">Todos</option>
         <option value="PENDENTE">PENDENTE</option>
-        <option value="PAGO">PAGO</option>
+        <option value="NAO_PENDENTE">NAO PENDENTE</option>
       </select>
     </div>
 
@@ -75,7 +75,7 @@
       <strong id="statProducao">0</strong>
     </div>
     <div class="stat-card">
-      <span>PAGO</span>
+      <span>NAO PENDENTE</span>
       <strong id="statPago">0</strong>
     </div>
     <div class="stat-card">
@@ -91,7 +91,8 @@
           <th>Parceiro</th>
           <th>Máquina</th>
           <th>Situação</th>
-          <th>Fechamento</th>
+          <th>Pagamento</th>
+          <th>PIX</th>
           <th>Ações</th>
         </tr>
       </thead>
@@ -131,11 +132,15 @@
         </select>
       </div>
       <div class="field">
-        <label for="modalFechamento">Fechamento Mensal</label>
-        <select id="modalFechamento" name="fechamento" required>
+        <label for="modalPagamento">Pagamento Mensal</label>
+        <select id="modalPagamento" name="pagamento" required>
           <option value="PENDENTE">PENDENTE</option>
-          <option value="PAGO">PAGO</option>
+          <option value="NAO_PENDENTE">NAO PENDENTE</option>
         </select>
+      </div>
+      <div class="field">
+        <label for="modalPix">PIX do parceiro</label>
+        <input id="modalPix" name="pix" type="text" maxlength="180" placeholder="CPF, e-mail, telefone ou chave aleatória">
       </div>
       <input id="modalIdAtual" type="hidden">
       <div class="modal-actions">
