@@ -262,7 +262,7 @@ function render() {
 
   if (!dadosPaginados.length) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td colspan="10" class="empty">Nenhum registro encontrado para os filtros selecionados.</td>`;
+    tr.innerHTML = `<td colspan="9" class="empty">Nenhum registro encontrado para os filtros selecionados.</td>`;
     tbody.appendChild(tr);
     atualizarEstatisticas();
     atualizarRodapePaginacao(0, 0, totalPaginas);
@@ -284,9 +284,8 @@ function render() {
     ).join("");
 
     tr.innerHTML = `
-      <td>${item.parceiro || "-"}</td>
-      <td>${item.maquina}</td>
       <td>${item.unidade || "-"}</td>
+      <td>${item.maquina}</td>
       <td>${item.agr || "-"}</td>
       <td><span class="status-pill ${getSituacaoMaquinaClass(item.situacaoMaquina)}">${item.situacaoMaquina || "-"}</span></td>
       <td>${item.agrFilhos ? "✔ Sim" : "✘ Não"}</td>
@@ -604,7 +603,7 @@ tbody.addEventListener("click", async (e) => {
 
     if (action === "excluir") {
       const item = state.registros.find((r) => r.id === id);
-      const ok = confirm(`Deseja excluir o registro "${item?.parceiro || "-"} / ${item?.maquina || "-"}"?`);
+      const ok = confirm(`Deseja excluir o registro "${item?.unidade || "-"} / ${item?.maquina || "-"}"?`);
       if (!ok) return;
       await excluirRegistro(id);
       alert("Registro excluído com sucesso.");
