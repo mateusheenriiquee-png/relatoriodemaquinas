@@ -40,7 +40,6 @@ const ordenacaoEl = document.getElementById("ordenacao");
 const paginationInfo = document.getElementById("paginationInfo");
 const modal = document.getElementById("modalMaquina");
 const modalTitulo = document.getElementById("modalTitulo");
-const modalParceiro = document.getElementById("modalParceiro");
 const modalNome = document.getElementById("modalNome");
 const modalSituacao = document.getElementById("modalSituacao");
 const modalPagamento = document.getElementById("modalPagamento");
@@ -366,7 +365,6 @@ async function excluirRegistro(id) {
 function abrirModalAdicionar() {
   state.modalModo = "adicionar";
   modalTitulo.textContent = "Novo Registro";
-  modalParceiro.value = "";
   modalNome.value = "";
   modalSituacao.value = "TREINAMENTO";
   modalPagamento.value = "PENDENTE";
@@ -382,7 +380,6 @@ function abrirModalAdicionar() {
 function abrirModalEditar(item) {
   state.modalModo = "editar";
   modalTitulo.textContent = "Editar Registro";
-  modalParceiro.value = item.parceiro;
   modalNome.value = item.maquina;
   modalSituacao.value = item.situacao;
   modalPagamento.value = item.pagamentoStatus;
@@ -399,28 +396,21 @@ function fecharModal() {
   modal.classList.add("hidden");
 }
 
-function validarFormulario(parceiro, maquina, idAtual) {
-  if (!parceiro || parceiro.length < 2) {
-    throw new Error("Informe um parceiro com pelo menos 2 caracteres.");
-  }
+function validarFormulario(maquina, idAtual) {
   if (!maquina || maquina.length < 2) {
     throw new Error("Informe uma máquina com pelo menos 2 caracteres.");
   }
 
   const nomeNormalizado = normalizarTexto(maquina).toLowerCase();
-  const parceiroNormalizado = normalizarTexto(parceiro).toLowerCase();
 
   const existeLocal = state.registros.some((m) => {
     if (state.modalModo === "editar" && m.id === idAtual) {
       return false;
     }
-    return (
-      normalizarTexto(m.maquina).toLowerCase() === nomeNormalizado &&
-      normalizarTexto(m.parceiro).toLowerCase() === parceiroNormalizado
-    );
+    return normalizarTexto(m.maquina).toLowerCase() === nomeNormalizado;
   });
   if (existeLocal) {
-    throw new Error("Já existe esse parceiro com essa máquina.");
+    throw new Error("Já existe uma máquina com esse nome.");
   }
 }
 
@@ -489,7 +479,6 @@ ordenacaoEl.addEventListener("change", (e) => {
 
 formMaquina.addEventListener("submit", async (e) => {
   e.preventDefault();
-  const parceiro = normalizarTexto(modalParceiro.value);
   const maquina = normalizarTexto(modalNome.value);
   const situacao = normalizarSituacao(modalSituacao.value);
   const pagamentoStatus = normalizarPagamento(modalPagamento.value);
@@ -501,10 +490,9 @@ formMaquina.addEventListener("submit", async (e) => {
   const idAtual = modalIdAtual.value;
 
   try {
-    validarFormulario(parceiro, maquina, idAtual);
+    validarFormulario(maquina, idAtual);
     if (state.modalModo === "adicionar") {
       await addDoc(collection(db, "maquinas"), {
-        parceiro,
         maquina,
         situacao,
         pagamentoStatus,
@@ -519,7 +507,6 @@ formMaquina.addEventListener("submit", async (e) => {
       alert("Registro adicionado com sucesso.");
     } else {
       await updateDoc(doc(db, "maquinas", idAtual), {
-        parceiro,
         maquina,
         situacao,
         pagamentoStatus,
