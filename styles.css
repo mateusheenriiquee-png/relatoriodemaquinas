@@ -189,6 +189,22 @@ tbody tr:last-child td {
   color: #c2410c;
 }
 
+/* Situação da Máquina */
+.status-maq-configurada {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-maq-fora {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
+.status-maq-nao {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
 .status-Produção {
   background: #dcfce7;
   color: #166534;

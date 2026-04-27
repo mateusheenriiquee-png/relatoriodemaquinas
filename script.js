@@ -10,7 +10,8 @@ import {
 import { db } from "./firebase-config.js";
 
 const SITUACAO_OPTIONS = ["TREINAMENTO", "PRODUCAO"];
-const PAGAMENTO_OPTIONS = ["PENDENTE", "NAO_PENDENTE"];
+const PAGAMENTO_OPTIONS = ["PENDENTE", "NAO PENDENTE"];
+const SITUACAO_MAQUINA_OPTIONS = ["CONFIGURADA", "CONFIGURADA FORA DO PADRÃO", "NÃO CONFIGURADA"];
 const PAGE_SIZE = 8;
 
 const state = {
@@ -19,6 +20,9 @@ const state = {
   filtroSituacao: "todos",
   filtroPagamento: "todos",
   filtroParceiro: "todos",
+  filtroUnidade: "todos",
+  filtroAgr: "todos",
+  filtroSituacaoMaquina: "todos",
   ordenacao: "parceiro-asc",
   paginaAtual: 1,
   modalModo: "adicionar"
@@ -29,6 +33,9 @@ const filtroTextoEl = document.getElementById("filtroTexto");
 const filtroSituacaoEl = document.getElementById("filtroSituacao");
 const filtroPagamentoEl = document.getElementById("filtroPagamento");
 const filtroParceiroEl = document.getElementById("filtroParceiro");
+const filtroUnidadeEl = document.getElementById("filtroUnidade");
+const filtroAgrEl = document.getElementById("filtroAgr");
+const filtroSituacaoMaquinaEl = document.getElementById("filtroSituacaoMaquina");
 const ordenacaoEl = document.getElementById("ordenacao");
 const paginationInfo = document.getElementById("paginationInfo");
 const modal = document.getElementById("modalMaquina");
@@ -38,6 +45,10 @@ const modalNome = document.getElementById("modalNome");
 const modalSituacao = document.getElementById("modalSituacao");
 const modalPagamento = document.getElementById("modalPagamento");
 const modalPix = document.getElementById("modalPix");
+const modalUnidade = document.getElementById("modalUnidade");
+const modalAgr = document.getElementById("modalAgr");
+const modalSituacaoMaquina = document.getElementById("modalSituacaoMaquina");
+const modalAgrFilhos = document.getElementById("modalAgrFilhos");
 const modalIdAtual = document.getElementById("modalIdAtual");
 const formMaquina = document.getElementById("formMaquina");
 
@@ -61,6 +72,11 @@ function normalizarSituacao(value) {
 function normalizarPagamento(value) {
   const v = String(value || "").trim().toUpperCase();
   return PAGAMENTO_OPTIONS.includes(v) ? v : "PENDENTE";
+}
+
+function normalizarSituacaoMaquina(value) {
+  const v = String(value || "").trim().toUpperCase();
+  return SITUACAO_MAQUINA_OPTIONS.includes(v) ? v : "NÃO CONFIGURADA";
 }
 
 function compararNomeNatural(a, b) {
@@ -93,7 +109,11 @@ async function carregar() {
       maquina: normalizarTexto(data.maquina),
       situacao: normalizarSituacao(data.situacao),
       pagamentoStatus: normalizarPagamento(data.pagamentoStatus || data.fechamentoMensal),
-      pixParceiro: normalizarTexto(data.pixParceiro || "")
+      pixParceiro: normalizarTexto(data.pixParceiro || ""),
+      unidade: normalizarTexto(data.unidade || ""),
+      agr: normalizarTexto(data.agr || ""),
+      situacaoMaquina: normalizarSituacaoMaquina(data.situacaoMaquina || ""),
+      agrFilhos: data.agrFilhos === true || data.agrFilhos === "true"
     };
   });
   atualizarFiltroParceiros();
@@ -117,16 +137,51 @@ function atualizarFiltroParceiros() {
     option.textContent = parceiro;
     filtroParceiroEl.appendChild(option);
   });
-
   const aindaExiste = valorAnterior === "todos" || parceiros.includes(valorAnterior);
   state.filtroParceiro = aindaExiste ? valorAnterior : "todos";
   filtroParceiroEl.value = state.filtroParceiro;
+
+  // Filtro de Unidade
+  const unidades = Array.from(
+    new Set(state.registros.map((item) => item.unidade).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base" }));
+  const valorUnidade = state.filtroUnidade;
+  filtroUnidadeEl.innerHTML = '<option value="todos">Todas</option>';
+  unidades.forEach((u) => {
+    const option = document.createElement("option");
+    option.value = u;
+    option.textContent = u;
+    filtroUnidadeEl.appendChild(option);
+  });
+  state.filtroUnidade = (valorUnidade === "todos" || unidades.includes(valorUnidade)) ? valorUnidade : "todos";
+  filtroUnidadeEl.value = state.filtroUnidade;
+
+  // Filtro de AGR
+  const agrs = Array.from(
+    new Set(state.registros.map((item) => item.agr).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base" }));
+  const valorAgr = state.filtroAgr;
+  filtroAgrEl.innerHTML = '<option value="todos">Todos</option>';
+  agrs.forEach((a) => {
+    const option = document.createElement("option");
+    option.value = a;
+    option.textContent = a;
+    filtroAgrEl.appendChild(option);
+  });
+  state.filtroAgr = (valorAgr === "todos" || agrs.includes(valorAgr)) ? valorAgr : "todos";
+  filtroAgrEl.value = state.filtroAgr;
 }
 
 function getSituacaoClass(situacao) {
   if (situacao === "PRODUCAO") return "status-Produção";
   if (situacao === "TREINAMENTO") return "status-Treinamento";
   return "status-Pendente";
+}
+
+function getSituacaoMaquinaClass(v) {
+  if (v === "CONFIGURADA") return "status-maq-configurada";
+  if (v === "CONFIGURADA FORA DO PADRÃO") return "status-maq-fora";
+  return "status-maq-nao";
 }
 
 function getRegistrosFiltrados() {
@@ -147,6 +202,18 @@ function getRegistrosFiltrados() {
 
   if (state.filtroParceiro !== "todos") {
     dados = dados.filter((item) => item.parceiro === state.filtroParceiro);
+  }
+
+  if (state.filtroUnidade !== "todos") {
+    dados = dados.filter((item) => item.unidade === state.filtroUnidade);
+  }
+
+  if (state.filtroAgr !== "todos") {
+    dados = dados.filter((item) => item.agr === state.filtroAgr);
+  }
+
+  if (state.filtroSituacaoMaquina !== "todos") {
+    dados = dados.filter((item) => item.situacaoMaquina === state.filtroSituacaoMaquina);
   }
 
   if (state.ordenacao === "parceiro-asc") {
@@ -195,7 +262,7 @@ function render() {
 
   if (!dadosPaginados.length) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td colspan="6" class="empty">Nenhum registro encontrado para os filtros selecionados.</td>`;
+    tr.innerHTML = `<td colspan="10" class="empty">Nenhum registro encontrado para os filtros selecionados.</td>`;
     tbody.appendChild(tr);
     atualizarEstatisticas();
     atualizarRodapePaginacao(0, 0, totalPaginas);
@@ -212,9 +279,17 @@ function render() {
       (v) => `<option value="${v}" ${v === item.pagamentoStatus ? "selected" : ""}>${v}</option>`
     ).join("");
 
+    const situacaoMaquinaOptions = SITUACAO_MAQUINA_OPTIONS.map(
+      (v) => `<option value="${v}" ${v === item.situacaoMaquina ? "selected" : ""}>${v}</option>`
+    ).join("");
+
     tr.innerHTML = `
       <td>${item.parceiro || "-"}</td>
       <td>${item.maquina}</td>
+      <td>${item.unidade || "-"}</td>
+      <td>${item.agr || "-"}</td>
+      <td><span class="status-pill ${getSituacaoMaquinaClass(item.situacaoMaquina)}">${item.situacaoMaquina || "-"}</span></td>
+      <td>${item.agrFilhos ? "✔ Sim" : "✘ Não"}</td>
       <td><span class="status-pill ${getSituacaoClass(item.situacao)}">${item.situacao}</span></td>
       <td><span class="status-pill ${getSituacaoClass(item.pagamentoStatus === "NAO_PENDENTE" ? "PRODUCAO" : "OUTRO")}">${item.pagamentoStatus}</span></td>
       <td>${item.pixParceiro || "-"}</td>
@@ -230,6 +305,21 @@ function render() {
           
           <label>Pagamento:</label>
           <select data-id-key="${idKey}" class="pagamentoSelect">${pagamentoOptions}</select>
+
+          <label>Unidade:</label>
+          <input data-id-key="${idKey}" class="unidadeInput" type="text" value="${item.unidade || ""}" placeholder="Unidade">
+
+          <label>AGR:</label>
+          <input data-id-key="${idKey}" class="agrInput" type="text" value="${item.agr || ""}" placeholder="AGR">
+
+          <label>Situação da Máquina:</label>
+          <select data-id-key="${idKey}" class="situacaoMaquinaSelect">${situacaoMaquinaOptions}</select>
+
+          <label>AGR possui filhos?</label>
+          <select data-id-key="${idKey}" class="agrFilhosSelect">
+            <option value="false" ${!item.agrFilhos ? "selected" : ""}>Não</option>
+            <option value="true" ${item.agrFilhos ? "selected" : ""}>Sim</option>
+          </select>
           
           <label>Chave PIX:</label>
           <input data-id-key="${idKey}" class="pixInput" type="text" value="${item.pixParceiro || ""}" placeholder="PIX">
@@ -255,11 +345,15 @@ function atualizarRodapePaginacao(inicio, fim, totalPaginas, totalItens = 0) {
   document.getElementById("btnNextPage").disabled = state.paginaAtual >= totalPaginas;
 }
 
-async function atualizarRegistro(id, situacao, pagamentoStatus, pixParceiro) {
+async function atualizarRegistro(id, situacao, pagamentoStatus, pixParceiro, unidade, agr, situacaoMaquina, agrFilhos) {
   await updateDoc(doc(db, "maquinas", id), {
     situacao: normalizarSituacao(situacao),
     pagamentoStatus: normalizarPagamento(pagamentoStatus),
     pixParceiro: normalizarTexto(pixParceiro),
+    unidade: normalizarTexto(unidade),
+    agr: normalizarTexto(agr),
+    situacaoMaquina: normalizarSituacaoMaquina(situacaoMaquina),
+    agrFilhos: agrFilhos === true || agrFilhos === "true",
     updatedAt: serverTimestamp()
   });
   await carregar();
@@ -278,6 +372,10 @@ function abrirModalAdicionar() {
   modalSituacao.value = "TREINAMENTO";
   modalPagamento.value = "PENDENTE";
   modalPix.value = "";
+  modalUnidade.value = "";
+  modalAgr.value = "";
+  modalSituacaoMaquina.value = "NÃO CONFIGURADA";
+  modalAgrFilhos.value = "false";
   modalIdAtual.value = "";
   modal.classList.remove("hidden");
 }
@@ -290,6 +388,10 @@ function abrirModalEditar(item) {
   modalSituacao.value = item.situacao;
   modalPagamento.value = item.pagamentoStatus;
   modalPix.value = item.pixParceiro || "";
+  modalUnidade.value = item.unidade || "";
+  modalAgr.value = item.agr || "";
+  modalSituacaoMaquina.value = item.situacaoMaquina || "NÃO CONFIGURADA";
+  modalAgrFilhos.value = item.agrFilhos ? "true" : "false";
   modalIdAtual.value = item.id;
   modal.classList.remove("hidden");
 }
@@ -362,6 +464,24 @@ filtroParceiroEl.addEventListener("change", (e) => {
   render();
 });
 
+filtroUnidadeEl.addEventListener("change", (e) => {
+  state.filtroUnidade = e.target.value;
+  state.paginaAtual = 1;
+  render();
+});
+
+filtroAgrEl.addEventListener("change", (e) => {
+  state.filtroAgr = e.target.value;
+  state.paginaAtual = 1;
+  render();
+});
+
+filtroSituacaoMaquinaEl.addEventListener("change", (e) => {
+  state.filtroSituacaoMaquina = e.target.value;
+  state.paginaAtual = 1;
+  render();
+});
+
 ordenacaoEl.addEventListener("change", (e) => {
   state.ordenacao = e.target.value;
   state.paginaAtual = 1;
@@ -375,6 +495,10 @@ formMaquina.addEventListener("submit", async (e) => {
   const situacao = normalizarSituacao(modalSituacao.value);
   const pagamentoStatus = normalizarPagamento(modalPagamento.value);
   const pixParceiro = normalizarTexto(modalPix.value);
+  const unidade = normalizarTexto(modalUnidade.value);
+  const agr = normalizarTexto(modalAgr.value);
+  const situacaoMaquina = normalizarSituacaoMaquina(modalSituacaoMaquina.value);
+  const agrFilhos = modalAgrFilhos.value === "true";
   const idAtual = modalIdAtual.value;
 
   try {
@@ -386,6 +510,10 @@ formMaquina.addEventListener("submit", async (e) => {
         situacao,
         pagamentoStatus,
         pixParceiro,
+        unidade,
+        agr,
+        situacaoMaquina,
+        agrFilhos,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
@@ -397,6 +525,10 @@ formMaquina.addEventListener("submit", async (e) => {
         situacao,
         pagamentoStatus,
         pixParceiro,
+        unidade,
+        agr,
+        situacaoMaquina,
+        agrFilhos,
         updatedAt: serverTimestamp()
       });
       alert("Registro editado com sucesso.");
@@ -441,12 +573,24 @@ tbody.addEventListener("click", async (e) => {
       const situacaoEl = tbody.querySelector(`select.situacaoSelect[data-id-key="${idKey}"]`);
       const pagamentoEl = tbody.querySelector(`select.pagamentoSelect[data-id-key="${idKey}"]`);
       const pixEl = tbody.querySelector(`input.pixInput[data-id-key="${idKey}"]`);
+      const unidadeEl = tbody.querySelector(`input.unidadeInput[data-id-key="${idKey}"]`);
+      const agrEl = tbody.querySelector(`input.agrInput[data-id-key="${idKey}"]`);
+      const situacaoMaquinaEl = tbody.querySelector(`select.situacaoMaquinaSelect[data-id-key="${idKey}"]`);
+      const agrFilhosEl = tbody.querySelector(`select.agrFilhosSelect[data-id-key="${idKey}"]`);
       
       if (!situacaoEl || !pagamentoEl || !pixEl) return;
-      await atualizarRegistro(id, situacaoEl.value, pagamentoEl.value, pixEl.value);
+      await atualizarRegistro(
+        id,
+        situacaoEl.value,
+        pagamentoEl.value,
+        pixEl.value,
+        unidadeEl?.value || "",
+        agrEl?.value || "",
+        situacaoMaquinaEl?.value || "",
+        agrFilhosEl?.value || "false"
+      );
       alert("Registro atualizado com sucesso.");
       
-      // Esconde o menu novamente após salvar
       const menu = document.getElementById(`menu-${idKey}`);
       if (menu) menu.classList.remove("active");
       return;

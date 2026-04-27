@@ -51,6 +51,30 @@
       </select>
     </div>
 
+    <div class="field">
+      <label for="filtroUnidade">Filtrar por unidade</label>
+      <select id="filtroUnidade">
+        <option value="todos">Todas</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="filtroAgr">Filtrar por AGR</label>
+      <select id="filtroAgr">
+        <option value="todos">Todos</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="filtroSituacaoMaquina">Sit. da Máquina</label>
+      <select id="filtroSituacaoMaquina">
+        <option value="todos">Todas</option>
+        <option value="CONFIGURADA">Configurada</option>
+        <option value="CONFIGURADA FORA DO PADRÃO">Fora do Padrão</option>
+        <option value="NÃO CONFIGURADA">Não Configurada</option>
+      </select>
+    </div>
+
     <div class="field field-small">
       <label for="ordenacao">Ordenar</label>
       <select id="ordenacao">
@@ -90,6 +114,10 @@
         <tr>
           <th>Parceiro</th>
           <th>Máquina</th>
+          <th>Unidade</th>
+          <th>AGR</th>
+          <th>Sit. Máquina</th>
+          <th>AGR Filhos</th>
           <th>Situação</th>
           <th>Pagamento</th>
           <th>PIX</th>
@@ -141,6 +169,29 @@
       <div class="field">
         <label for="modalPix">PIX do parceiro</label>
         <input id="modalPix" name="pix" type="text" maxlength="180" placeholder="CPF, e-mail, telefone ou chave aleatória">
+      </div>
+      <div class="field">
+        <label for="modalUnidade">Unidade</label>
+        <input id="modalUnidade" name="unidade" type="text" maxlength="120" placeholder="Nome da unidade">
+      </div>
+      <div class="field">
+        <label for="modalAgr">AGR</label>
+        <input id="modalAgr" name="agr" type="text" maxlength="120" placeholder="Código ou nome do AGR">
+      </div>
+      <div class="field">
+        <label for="modalSituacaoMaquina">Situação da Máquina</label>
+        <select id="modalSituacaoMaquina" name="situacaoMaquina">
+          <option value="NÃO CONFIGURADA">Não Configurada</option>
+          <option value="CONFIGURADA">Configurada</option>
+          <option value="CONFIGURADA FORA DO PADRÃO">Configurada Fora do Padrão</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="modalAgrFilhos">AGR possui filhos?</label>
+        <select id="modalAgrFilhos" name="agrFilhos">
+          <option value="false">Não</option>
+          <option value="true">Sim</option>
+        </select>
       </div>
       <input id="modalIdAtual" type="hidden">
       <div class="modal-actions">
