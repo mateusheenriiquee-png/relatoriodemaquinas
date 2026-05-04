@@ -57,12 +57,31 @@ const DYNAMIC_FIELD_CATEGORIES = {
 
 function detectField(header) {
   const h = header.toLowerCase().trim().replace(/\s+/g, "").replace(/[àáäâãæèéëêìíïîòóöôõœùúüûý]/g, (c) => ({à:'a', á:'a', ä:'a', â:'a', ã:'a', æ:'ae', è:'e', é:'e', ë:'e', ê:'e', ì:'i', í:'i', ï:'i', î:'i', ò:'o', ó:'o', ö:'o', ô:'o', õ:'o', œ:'oe', ù:'u', ú:'u', ü:'u', û:'u', ý:'y'}[c] || c));
-  
+
+  // Exact header name matching first (highest priority)
+  const exactHeader = h;
   for (const [field, aliases] of Object.entries(COLUMN_MAP)) {
-    if (aliases.some(a => h.includes(a.replace(/\s+/g, "")))) return field;
+    if (aliases.includes(exactHeader)) return field;
   }
-  return null;
-}
+
+  // For "maquina" field, be very restrictive - only exact matches or clear indicators
+  if (h === 'maquina' || h === 'máquina' || h === 'machine' || h === 'nome' ||
+      h.includes('maquina') || h.includes('machine') ||
+      (h.startsWith('maq') && h.length <= 8)) {
+    return 'maquina';
+  }
+
+  // For other fields, allow partial matches but be more careful
+  for (const [field, aliases] of Object.entries(COLUMN_MAP)) {
+    if (field === 'maquina') continue; // Already handled above
+
+    if (aliases.some(a => {
+      const alias = a.replace(/\s+/g, "");
+      // Require the alias to be a significant part of the header
+      return h.includes(alias) && (alias.length >= 3 || h === alias);
+    })) return field;
+  }
+
 
 // ── Analyze field value type and relevance ─────────────────────────────────
 function analyzeFieldRelevance(values) {
@@ -145,6 +164,16 @@ function normAgrFilhos(v) {
 // ── Parse rows with standard fields AND capture additional dynamic fields ────
 function parseRows(rows, includeExtra = false, selectedExtraFields = []) {
   const filtered = rows.filter(r => Object.values(r).some(v => String(v || "").trim()));
+  
+  console.log("🔍 Mapeamento de colunas detectado:");
+  const headerMapping = {};
+  if (filtered.length > 0) {
+    Object.keys(filtered[0]).forEach(header => {
+      const field = detectField(header);
+      headerMapping[header] = field;
+      console.log(`  "${header}" → ${field || "campo adicional"}`);
+    });
+  }
   
   return filtered
     .map(raw => {

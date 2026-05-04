@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Teste Mapeamento</title>
+</head>
+<body>
+    <h1>Teste de Mapeamento de Colunas</h1>
+    <div id="output"></div>
+
+    <script type="module">
+        // Simular a função detectField
+        const COLUMN_MAP = {
+            maquina:        ["maquina", "máquina", "machine", "nome"],
+            parceiro:       ["parceiro", "partner", "agente", "agent"],
+            situacao:       ["situacao", "situação", "situation", "status"],
+            pagamentoStatus:["pagamentostatus", "pagamento", "fechamentomensal", "payment", "protugao", "proteção", "protecao"],
+            pixParceiro:    ["pixparceiro", "pix"],
+            unidade:        ["unidade", "unit"],
+            agr:            ["agr"],
+            situacaoMaquina:["situacaomaquina", "situacaodamaquina", "situação da maquina", "situacaodamáquina", "homologacao", "homologação"],
+            agrFilhos:      ["agrfilhos", "agr filhos", "agr_filhos"]
+        };
+
+        function detectField(header) {
+            const h = header.toLowerCase().trim().replace(/\s+/g, "").replace(/[àáäâãæèéëêìíïîòóöôõœùúüûý]/g, (c) => ({à:'a', á:'a', ä:'a', â:'a', ã:'a', æ:'ae', è:'e', é:'e', ë:'e', ê:'e', ì:'i', í:'i', ï:'i', î:'i', ò:'o', ó:'o', ö:'o', ô:'o', õ:'o', œ:'oe', ù:'u', ú:'u', ü:'u', û:'u', ý:'y'}[c] || c));
+
+            // Exact header name matching first (highest priority)
+            const exactHeader = h;
+            for (const [field, aliases] of Object.entries(COLUMN_MAP)) {
+                if (aliases.includes(exactHeader)) return field;
+            }
+
+            // For "maquina" field, be very restrictive - only exact matches or clear indicators
+            if (h === 'maquina' || h === 'máquina' || h === 'machine' || h === 'nome' ||
+                h.includes('maquina') || h.includes('machine') ||
+                (h.startsWith('maq') && h.length <= 8)) {
+                return 'maquina';
+            }
+
+            // For other fields, allow partial matches but be more careful
+            for (const [field, aliases] of Object.entries(COLUMN_MAP)) {
+                if (field === 'maquina') continue; // Already handled above
+
+                if (aliases.some(a => {
+                    const alias = a.replace(/\s+/g, "");
+                    // Require the alias to be a significant part of the header
+                    return h.includes(alias) && (alias.length >= 3 || h === alias);
+                })) return field;
+            }
+
+            return null;
+        }
+
+        // Testar com os headers da planilha
+        const testHeaders = ['MAQUINA', 'AGENTE', 'UNIDADE', 'AGR', 'HOMOLOGACAO', 'PROTUGAO', 'PIX', 'AGR FILHOS'];
+
+        let output = '<h2>Mapeamento de Colunas:</h2><ul>';
+        testHeaders.forEach(header => {
+            const field = detectField(header);
+            output += `<li>"${header}" → ${field || 'campo adicional'}</li>`;
+        });
+        output += '</ul>';
+
+        document.getElementById('output').innerHTML = output;
+    </script>
+</body>
+</html>
