@@ -17,6 +17,10 @@
     <div class="actions">
       <button id="btnAdicionar" class="btn btn-primary">+ Novo Registro</button>
       <button id="btnRecarregar" class="btn btn-ghost">Atualizar Lista</button>
+      <div class="import-export-group">
+        <button id="btnImportar" class="btn btn-import">⬆ Importar</button>
+        <button id="btnExportar" class="btn btn-export">⬇ Exportar CSV</button>
+      </div>
     </div>
   </header>
 
@@ -201,6 +205,62 @@
   </div>
 </div>
 
+<!-- Modal de Importação -->
+<div id="modalImportar" class="modal hidden">
+  <div class="modal-content modal-import-content">
+    <div class="modal-header">
+      <h2>Importar Dados</h2>
+      <button id="btnFecharModalImportar" class="btn btn-ghost btn-small" type="button">Fechar</button>
+    </div>
+    <div class="import-options">
+
+      <div class="import-option-card">
+        <div class="import-option-icon">&#128202;</div>
+        <div class="import-option-body">
+          <h3>Google Sheets</h3>
+          <p>Cole o link publico da planilha (compartilhada como "qualquer pessoa com o link pode ver").</p>
+          <div class="field">
+            <label for="googleSheetsUrl">URL da Planilha</label>
+            <input id="googleSheetsUrl" type="url" placeholder="https://docs.google.com/spreadsheets/d/..." />
+          </div>
+          <button id="btnImportarSheets" class="btn btn-primary btn-full">Carregar do Google Sheets</button>
+        </div>
+      </div>
+
+      <div class="import-divider">ou</div>
+
+      <div class="import-option-card">
+        <div class="import-option-icon">&#128193;</div>
+        <div class="import-option-body">
+          <h3>Arquivo CSV ou Excel</h3>
+          <p>Selecione um arquivo <strong>.csv</strong> ou <strong>.xlsx</strong> do seu computador.</p>
+          <input id="fileInputCsvXlsx" type="file" accept=".csv,.xlsx" class="hidden-input" />
+          <button id="btnEscolherArquivo" class="btn btn-ghost btn-full">Escolher arquivo (.csv ou .xlsx)</button>
+          <span id="nomeArquivoSelecionado" class="file-name-hint"></span>
+        </div>
+      </div>
+
+    </div>
+
+    <div id="importPreviewArea" class="import-preview hidden">
+      <p id="importPreviewInfo" class="import-preview-info"></p>
+      <div class="import-preview-scroll">
+        <table id="importPreviewTable" class="import-preview-table"></table>
+      </div>
+      <div class="import-actions-row">
+        <div class="import-mode-group">
+          <label><input type="radio" name="importMode" value="substituir" checked /> Substituir todos os registros</label>
+          <label><input type="radio" name="importMode" value="adicionar" /> Adicionar aos existentes</label>
+        </div>
+        <button id="btnConfirmarImport" class="btn btn-primary">Confirmar Importacao</button>
+      </div>
+    </div>
+
+    <div id="importStatusMsg" class="import-status hidden"></div>
+  </div>
+</div>
+
 <script type="module" src="script.js"></script>
+<script type="module" src="import-export.js"></script>
 </body>
 </html>
