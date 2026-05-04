@@ -108,6 +108,32 @@ select {
   font-size: 0.95rem;
 }
 
+.input-with-prefix {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.input-with-prefix .prefix {
+  padding: 10px 12px;
+  background: #f8fafc;
+  color: var(--muted);
+  font-weight: 600;
+  border-right: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.input-with-prefix input {
+  border: none;
+  border-radius: 0;
+  padding: 10px 12px;
+  flex: 1;
+  background: transparent;
+}
+
 .stats {
   display: grid;
   grid-template-columns: repeat(5, minmax(120px, 1fr));

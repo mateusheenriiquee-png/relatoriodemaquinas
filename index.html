@@ -149,7 +149,10 @@
       </div>
       <div class="field">
         <label for="modalNome">Máquina</label>
-        <input id="modalNome" name="nome" type="text" required maxlength="100" value="WEBCERT-SE-" placeholder="Digite o codigo da maquiana">
+        <div class="input-with-prefix">
+          <span class="prefix">WEBCERT-SE-</span>
+          <input id="modalNome" name="nome" type="text" required maxlength="100" placeholder="Digite o restante do nome da máquina">
+        </div>
       </div>
       <div class="field">
         <label for="modalSituacao">Situação</label>

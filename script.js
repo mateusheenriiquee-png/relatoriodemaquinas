@@ -79,17 +79,6 @@ function normalizarSituacaoMaquina(value) {
   return SITUACAO_MAQUINA_OPTIONS.includes(v) ? v : "NÃO CONFIGURADA";
 }
 
-function formatarNomeMaquina(value) {
-  const nome = normalizarTexto(value);
-  if (!nome) {
-    return MAQUINA_PREFIXO;
-  }
-  if (nome.toUpperCase().startsWith(MAQUINA_PREFIXO)) {
-    return MAQUINA_PREFIXO + nome.slice(MAQUINA_PREFIXO.length);
-  }
-  return MAQUINA_PREFIXO + nome;
-}
-
 function compararNomeNatural(a, b) {
   const pattern = /^(.*?)-(\d+)$/i;
   const matchA = String(a || "").trim().match(pattern);
@@ -377,9 +366,8 @@ async function excluirRegistro(id) {
 function abrirModalAdicionar() {
   state.modalModo = "adicionar";
   modalTitulo.textContent = "Novo Registro";
-  modalNome.value = MAQUINA_PREFIXO;
+  modalNome.value = "";
   modalNome.focus();
-  modalNome.setSelectionRange(MAQUINA_PREFIXO.length, MAQUINA_PREFIXO.length);
   modalSituacao.value = "TREINAMENTO";
   modalPagamento.value = "PENDENTE";
   modalPix.value = "";
@@ -394,7 +382,7 @@ function abrirModalAdicionar() {
 function abrirModalEditar(item) {
   state.modalModo = "editar";
   modalTitulo.textContent = "Editar Registro";
-  modalNome.value = item.maquina;
+  modalNome.value = item.maquina.startsWith(MAQUINA_PREFIXO) ? item.maquina.slice(MAQUINA_PREFIXO.length) : "";
   modalSituacao.value = item.situacao;
   modalPagamento.value = item.pagamentoStatus;
   modalPix.value = item.pixParceiro || "";
@@ -410,12 +398,13 @@ function fecharModal() {
   modal.classList.add("hidden");
 }
 
-function validarFormulario(maquina, idAtual) {
-  if (!maquina || maquina.length < MAQUINA_PREFIXO.length + 1) {
+function validarFormulario(maquinaRestante, idAtual) {
+  if (!maquinaRestante.trim()) {
     throw new Error("Informe o código da máquina após o prefixo WEBCERT-SE-.");
   }
 
-  const nomeNormalizado = normalizarTexto(maquina).toLowerCase();
+  const nomeCompleto = MAQUINA_PREFIXO + normalizarTexto(maquinaRestante);
+  const nomeNormalizado = nomeCompleto.toLowerCase();
 
   const existeLocal = state.registros.some((m) => {
     if (state.modalModo === "editar" && m.id === idAtual) {
@@ -493,7 +482,8 @@ ordenacaoEl.addEventListener("change", (e) => {
 
 formMaquina.addEventListener("submit", async (e) => {
   e.preventDefault();
-  const maquina = formatarNomeMaquina(modalNome.value);
+  const maquinaRestante = modalNome.value;
+  const maquina = MAQUINA_PREFIXO + normalizarTexto(maquinaRestante);
   const situacao = normalizarSituacao(modalSituacao.value);
   const pagamentoStatus = normalizarPagamento(modalPagamento.value);
   const pixParceiro = normalizarTexto(modalPix.value);
@@ -504,7 +494,7 @@ formMaquina.addEventListener("submit", async (e) => {
   const idAtual = modalIdAtual.value;
 
   try {
-    validarFormulario(maquina, idAtual);
+    validarFormulario(maquinaRestante, idAtual);
     if (state.modalModo === "adicionar") {
       await addDoc(collection(db, "maquinas"), {
         maquina,
