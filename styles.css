@@ -487,6 +487,20 @@ button:disabled {
   color: var(--muted);
 }
 
+.sheets-help-box {
+  background: #fffbeb;
+  border-left: 3px solid #f59e0b;
+  padding: 10px 12px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  font-size: 0.85rem;
+  color: #92400e;
+}
+
+.sheets-help-box strong {
+  color: #d97706;
+}
+
 .import-divider {
   text-align: center;
   padding: 8px 0;

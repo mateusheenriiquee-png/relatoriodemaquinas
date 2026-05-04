@@ -34,13 +34,13 @@ async function getXLSX() {
 // ── Column mapping (flexible – tolerates Portuguese / English headers) ───────
 const COLUMN_MAP = {
   maquina:        ["maquina", "máquina", "machine", "nome"],
-  parceiro:       ["parceiro", "partner"],
+  parceiro:       ["parceiro", "partner", "agente", "agent"],
   situacao:       ["situacao", "situação", "situation", "status"],
-  pagamentoStatus:["pagamentostatus", "pagamento", "fechamentomensal", "payment"],
+  pagamentoStatus:["pagamentostatus", "pagamento", "fechamentomensal", "payment", "protugao", "proteção", "protecao"],
   pixParceiro:    ["pixparceiro", "pix"],
   unidade:        ["unidade", "unit"],
   agr:            ["agr"],
-  situacaoMaquina:["situacaomaquina", "situacaodamaquina", "situação da maquina", "situacaodamáquina"],
+  situacaoMaquina:["situacaomaquina", "situacaodamaquina", "situação da maquina", "situacaodamáquina", "homologacao", "homologação"],
   agrFilhos:      ["agrfilhos", "agr filhos", "agr_filhos"]
 };
 
@@ -56,7 +56,8 @@ const DYNAMIC_FIELD_CATEGORIES = {
 };
 
 function detectField(header) {
-  const h = header.toLowerCase().trim().replace(/\s+/g, "");
+  const h = header.toLowerCase().trim().replace(/\s+/g, "").replace(/[àáäâãæèéëêìíïîòóöôõœùúüûý]/g, (c) => ({à:'a', á:'a', ä:'a', â:'a', ã:'a', æ:'ae', è:'e', é:'e', ë:'e', ê:'e', ì:'i', í:'i', ï:'i', î:'i', ò:'o', ó:'o', ö:'o', ô:'o', õ:'o', œ:'oe', ù:'u', ú:'u', ü:'u', û:'u', ý:'y'}[c] || c));
+  
   for (const [field, aliases] of Object.entries(COLUMN_MAP)) {
     if (aliases.some(a => h.includes(a.replace(/\s+/g, "")))) return field;
   }
@@ -104,13 +105,42 @@ const PAGAMENTO_OPTIONS      = ["PENDENTE", "NAO PENDENTE"];
 const SITUACAO_MAQ_OPTIONS   = ["CONFIGURADA", "CONFIGURADA FORA DO PADRÃO", "NÃO CONFIGURADA"];
 
 function normText(v)    { return String(v || "").trim().replace(/\s+/g, " "); }
-function normSit(v)     { const u = normText(v).toUpperCase(); return SITUACAO_OPTIONS.includes(u) ? u : "TREINAMENTO"; }
-function normPag(v)     { const u = normText(v).toUpperCase(); return PAGAMENTO_OPTIONS.includes(u) ? u : "PENDENTE"; }
+
+function normSit(v)     { 
+  const u = normText(v).toUpperCase();
+  if (SITUACAO_OPTIONS.includes(u)) return u;
+  // Map common values
+  if (["OK", "ATIVO", "ATIVADO", "HABILITADO"].includes(u)) return "PRODUCAO";
+  if (["PENDENTE", "INATIVO", "DESABILITADO"].includes(u)) return "TREINAMENTO";
+  return "TREINAMENTO"; 
+}
+
+function normPag(v)     { 
+  const u = normText(v).toUpperCase();
+  if (PAGAMENTO_OPTIONS.includes(u)) return u;
+  // Map common values
+  if (["OK", "PAGO", "FECHADO", "CONCLUÍDO"].includes(u)) return "NAO PENDENTE";
+  if (["PENDENTE", "ABERTO", "VAZIO", "-", ""].includes(u)) return "PENDENTE";
+  return "PENDENTE"; 
+}
+
 function normSitMaq(v)  {
   const u = normText(v).toUpperCase();
-  return SITUACAO_MAQ_OPTIONS.find(o => o.toUpperCase() === u) || "NÃO CONFIGURADA";
+  const match = SITUACAO_MAQ_OPTIONS.find(o => o.toUpperCase() === u);
+  if (match) return match;
+  
+  // Map common values
+  if (["OK", "CONFIGURADO", "ATIVADO"].includes(u)) return "CONFIGURADA";
+  if (["PENDENTE", "-", ""].includes(u)) return "NÃO CONFIGURADA";
+  if (["FORA DO PADRÃO", "IMPROPER"].includes(u)) return "CONFIGURADA FORA DO PADRÃO";
+  
+  return "NÃO CONFIGURADA";
 }
-function normAgrFilhos(v) { return v === true || String(v).toLowerCase() === "true" || String(v) === "1" || String(v).toLowerCase() === "sim"; }
+
+function normAgrFilhos(v) { 
+  const s = String(v).toLowerCase().trim();
+  return s === "true" || s === "1" || s === "sim" || s === "yes" || v === true; 
+}
 
 // ── Parse rows with standard fields AND capture additional dynamic fields ────
 function parseRows(rows, includeExtra = false, selectedExtraFields = []) {
@@ -248,9 +278,73 @@ function sheetsUrlToCsvUrl(url) {
 
 async function fetchSheetsAsCSV(url) {
   const csvUrl = sheetsUrlToCsvUrl(url);
-  const res = await fetch(csvUrl);
-  if (!res.ok) throw new Error(`Não foi possível acessar a planilha (${res.status}). Verifique se ela está compartilhada publicamente.`);
-  return await res.text();
+  console.log("🔗 Tentando acessar Google Sheets:", csvUrl);
+  
+  try {
+    // Try with CORS mode first
+    let res = await fetch(csvUrl, {
+      method: 'GET',
+      mode: 'cors'
+    });
+    
+    // If CORS fails, try without mode
+    if (!res.ok && res.status === 0) {
+      console.log("⚠️ CORS bloqueado, tentando sem CORS...");
+      res = await fetch(csvUrl, { method: 'GET' });
+    }
+    
+    if (!res.ok) {
+      console.error(`❌ Erro HTTP ${res.status}:`, res.statusText);
+      
+      if (res.status === 403) {
+        throw new Error(
+          `❌ ACESSO NEGADO (403)\n\n` +
+          `A planilha não está compartilhada publicamente.\n\n` +
+          `📌 SOLUÇÃO - Compartilhe a planilha:\n` +
+          `1️⃣ Abra a planilha no Google Sheets\n` +
+          `2️⃣ Clique em "Compartilhar" (canto superior direito)\n` +
+          `3️⃣ Clique em "Alterar para qualquer pessoa com o link"\n` +
+          `4️⃣ Selecione "Visualizador" (apenas leitura)\n` +
+          `5️⃣ Copie o link compartilhável\n` +
+          `6️⃣ Cole aqui neste formulário\n\n` +
+          `Link que você enviou:\n${url}`
+        );
+      }
+      
+      if (res.status === 404) {
+        throw new Error(`❌ Planilha não encontrada (404).\nVerifique se a URL está correta.`);
+      }
+      
+      throw new Error(
+        `❌ Erro ${res.status} ao acessar a planilha.\n` +
+        `Verifique se está compartilhada publicamente.`
+      );
+    }
+    
+    const csvText = await res.text();
+    
+    if (!csvText || csvText.trim().length === 0) {
+      throw new Error("❌ A planilha está vazia ou não pôde ser lida.");
+    }
+    
+    console.log("✅ Planilha carregada com sucesso!");
+    return csvText;
+  } catch (err) {
+    console.error("🔥 Erro ao buscar planilha:", err);
+    
+    if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
+      throw new Error(
+        `❌ ERRO DE CONEXÃO\n\n` +
+        `Possíveis causas:\n` +
+        `• Sem conexão com internet\n` +
+        `• Navegador bloqueou a requisição\n` +
+        `• URL incorreta\n\n` +
+        `URL que você enviou:\n${url}\n\n` +
+        `Erro: ${err.message}`
+      );
+    }
+    throw err;
+  }
 }
 
 // ── Preview rendering with dynamic field selection ──────────────────────────
@@ -442,12 +536,19 @@ document.addEventListener("DOMContentLoaded", () => {
   btnImportarSheets.addEventListener("click", async () => {
     const url = googleSheetsUrlEl.value.trim();
     if (!url) { showStatus("Cole a URL da planilha antes de continuar.", "error"); return; }
+    if (!url.includes("docs.google.com/spreadsheets")) { 
+      showStatus("❌ URL inválida. Deve ser um Google Sheets. Exemplo: https://docs.google.com/spreadsheets/d/ABC123xyz...", "error"); 
+      return; 
+    }
     try {
       btnImportarSheets.disabled = true;
-      showStatus("Buscando dados do Google Sheets...", "loading");
+      showStatus("🔄 Buscando dados do Google Sheets (isso pode levar alguns segundos)...", "loading");
       const csvText = await fetchSheetsAsCSV(url);
       const rows = parseCSVText(csvText);
       rawImportData = rows; // Store raw data for later re-processing
+      
+      console.log(`📋 Linhas encontradas: ${rows.length}`);
+      console.log(`🏷️ Headers: ${rows.length > 0 ? Object.keys(rows[0]).join(", ") : "Nenhum"}`);
       
       // First pass: identify ALL fields
       const allFields = scanAllFieldsFromRows(rows);
@@ -455,11 +556,20 @@ document.addEventListener("DOMContentLoaded", () => {
       // Parse records with standard fields only for now
       const records = parseRows(rows, false);
       
-      if (!records.length) throw new Error("Nenhum registro válido encontrado na planilha. Verifique os cabeçalhos.");
+      if (!records.length) {
+        console.warn("⚠️ Nenhum registro com campo 'maquina' encontrado");
+        throw new Error(
+          "❌ Nenhum registro válido encontrado na planilha.\n\n" +
+          "A planilha deve ter uma coluna chamada 'Máquina', 'maquina' ou 'machine'.\n" +
+          `Headers encontrados: ${Object.keys(rows[0] || {}).join(", ")}`
+        );
+      }
       
+      console.log(`✅ ${records.length} registro(s) válido(s) encontrado(s)`);
       // Show preview with extra fields
       showPreview(records, allFields);
     } catch (err) {
+      console.error("Erro ao buscar planilha:", err);
       showStatus(err.message || "Erro ao buscar planilha.", "error");
     } finally {
       btnImportarSheets.disabled = false;
