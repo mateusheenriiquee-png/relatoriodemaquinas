@@ -44,12 +44,58 @@ const COLUMN_MAP = {
   agrFilhos:      ["agrfilhos", "agr filhos", "agr_filhos"]
 };
 
+// ── New comprehensive field analyzer for complete data scanning ──────────────
+const DYNAMIC_FIELD_CATEGORIES = {
+  "Identificação": ["id", "código", "code", "numero", "number", "matricula", "registration"],
+  "Contato": ["email", "telefone", "phone", "celular", "whatsapp", "telegram", "contact", "endereço", "address"],
+  "Financeiro": ["valor", "value", "preço", "price", "custo", "cost", "taxa", "fee", "desconto", "discount"],
+  "Data": ["data", "date", "criado", "created", "modificado", "modified", "atualizado", "updated", "vencimento", "expiry"],
+  "Status": ["ativo", "active", "inativo", "inactive", "habilitado", "enabled", "desabilitado", "disabled"],
+  "Localização": ["cidade", "city", "estado", "state", "país", "country", "região", "region", "filial", "branch"],
+  "Observação": ["nota", "note", "comentário", "comment", "descrição", "description", "observação", "remarks"]
+};
+
 function detectField(header) {
   const h = header.toLowerCase().trim().replace(/\s+/g, "");
   for (const [field, aliases] of Object.entries(COLUMN_MAP)) {
     if (aliases.some(a => h.includes(a.replace(/\s+/g, "")))) return field;
   }
   return null;
+}
+
+// ── Analyze field value type and relevance ─────────────────────────────────
+function analyzeFieldRelevance(values) {
+  const nonEmpty = values.filter(v => String(v || "").trim());
+  const fillRate = nonEmpty.length / Math.max(values.length, 1);
+  
+  if (fillRate < 0.1) return { type: "sparse", category: "other", relevance: 0.2 };
+  if (fillRate < 0.5) return { type: "partial", category: "other", relevance: 0.5 };
+  
+  const uniqueCount = new Set(nonEmpty.map(v => String(v).toLowerCase())).size;
+  const uniqueRatio = uniqueCount / nonEmpty.length;
+  
+  let type = "text";
+  if (/^\d+$/.test(nonEmpty[0])) type = "number";
+  else if (/^\d{1,2}\/\d{1,2}\/\d{2,4}|^\d{4}-\d{2}-\d{2}/.test(nonEmpty[0])) type = "date";
+  else if (/^(true|false|sim|não|yes|no|1|0)$/i.test(nonEmpty[0])) type = "boolean";
+  else if (/^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i.test(nonEmpty[0])) type = "email";
+  
+  return {
+    type,
+    fillRate: Math.round(fillRate * 100),
+    uniqueRatio: Math.round(uniqueRatio * 100),
+    relevance: fillRate * (1 - uniqueRatio / 2), // high if common & non-unique
+    category: "other"
+  };
+}
+
+// ── Detect field category from header and values ──────────────────────────────
+function detectFieldCategory(header, values) {
+  const h = header.toLowerCase();
+  for (const [category, keywords] of Object.entries(DYNAMIC_FIELD_CATEGORIES)) {
+    if (keywords.some(k => h.includes(k))) return category;
+  }
+  return "Outro";
 }
 
 // ── Normalisation helpers (mirrors script.js) ──────────────────────────────
@@ -66,17 +112,26 @@ function normSitMaq(v)  {
 }
 function normAgrFilhos(v) { return v === true || String(v).toLowerCase() === "true" || String(v) === "1" || String(v).toLowerCase() === "sim"; }
 
-// ── Parse rows (array of objects) into normalised records ──────────────────
-function parseRows(rows) {
-  return rows
-    .filter(r => Object.values(r).some(v => String(v || "").trim()))
+// ── Parse rows with standard fields AND capture additional dynamic fields ────
+function parseRows(rows, includeExtra = false, selectedExtraFields = []) {
+  const filtered = rows.filter(r => Object.values(r).some(v => String(v || "").trim()));
+  
+  return filtered
     .map(raw => {
       const r = {};
+      const extra = {}; // capture additional fields
+      
       for (const [k, v] of Object.entries(raw)) {
         const field = detectField(k);
-        if (field) r[field] = v;
+        if (field) {
+          r[field] = v;
+        } else if (includeExtra && String(v || "").trim() && selectedExtraFields.includes(k)) {
+          // Only store selected additional fields
+          extra[k] = v;
+        }
       }
-      return {
+      
+      const normalized = {
         maquina:        normText(r.maquina || ""),
         parceiro:       normText(r.parceiro || ""),
         situacao:       normSit(r.situacao),
@@ -87,8 +142,50 @@ function parseRows(rows) {
         situacaoMaquina:normSitMaq(r.situacaoMaquina || ""),
         agrFilhos:      normAgrFilhos(r.agrFilhos)
       };
+      
+      // Include extra fields if requested and available
+      if (includeExtra && Object.keys(extra).length > 0) {
+        normalized.dadosAdicionais = extra;
+      }
+      
+      return normalized;
     })
     .filter(r => r.maquina); // must have a machine name
+}
+
+// ── Comprehensive scan: extract ALL potentially useful data ──────────────────
+function scanAllFieldsFromRows(rows) {
+  if (!rows.length) return [];
+  
+  const fieldMap = new Map(); // header -> { values: [], category, analysis }
+  
+  // Collect all unique headers and their values
+  for (const row of rows) {
+    for (const [header, value] of Object.entries(row)) {
+      if (!fieldMap.has(header)) {
+        fieldMap.set(header, { values: [], category: null, standardField: detectField(header) });
+      }
+      fieldMap.get(header).values.push(value);
+    }
+  }
+  
+  // Analyze each field
+  const allFields = Array.from(fieldMap.entries()).map(([header, data]) => {
+    if (data.standardField) return null; // skip standard fields
+    
+    const analysis = analyzeFieldRelevance(data.values);
+    const category = detectFieldCategory(header, data.values);
+    
+    return {
+      header,
+      category,
+      ...analysis,
+      sampleValues: data.values.filter(v => String(v || "").trim()).slice(0, 3)
+    };
+  }).filter(Boolean);
+  
+  // Sort by relevance
+  return allFields.sort((a, b) => b.relevance - a.relevance);
 }
 
 // ── CSV parser (handles quoted fields) ─────────────────────────────────────
@@ -156,15 +253,19 @@ async function fetchSheetsAsCSV(url) {
   return await res.text();
 }
 
-// ── Preview rendering ────────────────────────────────────────────────────────
+// ── Preview rendering with dynamic field selection ──────────────────────────
 let pendingImportRecords = [];
+let discoveredExtraFields = [];
+let rawImportData = []; // Store raw data for re-parsing with extra fields
 
-function showPreview(records) {
+function showPreview(records, allFields = []) {
   pendingImportRecords = records;
+  discoveredExtraFields = allFields;
 
   const previewArea = document.getElementById("importPreviewArea");
   const infoEl = document.getElementById("importPreviewInfo");
   const tableEl = document.getElementById("importPreviewTable");
+  const extraFieldsEl = document.getElementById("importExtraFieldsContainer");
 
   infoEl.textContent = `${records.length} registro(s) encontrado(s). Pré-visualização (primeiros 5):`;
 
@@ -180,6 +281,37 @@ function showPreview(records) {
       ${preview.map(r => `<tr>${fields.map(f => `<td>${r[f] || "-"}</td>`).join("")}</tr>`).join("")}
     </tbody>
   `;
+
+  // Show discovered additional fields
+  if (allFields && allFields.length > 0) {
+    let html = `
+      <div class="extra-fields-section">
+        <h4>📊 Campos Adicionais Descobertos (${allFields.length})</h4>
+        <p class="extra-fields-info">O sistema identificou informações úteis adicionais. Selecione quais deseja importar:</p>
+        <div class="extra-fields-grid">
+    `;
+    
+    allFields.forEach(field => {
+      const checked = field.relevance > 0.7 ? 'checked' : ''; // auto-select high relevance
+      html += `
+        <label class="field-checkbox">
+          <input type="checkbox" name="extraField" value="${field.header}" ${checked} data-category="${field.category}">
+          <span class="field-info">
+            <strong>${field.header}</strong>
+            <span class="field-category">${field.category}</span>
+            <span class="field-stats">${field.fillRate}% preenchido | ${field.type}</span>
+            <span class="field-samples">Ex: ${field.sampleValues.join(", ")}</span>
+          </span>
+        </label>
+      `;
+    });
+    
+    html += `</div></div>`;
+    extraFieldsEl.innerHTML = html;
+    extraFieldsEl.classList.remove("hidden");
+  } else {
+    extraFieldsEl.classList.add("hidden");
+  }
 
   previewArea.classList.remove("hidden");
   hideStatus();
@@ -274,6 +406,8 @@ document.addEventListener("DOMContentLoaded", () => {
   // Open / close modal
   btnImportar.addEventListener("click", () => {
     pendingImportRecords = [];
+    discoveredExtraFields = [];
+    rawImportData = [];
     previewArea.classList.add("hidden");
     hideStatus();
     googleSheetsUrlEl.value = "";
@@ -313,9 +447,18 @@ document.addEventListener("DOMContentLoaded", () => {
       showStatus("Buscando dados do Google Sheets...", "loading");
       const csvText = await fetchSheetsAsCSV(url);
       const rows = parseCSVText(csvText);
-      const records = parseRows(rows);
+      rawImportData = rows; // Store raw data for later re-processing
+      
+      // First pass: identify ALL fields
+      const allFields = scanAllFieldsFromRows(rows);
+      
+      // Parse records with standard fields only for now
+      const records = parseRows(rows, false);
+      
       if (!records.length) throw new Error("Nenhum registro válido encontrado na planilha. Verifique os cabeçalhos.");
-      showPreview(records);
+      
+      // Show preview with extra fields
+      showPreview(records, allFields);
     } catch (err) {
       showStatus(err.message || "Erro ao buscar planilha.", "error");
     } finally {
@@ -332,18 +475,26 @@ document.addEventListener("DOMContentLoaded", () => {
     nomeArquivo.textContent = file.name;
     try {
       showStatus("Lendo arquivo...", "loading");
-      let records;
+      let rows;
       if (file.name.toLowerCase().endsWith(".xlsx")) {
         const buf = await file.arrayBuffer();
-        const rows = await parseXLSXFile(buf);
-        records = parseRows(rows);
+        rows = await parseXLSXFile(buf);
       } else {
         const text = await file.text();
-        const rows = parseCSVText(text);
-        records = parseRows(rows);
+        rows = parseCSVText(text);
       }
+      rawImportData = rows; // Store raw data for later re-processing
+      
+      // First pass: identify ALL fields
+      const allFields = scanAllFieldsFromRows(rows);
+      
+      // Parse records with standard fields only for now
+      const records = parseRows(rows, false);
+      
       if (!records.length) throw new Error("Nenhum registro válido encontrado. Verifique os cabeçalhos do arquivo.");
-      showPreview(records);
+      
+      // Show preview with extra fields
+      showPreview(records, allFields);
     } catch (err) {
       showStatus(err.message || "Erro ao ler arquivo.", "error");
     }
@@ -352,16 +503,31 @@ document.addEventListener("DOMContentLoaded", () => {
   // Confirm import
   btnConfirmar.addEventListener("click", async () => {
     if (!pendingImportRecords.length) return;
+    
+    // Get selected extra fields
+    const selectedExtras = Array.from(document.querySelectorAll('input[name="extraField"]:checked'))
+      .map(el => el.value);
+    
+    // Re-parse records with selected extra fields
+    let finalRecords = pendingImportRecords;
+    if (selectedExtras.length > 0 && rawImportData.length > 0) {
+      // Re-parse with extra fields
+      finalRecords = parseRows(rawImportData, true, selectedExtras);
+    }
+    
     const mode = document.querySelector('input[name="importMode"]:checked')?.value || "substituir";
     const modeLabel = mode === "substituir" ? "substituir todos os registros" : "adicionar aos existentes";
-    const ok = confirm(`Confirmar importação de ${pendingImportRecords.length} registro(s) (${modeLabel})?`);
+    const extraInfo = selectedExtras.length > 0 ? ` + ${selectedExtras.length} campo(s) adicional(is)` : "";
+    const ok = confirm(`Confirmar importação de ${finalRecords.length} registro(s)${extraInfo} (${modeLabel})?`);
     if (!ok) return;
 
     try {
       btnConfirmar.disabled = true;
-      await writeToFirestore(pendingImportRecords, mode);
-      showStatus(`${pendingImportRecords.length} registro(s) importado(s) com sucesso!`, "success");
+      await writeToFirestore(finalRecords, mode);
+      showStatus(`${finalRecords.length} registro(s) importado(s) com sucesso! ${selectedExtras.length > 0 ? `+ ${selectedExtras.length} campo(s) adicional(is)` : ""}`, "success");
       pendingImportRecords = [];
+      discoveredExtraFields = [];
+      rawImportData = [];
       previewArea.classList.add("hidden");
       // Reload the main list by dispatching a click on "Atualizar Lista"
       document.getElementById("btnRecarregar")?.click();
