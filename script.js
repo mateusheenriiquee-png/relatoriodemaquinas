@@ -12,6 +12,7 @@ import { db } from "./firebase-config.js";
 const SITUACAO_OPTIONS = ["TREINAMENTO", "PRODUCAO"];
 const PAGAMENTO_OPTIONS = ["PENDENTE", "NAO PENDENTE"];
 const SITUACAO_MAQUINA_OPTIONS = ["CONFIGURADA", "CONFIGURADA FORA DO PADRÃO", "NÃO CONFIGURADA"];
+const MAQUINA_PREFIXO = "WEBCERT-SE-";
 const PAGE_SIZE = 8;
 
 const state = {
@@ -76,6 +77,17 @@ function normalizarPagamento(value) {
 function normalizarSituacaoMaquina(value) {
   const v = String(value || "").trim().toUpperCase();
   return SITUACAO_MAQUINA_OPTIONS.includes(v) ? v : "NÃO CONFIGURADA";
+}
+
+function formatarNomeMaquina(value) {
+  const nome = normalizarTexto(value);
+  if (!nome) {
+    return MAQUINA_PREFIXO;
+  }
+  if (nome.toUpperCase().startsWith(MAQUINA_PREFIXO)) {
+    return MAQUINA_PREFIXO + nome.slice(MAQUINA_PREFIXO.length);
+  }
+  return MAQUINA_PREFIXO + nome;
 }
 
 function compararNomeNatural(a, b) {
@@ -365,7 +377,9 @@ async function excluirRegistro(id) {
 function abrirModalAdicionar() {
   state.modalModo = "adicionar";
   modalTitulo.textContent = "Novo Registro";
-  modalNome.value = "";
+  modalNome.value = MAQUINA_PREFIXO;
+  modalNome.focus();
+  modalNome.setSelectionRange(MAQUINA_PREFIXO.length, MAQUINA_PREFIXO.length);
   modalSituacao.value = "TREINAMENTO";
   modalPagamento.value = "PENDENTE";
   modalPix.value = "";
@@ -397,8 +411,8 @@ function fecharModal() {
 }
 
 function validarFormulario(maquina, idAtual) {
-  if (!maquina || maquina.length < 2) {
-    throw new Error("Informe uma máquina com pelo menos 2 caracteres.");
+  if (!maquina || maquina.length < MAQUINA_PREFIXO.length + 1) {
+    throw new Error("Informe o código da máquina após o prefixo WEBCERT-SE-.");
   }
 
   const nomeNormalizado = normalizarTexto(maquina).toLowerCase();
@@ -479,7 +493,7 @@ ordenacaoEl.addEventListener("change", (e) => {
 
 formMaquina.addEventListener("submit", async (e) => {
   e.preventDefault();
-  const maquina = normalizarTexto(modalNome.value);
+  const maquina = formatarNomeMaquina(modalNome.value);
   const situacao = normalizarSituacao(modalSituacao.value);
   const pagamentoStatus = normalizarPagamento(modalPagamento.value);
   const pixParceiro = normalizarTexto(modalPix.value);
