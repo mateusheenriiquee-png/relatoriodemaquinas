@@ -41,7 +41,7 @@ app.post("/webhook/suportes", async (req, res) => {
 
     for (const input of inputs) {
       const support = normalizeSupport(input);
-      if (!support.protocolo && !support.cliente && !support.cpfCnpj) {
+      if (!support.protocolo && !support.responsavelAbertura && !support.cpfCnpj) {
         continue;
       }
       const ref = db.collection(COLLECTION).doc();

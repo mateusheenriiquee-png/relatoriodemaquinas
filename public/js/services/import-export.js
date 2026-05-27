@@ -27,27 +27,42 @@ function norm(value) {
   return String(value || "").trim().replace(/\s+/g, " ");
 }
 
-function mapStatus(value) {
-  const v = norm(value).toUpperCase();
-  if (v === "FINALIZADO" || v === "CONCLUIDO" || v === "CONCLUÍDO") return "FINALIZADO";
-  if (v === "EM ANDAMENTO" || v === "EM_ATENDIMENTO") return "EM ANDAMENTO";
-  return "ABERTO";
+function excelSerialToIsoDateTime(serial) {
+  const base = new Date(Date.UTC(1899, 11, 30));
+  const ms = Math.round(Number(serial) * 24 * 60 * 60 * 1000);
+  const date = new Date(base.getTime() + ms);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
 }
 
-function mapCanal(value) {
+function normalizeDateTime(value) {
+  if (value === null || value === undefined || value === "") return "";
+  if (typeof value === "number" && Number.isFinite(value)) return excelSerialToIsoDateTime(value);
+  const text = norm(value);
+  if (!text) return "";
+  const date = new Date(text);
+  if (!Number.isNaN(date.getTime())) return date.toISOString();
+  return text;
+}
+
+function mapStatus(value) {
   const v = norm(value).toUpperCase();
-  if (["WHATSAPP", "EMAIL", "TELEFONE", "WEBHOOK"].includes(v)) return v;
-  return "WEBHOOK";
+  if (v === "EM ABERTO" || v === "ABERTO") return "EM ABERTO";
+  if (v === "FINALIZADO" || v === "CONCLUIDO" || v === "CONCLUÍDO") return "FINALIZADO";
+  if (v === "EM ANDAMENTO" || v === "EM_ATENDIMENTO") return "EM ANDAMENTO";
+  if (v === "SEM RETORNO") return "SEM RETORNO";
+  return "EM ABERTO";
 }
 
 const FIELD_ALIASES = {
   protocolo: ["protocolo", "id", "id suporte", "numero chamado", "n chamado", "ticket"],
-  cliente: ["cliente", "nome cliente", "razao social", "nome", "parceiro"],
+  responsavelAbertura: ["responsavel da abertura", "responsavel", "abertura por", "cliente", "nome cliente", "razao social", "nome", "parceiro"],
   cpfCnpj: ["cpf/cnpj", "cpf cnpj", "cpfcnpj", "cpf", "cnpj", "documento"],
-  contato: ["contato", "telefone", "celular", "whatsapp", "email"],
+  contato: ["contato", "contato ou grupo", "telefone", "celular", "whatsapp", "email"],
+  tipo: ["tipo"],
+  ac: ["ac"],
   tecnico: ["tecnico", "tecnico responsavel", "responsavel tecnico", "analista"],
-  canal: ["canal", "origem", "source"],
-  status: ["status", "situacao", "situação"],
+  status: ["status", "sit. atendimento", "situacao atendimento", "situacao", "situação", "coluna 8"],
+  statusAbertura: ["status da abertura", "status abertura"],
   dataAbertura: ["data abertura", "data de abertura", "abertura", "created at", "data"]
 };
 
@@ -66,13 +81,15 @@ function parseRows(rows) {
     .filter((row) => Object.values(row).some((v) => norm(v)))
     .map((row) => ({
       protocolo: norm(findField(row, "protocolo")),
-      cliente: norm(findField(row, "cliente")),
+      responsavelAbertura: norm(findField(row, "responsavelAbertura")),
       cpfCnpj: norm(findField(row, "cpfCnpj")),
+      tipo: norm(findField(row, "tipo")),
+      ac: norm(findField(row, "ac")),
       contato: norm(findField(row, "contato")),
       tecnico: norm(findField(row, "tecnico")),
-      canal: mapCanal(findField(row, "canal")),
       status: mapStatus(findField(row, "status")),
-      dataAbertura: norm(findField(row, "dataAbertura"))
+      statusAbertura: norm(findField(row, "statusAbertura")),
+      dataAbertura: normalizeDateTime(findField(row, "dataAbertura"))
     }))
     .filter((row) => row.protocolo || row.cliente || row.cpfCnpj);
 }
@@ -159,8 +176,8 @@ function showPreview(records) {
   const preview = records.slice(0, 5);
   infoEl.textContent = `${records.length} registro(s) encontrados. Pre-visualizacao (primeiros 5):`;
   tableEl.innerHTML = `
-    <thead><tr><th>Protocolo</th><th>Cliente</th><th>CPF/CNPJ</th><th>Tecnico</th><th>Canal</th><th>Status</th></tr></thead>
-    <tbody>${preview.map((r) => `<tr><td>${r.protocolo || "-"}</td><td>${r.cliente || "-"}</td><td>${r.cpfCnpj || "-"}</td><td>${r.tecnico || "-"}</td><td>${r.canal}</td><td>${r.status}</td></tr>`).join("")}</tbody>
+    <thead><tr><th>Protocolo</th><th>Resp. Abertura</th><th>CPF/CNPJ</th><th>AC</th><th>Tecnico</th><th>Sit. Atendimento</th></tr></thead>
+    <tbody>${preview.map((r) => `<tr><td>${r.protocolo || "-"}</td><td>${r.responsavelAbertura || "-"}</td><td>${r.cpfCnpj || "-"}</td><td>${r.ac || "-"}</td><td>${r.tecnico || "-"}</td><td>${r.status}</td></tr>`).join("")}</tbody>
   `;
   previewArea.classList.remove("hidden");
   hideStatus();
@@ -187,7 +204,7 @@ async function exportCSV() {
     alert("Nenhum registro para exportar.");
     return;
   }
-  const headers = ["protocolo", "cliente", "cpfCnpj", "contato", "tecnico", "canal", "status", "dataAbertura"];
+  const headers = ["dataAbertura", "responsavelAbertura", "protocolo", "tipo", "ac", "contato", "status", "tecnico", "statusAbertura", "cpfCnpj"];
   const escape = (v) => `"${String(v || "").replace(/"/g, '""')}"`;
   const csv = [headers.join(","), ...rows.map((r) => headers.map((h) => escape(r[h])).join(","))].join("\n");
   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });

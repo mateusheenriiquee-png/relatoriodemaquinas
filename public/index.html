@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Registro de Suportes Tecnicos</title>
+  <title>Suporte Tecnico</title>
   <link rel="stylesheet" href="./css/main.css">
 </head>
 <body>
   <div class="container">
     <header class="header">
       <div>
-        <h1>Registro de Suportes Tecnicos</h1>
+        <h1>Suporte Tecnico</h1>
         <p class="subtitle">Gestao de atendimentos recebidos via webhook e CRM</p>
       </div>
       <div class="actions">
@@ -25,48 +25,34 @@
 
     <section class="toolbar">
       <div class="field">
-        <label for="filtroTexto">Buscar por cliente, protocolo ou CPF/CNPJ</label>
-        <input id="filtroTexto" type="text" placeholder="Digite para buscar...">
-      </div>
-      <div class="field">
         <label for="filtroStatus">Status do suporte</label>
         <select id="filtroStatus">
           <option value="todos">Todos</option>
-          <option value="ABERTO">ABERTO</option>
+          <option value="EM ABERTO">EM ABERTO</option>
           <option value="EM ANDAMENTO">EM ANDAMENTO</option>
           <option value="FINALIZADO">FINALIZADO</option>
+          <option value="SEM RETORNO">SEM RETORNO</option>
         </select>
       </div>
       <div class="field">
-        <label for="filtroCanal">Canal</label>
-        <select id="filtroCanal">
-          <option value="todos">Todos</option>
-          <option value="WHATSAPP">WHATSAPP</option>
-          <option value="TELEFONE">TELEFONE</option>
-          <option value="EMAIL">EMAIL</option>
-          <option value="WEBHOOK">WEBHOOK</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="filtroTecnico">Tecnico</label>
-        <select id="filtroTecnico">
+        <label for="filtroAc">AC</label>
+        <select id="filtroAc">
           <option value="todos">Todos</option>
         </select>
       </div>
       <div class="field">
-        <label for="ordenacao">Ordenar</label>
-        <select id="ordenacao">
-          <option value="data-desc">Data (mais recente)</option>
-          <option value="data-asc">Data (mais antiga)</option>
-          <option value="cliente-asc">Cliente (A-Z)</option>
-          <option value="protocolo-asc">Protocolo (A-Z)</option>
-        </select>
+        <label for="filtroCpfCnpj">CPF/CNPJ</label>
+        <input id="filtroCpfCnpj" type="text" placeholder="Digite CPF ou CNPJ">
+      </div>
+      <div class="field">
+        <label for="filtroProtocolo">Protocolo</label>
+        <input id="filtroProtocolo" type="text" placeholder="Digite o protocolo">
       </div>
     </section>
 
     <section class="stats">
       <div class="stat-card"><span>Total</span><strong id="statTotal">0</strong></div>
-      <div class="stat-card"><span>Abertos</span><strong id="statAbertos">0</strong></div>
+      <div class="stat-card"><span>Em aberto</span><strong id="statAbertos">0</strong></div>
       <div class="stat-card"><span>Em andamento</span><strong id="statAndamento">0</strong></div>
       <div class="stat-card"><span>Finalizados</span><strong id="statFinalizados">0</strong></div>
     </section>
@@ -75,14 +61,16 @@
       <table>
         <thead>
           <tr>
-            <th>Data</th>
+            <th>Data/Hora</th>
+            <th>Resp. Abertura</th>
             <th>Protocolo</th>
-            <th>Cliente</th>
             <th>CPF/CNPJ</th>
-            <th>Contato</th>
+            <th>Tipo</th>
+            <th>AC</th>
+            <th>Contato/Grupo</th>
+            <th>Sit. Atendimento</th>
             <th>Tecnico</th>
-            <th>Canal</th>
-            <th>Status</th>
+            <th>Status Abertura</th>
             <th>Acoes</th>
           </tr>
         </thead>
@@ -107,28 +95,26 @@
       </div>
       <form id="formSuporte" class="modal-form">
         <div class="field"><label for="modalProtocolo">Protocolo</label><input id="modalProtocolo" required maxlength="80"></div>
-        <div class="field"><label for="modalCliente">Cliente</label><input id="modalCliente" required maxlength="160"></div>
+        <div class="field"><label for="modalResponsavelAbertura">Responsavel da abertura</label><input id="modalResponsavelAbertura" maxlength="120"></div>
         <div class="field"><label for="modalCpfCnpj">CPF/CNPJ</label><input id="modalCpfCnpj" maxlength="32"></div>
-        <div class="field"><label for="modalContato">Contato</label><input id="modalContato" maxlength="120"></div>
+        <div class="field"><label for="modalTipo">Tipo</label><input id="modalTipo" maxlength="80" placeholder="SUPORTE TECNICO / INSTALACAO"></div>
+        <div class="field"><label for="modalAc">AC</label><input id="modalAc" maxlength="80" placeholder="CONSULTI, SOLUTI..."></div>
+        <div class="field"><label for="modalContato">Contato ou grupo</label><input id="modalContato" maxlength="120"></div>
         <div class="field"><label for="modalTecnico">Tecnico responsavel</label><input id="modalTecnico" maxlength="120"></div>
         <div class="field">
-          <label for="modalCanal">Canal</label>
-          <select id="modalCanal">
-            <option value="WEBHOOK">WEBHOOK</option>
-            <option value="WHATSAPP">WHATSAPP</option>
-            <option value="TELEFONE">TELEFONE</option>
-            <option value="EMAIL">EMAIL</option>
+          <label for="modalStatus">Situacao do atendimento</label>
+          <select id="modalStatus">
+            <option value="EM ABERTO">EM ABERTO</option>
+            <option value="EM ANDAMENTO">EM ANDAMENTO</option>
+            <option value="FINALIZADO">FINALIZADO</option>
+            <option value="SEM RETORNO">SEM RETORNO</option>
           </select>
         </div>
         <div class="field">
-          <label for="modalStatus">Status</label>
-          <select id="modalStatus">
-            <option value="ABERTO">ABERTO</option>
-            <option value="EM ANDAMENTO">EM ANDAMENTO</option>
-            <option value="FINALIZADO">FINALIZADO</option>
-          </select>
+          <label for="modalStatusAbertura">Status da abertura</label>
+          <input id="modalStatusAbertura" maxlength="80" placeholder="DEVIDO, PENDENTE...">
         </div>
-        <div class="field"><label for="modalDataAbertura">Data de abertura</label><input id="modalDataAbertura" type="date"></div>
+        <div class="field"><label for="modalDataAbertura">Carimbo de data/hora</label><input id="modalDataAbertura" type="datetime-local"></div>
         <input id="modalIdAtual" type="hidden">
         <div class="modal-actions">
           <button id="btnSalvarModal" class="btn btn-primary" type="submit">Salvar</button>

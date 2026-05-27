@@ -8,7 +8,7 @@
 }
 * { box-sizing: border-box; }
 body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; background: linear-gradient(180deg, #eef2ff 0%, var(--bg) 45%); color: var(--text); }
-.container { max-width: 1140px; margin: 32px auto; background: var(--card); padding: 24px; border-radius: 18px; border: 1px solid var(--border); box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08); }
+.container { max-width: 1320px; margin: 32px auto; background: var(--card); padding: 24px; border-radius: 18px; border: 1px solid var(--border); box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08); }
 .header { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 20px; }
 h1 { margin: 0; font-size: 1.7rem; }
 .subtitle { margin: 6px 0 0; color: var(--muted); }
@@ -19,7 +19,7 @@ h1 { margin: 0; font-size: 1.7rem; }
 .btn-small { font-size: 0.82rem; padding: 8px 10px; }
 .btn-import { background: #0f766e; color: #fff; }
 .btn-export { background: #7c3aed; color: #fff; }
-.toolbar { margin-bottom: 18px; display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr 1fr; gap: 12px; }
+.toolbar { margin-bottom: 18px; display: grid; grid-template-columns: repeat(4, minmax(180px, 1fr)); gap: 12px; }
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field label { font-size: 0.83rem; color: var(--muted); }
 input, select { width: 100%; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; background: #fff; color: var(--text); font-size: 0.95rem; }
@@ -30,8 +30,8 @@ input, select { width: 100%; border: 1px solid var(--border); border-radius: 10p
 .table-wrapper { border: 1px solid var(--border); border-radius: 14px; overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
 thead { background: #0f172a; }
-th { color: #fff; padding: 12px; text-align: left; font-weight: 600; }
-td { padding: 12px; border-bottom: 1px solid var(--border); }
+th { color: #fff; padding: 10px; text-align: left; font-weight: 600; font-size: 0.84rem; white-space: nowrap; }
+td { padding: 10px; border-bottom: 1px solid var(--border); font-size: 0.84rem; white-space: nowrap; }
 tbody tr:last-child td { border-bottom: 0; }
 .empty { text-align: center; color: var(--muted); padding: 20px; }
 .status-pill { display: inline-block; padding: 4px 10px; border-radius: 999px; font-weight: 600; font-size: 0.83rem; }
