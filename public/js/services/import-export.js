@@ -217,63 +217,8 @@ async function exportCSV() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  const modalImportar = document.getElementById("modalImportar");
-  const btnImportar = document.getElementById("btnImportar");
-  const btnFecharImportar = document.getElementById("btnFecharModalImportar");
   const btnExportar = document.getElementById("btnExportar");
-  const fileInput = document.getElementById("fileInputCsvXlsx");
-  const btnEscolherArquivo = document.getElementById("btnEscolherArquivo");
-  const nomeArquivo = document.getElementById("nomeArquivoSelecionado");
-  const btnConfirmar = document.getElementById("btnConfirmarImport");
-  const previewArea = document.getElementById("importPreviewArea");
-
-  btnImportar.addEventListener("click", () => {
-    pendingImportRecords = [];
-    previewArea.classList.add("hidden");
-    hideStatus();
-    nomeArquivo.textContent = "";
-    fileInput.value = "";
-    modalImportar.classList.remove("hidden");
-  });
-  btnFecharImportar.addEventListener("click", () => modalImportar.classList.add("hidden"));
-  btnEscolherArquivo.addEventListener("click", () => fileInput.click());
-
-  fileInput.addEventListener("change", async () => {
-    const file = fileInput.files[0];
-    if (!file) return;
-    nomeArquivo.textContent = file.name;
-    try {
-      showStatus("Lendo arquivo...", "loading");
-      const rows = file.name.toLowerCase().endsWith(".xlsx")
-        ? await parseXLSXFile(await file.arrayBuffer())
-        : parseCSVText(await file.text());
-      const records = parseRows(rows);
-      if (!records.length) throw new Error("Nenhum registro valido encontrado.");
-      showPreview(records);
-    } catch (err) {
-      showStatus(err.message || "Erro ao ler arquivo.", "error");
-    }
-  });
-
-  btnConfirmar.addEventListener("click", async () => {
-    if (!pendingImportRecords.length) return;
-    const mode = document.querySelector('input[name="importMode"]:checked')?.value || "substituir";
-    const ok = confirm(`Confirmar importacao de ${pendingImportRecords.length} registro(s)?`);
-    if (!ok) return;
-    try {
-      btnConfirmar.disabled = true;
-      await writeToFirestore(pendingImportRecords, mode);
-      showStatus(`${pendingImportRecords.length} registro(s) importado(s) com sucesso!`, "success");
-      pendingImportRecords = [];
-      previewArea.classList.add("hidden");
-      document.getElementById("btnRecarregar")?.click();
-    } catch (err) {
-      showStatus("Erro ao salvar: " + (err.message || err), "error");
-    } finally {
-      btnConfirmar.disabled = false;
-    }
-  });
-
+  if (!btnExportar) return;
   btnExportar.addEventListener("click", async () => {
     try {
       btnExportar.disabled = true;

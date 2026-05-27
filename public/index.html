@@ -16,10 +16,7 @@
       <div class="actions">
         <button id="btnAdicionar" class="btn btn-primary">+ Novo Suporte</button>
         <button id="btnRecarregar" class="btn btn-ghost">Atualizar Lista</button>
-        <div class="import-export-group">
-          <button id="btnImportar" class="btn btn-import">⬆ Importar</button>
-          <button id="btnExportar" class="btn btn-export">⬇ Exportar CSV</button>
-        </div>
+        <button id="btnExportar" class="btn btn-export">⬇ Exportar CSV</button>
       </div>
     </header>
 
@@ -38,6 +35,22 @@
         <label for="filtroAc">AC</label>
         <select id="filtroAc">
           <option value="todos">Todos</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="filtroTecnico">Tecnico Responsavel</label>
+        <select id="filtroTecnico">
+          <option value="todos">Todos</option>
+          <option value="MATHEUS">MATHEUS</option>
+          <option value="HENRIQUE">HENRIQUE</option>
+          <option value="VICTOR">VICTOR</option>
+          <option value="ISABELE">ISABELE</option>
+          <option value="MALU">MALU</option>
+          <option value="AGNY">AGNY</option>
+          <option value="IANCA">IANCA</option>
+          <option value="EMYLE">EMYLE</option>
+          <option value="VINICIUS">VINICIUS</option>
+          <option value="JUNIOR">JUNIOR</option>
         </select>
       </div>
       <div class="field">
@@ -71,7 +84,7 @@
             <th>Sit. Atendimento</th>
             <th>Tecnico</th>
             <th>Status Abertura</th>
-            <th>Acoes</th>
+            <th>Ações</th>
           </tr>
         </thead>
         <tbody id="tbody"></tbody>
@@ -97,10 +110,37 @@
         <div class="field"><label for="modalProtocolo">Protocolo</label><input id="modalProtocolo" required maxlength="80"></div>
         <div class="field"><label for="modalResponsavelAbertura">Responsavel da abertura</label><input id="modalResponsavelAbertura" maxlength="120"></div>
         <div class="field"><label for="modalCpfCnpj">CPF/CNPJ</label><input id="modalCpfCnpj" maxlength="32"></div>
-        <div class="field"><label for="modalTipo">Tipo</label><input id="modalTipo" maxlength="80" placeholder="SUPORTE TECNICO / INSTALACAO"></div>
-        <div class="field"><label for="modalAc">AC</label><input id="modalAc" maxlength="80" placeholder="CONSULTI, SOLUTI..."></div>
+        <div class="field">
+          <label for="modalTipo">Tipo</label>
+          <select id="modalTipo">
+            <option value="Suporte tecnico">Suporte tecnico</option>
+            <option value="Instalção">Instalação</option>
+            <option value="Configuração de Maquina">Configuração de Maquina</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="modalAc">AC</label>
+          <select id="modalAc">
+            <option value="CONSULTI">CONSULTI</option>
+            <option value="VALID">VALID</option>
+          </select>
+        </div>
         <div class="field"><label for="modalContato">Contato ou grupo</label><input id="modalContato" maxlength="120"></div>
-        <div class="field"><label for="modalTecnico">Tecnico responsavel</label><input id="modalTecnico" maxlength="120"></div>
+        <div class="field">
+          <label for="modalTecnico">Tecnico responsavel</label>
+          <select id="modalTecnico">
+            <option value="MATHEUS">MATHEUS</option>
+            <option value="HENRIQUE">HENRIQUE</option>
+            <option value="VICTOR">VICTOR</option>
+            <option value="ISABELE">ISABELE</option>
+            <option value="MALU">MALU</option>
+            <option value="AGNY">AGNY</option>
+            <option value="IANCA">IANCA</option>
+            <option value="EMYLE">EMYLE</option>
+            <option value="VINICIUS">VINICIUS</option>
+            <option value="JUNIOR">JUNIOR</option>
+          </select>
+        </div>
         <div class="field">
           <label for="modalStatus">Situacao do atendimento</label>
           <select id="modalStatus">
@@ -112,7 +152,10 @@
         </div>
         <div class="field">
           <label for="modalStatusAbertura">Status da abertura</label>
-          <input id="modalStatusAbertura" maxlength="80" placeholder="DEVIDO, PENDENTE...">
+          <select id="modalStatusAbertura">
+            <option value="DEVIDO">Devido</option>
+            <option value="INDEVIDO">indevido</option>
+          </select>
         </div>
         <div class="field"><label for="modalDataAbertura">Carimbo de data/hora</label><input id="modalDataAbertura" type="datetime-local"></div>
         <input id="modalIdAtual" type="hidden">
@@ -120,40 +163,6 @@
           <button id="btnSalvarModal" class="btn btn-primary" type="submit">Salvar</button>
         </div>
       </form>
-    </div>
-  </div>
-
-  <div id="modalImportar" class="modal hidden">
-    <div class="modal-content modal-import-content">
-      <div class="modal-header">
-        <h2>Importar Dados</h2>
-        <button id="btnFecharModalImportar" class="btn btn-ghost btn-small" type="button">Fechar</button>
-      </div>
-      <div class="import-options">
-        <div class="import-option-card">
-          <div class="import-option-body">
-            <h3>Arquivo CSV ou Excel</h3>
-            <p>Use uma planilha com campos de suporte. As colunas "observacao do tecnico" e "observacao" sao ignoradas automaticamente.</p>
-            <input id="fileInputCsvXlsx" type="file" accept=".csv,.xlsx" class="hidden-input">
-            <button id="btnEscolherArquivo" class="btn btn-ghost btn-full">Escolher arquivo (.csv ou .xlsx)</button>
-            <span id="nomeArquivoSelecionado" class="file-name-hint"></span>
-          </div>
-        </div>
-      </div>
-      <div id="importPreviewArea" class="import-preview hidden">
-        <p id="importPreviewInfo" class="import-preview-info"></p>
-        <div class="import-preview-scroll">
-          <table id="importPreviewTable" class="import-preview-table"></table>
-        </div>
-        <div class="import-actions-row">
-          <div class="import-mode-group">
-            <label><input type="radio" name="importMode" value="substituir" checked> Substituir todos os registros</label>
-            <label><input type="radio" name="importMode" value="adicionar"> Adicionar aos existentes</label>
-          </div>
-          <button id="btnConfirmarImport" class="btn btn-primary">Confirmar Importacao</button>
-        </div>
-      </div>
-      <div id="importStatusMsg" class="import-status hidden"></div>
     </div>
   </div>
 

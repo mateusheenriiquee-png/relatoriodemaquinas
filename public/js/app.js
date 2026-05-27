@@ -17,6 +17,7 @@ const state = {
   registros: [],
   filtroStatus: "todos",
   filtroAc: "todos",
+  filtroTecnico: "todos",
   filtroCpfCnpj: "",
   filtroProtocolo: "",
   paginaAtual: 1,
@@ -26,6 +27,7 @@ const state = {
 const tbody = document.getElementById("tbody");
 const filtroStatusEl = document.getElementById("filtroStatus");
 const filtroAcEl = document.getElementById("filtroAc");
+const filtroTecnicoEl = document.getElementById("filtroTecnico");
 const filtroCpfCnpjEl = document.getElementById("filtroCpfCnpj");
 const filtroProtocoloEl = document.getElementById("filtroProtocolo");
 const paginationInfo = document.getElementById("paginationInfo");
@@ -74,6 +76,30 @@ function toDatetimeLocal(value) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+function resolverDataAbertura(data = {}) {
+  const dataWebhook = norm(data.dataAbertura || data.carimboDataHora || "");
+  if (dataWebhook) return dataWebhook;
+  if (typeof data.createdAt === "string") return norm(data.createdAt);
+  if (data.createdAt && typeof data.createdAt.toDate === "function") {
+    return data.createdAt.toDate().toISOString();
+  }
+  return "";
+}
+
+function configurarCamposModoEdicao(estaEditando) {
+  modalProtocolo.disabled = estaEditando;
+  modalResponsavelAbertura.disabled = estaEditando;
+  modalCpfCnpj.disabled = estaEditando;
+  modalTipo.disabled = estaEditando;
+  modalAc.disabled = estaEditando;
+  modalContato.disabled = estaEditando;
+  modalDataAbertura.disabled = true;
+
+  modalStatus.disabled = false;
+  modalTecnico.disabled = false;
+  modalStatusAbertura.disabled = false;
+}
+
 async function carregar() {
   const snap = await getDocs(collection(db, COLLECTION));
   state.registros = snap.docs.map((d) => {
@@ -89,7 +115,7 @@ async function carregar() {
       tecnico: norm(data.tecnico || data.tecnicoResponsavel || ""),
       status: normStatus(data.status || data.situacao || data.situacaoAtendimento || "EM ABERTO"),
       statusAbertura: norm(data.statusAbertura || ""),
-      dataAbertura: norm(data.dataAbertura || data.carimboDataHora || "")
+      dataAbertura: resolverDataAbertura(data)
     };
   });
   atualizarFiltroAc();
@@ -117,6 +143,7 @@ function getRegistrosFiltrados() {
   if (state.filtroProtocolo) dados = dados.filter((item) => item.protocolo.toLowerCase().includes(state.filtroProtocolo.toLowerCase()));
   if (state.filtroStatus !== "todos") dados = dados.filter((item) => item.status === state.filtroStatus);
   if (state.filtroAc !== "todos") dados = dados.filter((item) => item.ac === state.filtroAc);
+  if (state.filtroTecnico !== "todos") dados = dados.filter((item) => item.tecnico === state.filtroTecnico);
   dados.sort((a, b) => toComparableDate(b.dataAbertura) - toComparableDate(a.dataAbertura));
   return dados;
 }
@@ -186,33 +213,35 @@ function render() {
 
 function abrirModalAdicionar() {
   state.modalModo = "adicionar";
+  configurarCamposModoEdicao(false);
   modalTitulo.textContent = "Novo Suporte";
   modalProtocolo.value = "";
   modalResponsavelAbertura.value = "";
   modalCpfCnpj.value = "";
-  modalTipo.value = "";
-  modalAc.value = "";
+  modalTipo.value = "SUPORTE TECNICO";
+  modalAc.value = "CONSULTI";
   modalContato.value = "";
-  modalTecnico.value = "";
+  modalTecnico.value = "MATHEUS";
   modalStatus.value = "EM ABERTO";
-  modalStatusAbertura.value = "";
-  modalDataAbertura.value = "";
+  modalStatusAbertura.value = "DEVIDO";
+  modalDataAbertura.value = toDatetimeLocal(new Date().toISOString());
   modalIdAtual.value = "";
   modal.classList.remove("hidden");
 }
 
 function abrirModalEditar(item) {
   state.modalModo = "editar";
+  configurarCamposModoEdicao(true);
   modalTitulo.textContent = "Editar Suporte";
   modalProtocolo.value = item.protocolo;
   modalResponsavelAbertura.value = item.responsavelAbertura;
   modalCpfCnpj.value = item.cpfCnpj;
-  modalTipo.value = item.tipo;
-  modalAc.value = item.ac;
+  modalTipo.value = item.tipo || "SUPORTE TECNICO";
+  modalAc.value = item.ac || "CONSULTI";
   modalContato.value = item.contato;
-  modalTecnico.value = item.tecnico;
+  modalTecnico.value = item.tecnico || "MATHEUS";
   modalStatus.value = item.status;
-  modalStatusAbertura.value = item.statusAbertura;
+  modalStatusAbertura.value = item.statusAbertura || "DEVIDO";
   modalDataAbertura.value = toDatetimeLocal(item.dataAbertura);
   modalIdAtual.value = item.id;
   modal.classList.remove("hidden");
@@ -229,24 +258,32 @@ document.getElementById("btnPrevPage").addEventListener("click", () => { state.p
 document.getElementById("btnNextPage").addEventListener("click", () => { state.paginaAtual += 1; render(); });
 filtroStatusEl.addEventListener("change", (e) => { state.filtroStatus = e.target.value; state.paginaAtual = 1; render(); });
 filtroAcEl.addEventListener("change", (e) => { state.filtroAc = e.target.value; state.paginaAtual = 1; render(); });
+filtroTecnicoEl.addEventListener("change", (e) => { state.filtroTecnico = e.target.value; state.paginaAtual = 1; render(); });
 filtroCpfCnpjEl.addEventListener("input", (e) => { state.filtroCpfCnpj = e.target.value.trim(); state.paginaAtual = 1; render(); });
 filtroProtocoloEl.addEventListener("input", (e) => { state.filtroProtocolo = e.target.value.trim(); state.paginaAtual = 1; render(); });
 
 formSuporte.addEventListener("submit", async (e) => {
   e.preventDefault();
-  const payload = {
-    protocolo: norm(modalProtocolo.value),
-    responsavelAbertura: norm(modalResponsavelAbertura.value),
-    cpfCnpj: norm(modalCpfCnpj.value),
-    tipo: norm(modalTipo.value),
-    ac: norm(modalAc.value),
-    contato: norm(modalContato.value),
-    tecnico: norm(modalTecnico.value),
-    status: normStatus(modalStatus.value),
-    statusAbertura: norm(modalStatusAbertura.value),
-    dataAbertura: norm(modalDataAbertura.value),
-    updatedAt: serverTimestamp()
-  };
+  const payload = state.modalModo === "adicionar"
+    ? {
+      protocolo: norm(modalProtocolo.value),
+      responsavelAbertura: norm(modalResponsavelAbertura.value),
+      cpfCnpj: norm(modalCpfCnpj.value),
+      tipo: norm(modalTipo.value),
+      ac: norm(modalAc.value),
+      contato: norm(modalContato.value),
+      tecnico: norm(modalTecnico.value),
+      status: normStatus(modalStatus.value),
+      statusAbertura: norm(modalStatusAbertura.value),
+      dataAbertura: new Date().toISOString(),
+      updatedAt: serverTimestamp()
+    }
+    : {
+      tecnico: norm(modalTecnico.value),
+      status: normStatus(modalStatus.value),
+      statusAbertura: norm(modalStatusAbertura.value),
+      updatedAt: serverTimestamp()
+    };
   try {
     if (state.modalModo === "adicionar") {
       await addDoc(collection(db, COLLECTION), { ...payload, createdAt: serverTimestamp() });

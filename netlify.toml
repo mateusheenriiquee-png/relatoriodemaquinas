@@ -1,0 +1,11 @@
+[build]
+  publish = "public"
+
+[functions]
+  directory = "netlify/functions"
+
+[[redirects]]
+  from = "/webhook/suportes"
+  to = "/.netlify/functions/webhook-suportes"
+  status = 200
+  force = true
