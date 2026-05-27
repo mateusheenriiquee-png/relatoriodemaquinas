@@ -41,6 +41,7 @@ const modalCpfCnpj = document.getElementById("modalCpfCnpj");
 const modalTipo = document.getElementById("modalTipo");
 const modalAc = document.getElementById("modalAc");
 const modalContato = document.getElementById("modalContato");
+const modalDescricao = document.getElementById("modalDescricao");
 const modalTecnico = document.getElementById("modalTecnico");
 const modalStatus = document.getElementById("modalStatus");
 const modalStatusAbertura = document.getElementById("modalStatusAbertura");
@@ -93,6 +94,7 @@ function configurarCamposModoEdicao(estaEditando) {
   modalTipo.disabled = estaEditando;
   modalAc.disabled = estaEditando;
   modalContato.disabled = estaEditando;
+  modalDescricao.disabled = estaEditando;
   modalDataAbertura.disabled = true;
 
   modalStatus.disabled = false;
@@ -110,6 +112,7 @@ async function carregar() {
       responsavelAbertura: norm(data.responsavelAbertura || data.responsavel || data.cliente || ""),
       cpfCnpj: norm(data.cpfCnpj || data.cpf_cnpj || ""),
       contato: norm(data.contato || data.telefone || ""),
+      descricao: norm(data.descricao || data.description || ""),
       tipo: norm(data.tipo || ""),
       ac: norm(data.ac || data.AC || ""),
       tecnico: norm(data.tecnico || data.tecnicoResponsavel || ""),
@@ -179,7 +182,7 @@ function render() {
   const paginados = dados.slice(inicio, fim);
   if (!paginados.length) {
     const tr = document.createElement("tr");
-    tr.innerHTML = '<td colspan="11" class="empty">Nenhum suporte encontrado para os filtros selecionados.</td>';
+    tr.innerHTML = '<td colspan="12" class="empty">Nenhum suporte encontrado para os filtros selecionados.</td>';
     tbody.appendChild(tr);
     atualizarEstatisticas();
     atualizarRodapePaginacao(0, 0, totalPaginas);
@@ -195,6 +198,7 @@ function render() {
       <td>${item.tipo || "-"}</td>
       <td>${item.ac || "-"}</td>
       <td>${item.contato || "-"}</td>
+      <td>${item.descricao || "-"}</td>
       <td><span class="status-pill ${statusClass(item.status)}">${item.status}</span></td>
       <td>${item.tecnico || "-"}</td>
       <td>${item.statusAbertura || "-"}</td>
@@ -221,6 +225,7 @@ function abrirModalAdicionar() {
   modalTipo.value = "SUPORTE TECNICO";
   modalAc.value = "CONSULTI";
   modalContato.value = "";
+  modalDescricao.value = "";
   modalTecnico.value = "MATHEUS";
   modalStatus.value = "EM ABERTO";
   modalStatusAbertura.value = "DEVIDO";
@@ -239,6 +244,7 @@ function abrirModalEditar(item) {
   modalTipo.value = item.tipo || "SUPORTE TECNICO";
   modalAc.value = item.ac || "CONSULTI";
   modalContato.value = item.contato;
+  modalDescricao.value = item.descricao || "";
   modalTecnico.value = item.tecnico || "MATHEUS";
   modalStatus.value = item.status;
   modalStatusAbertura.value = item.statusAbertura || "DEVIDO";
@@ -272,6 +278,7 @@ formSuporte.addEventListener("submit", async (e) => {
       tipo: norm(modalTipo.value),
       ac: norm(modalAc.value),
       contato: norm(modalContato.value),
+      descricao: norm(modalDescricao.value),
       tecnico: norm(modalTecnico.value),
       status: normStatus(modalStatus.value),
       statusAbertura: norm(modalStatusAbertura.value),

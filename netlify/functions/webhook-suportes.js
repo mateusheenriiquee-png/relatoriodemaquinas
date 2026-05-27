@@ -35,6 +35,21 @@ function isAuthorized(event, body) {
   return token === WEBHOOK_TOKEN;
 }
 
+function hasMeaningfulSupportData(support = {}) {
+  return Boolean(
+    support.protocolo ||
+    support.responsavelAbertura ||
+    support.cpfCnpj ||
+    support.contato ||
+    support.descricao ||
+    support.tipo ||
+    support.ac ||
+    support.tecnico ||
+    support.statusAbertura ||
+    support.dataAbertura
+  );
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== "POST") {
     return {
@@ -66,7 +81,7 @@ exports.handler = async (event) => {
 
     for (const input of inputs) {
       const support = normalizeSupport(input);
-      if (!support.protocolo && !support.responsavelAbertura && !support.cpfCnpj) {
+      if (!hasMeaningfulSupportData(support)) {
         continue;
       }
       const ref = db.collection(COLLECTION).doc();

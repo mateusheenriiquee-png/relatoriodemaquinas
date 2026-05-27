@@ -43,6 +43,7 @@ function normalizeSupport(input) {
   const responsavelAbertura = normalizeText(getValueByAliases(input, ["responsavel da abertura", "responsavel", "cliente", "nome cliente", "razao social", "nome"]));
   const cpfCnpj = normalizeText(getValueByAliases(input, ["cpf/cnpj", "cpf cnpj", "cpfcnpj", "cpf", "cnpj", "documento"]));
   const contato = normalizeText(getValueByAliases(input, ["contato", "contato ou grupo", "telefone", "celular", "whatsapp", "email"]));
+  const descricao = normalizeText(getValueByAliases(input, ["descricao", "descrição", "description", "descricao do problema", "descrição do problema"]));
   const tipo = normalizeText(getValueByAliases(input, ["tipo"]));
   const ac = normalizeText(getValueByAliases(input, ["ac"]));
   const tecnico = normalizeText(getValueByAliases(input, ["tecnico", "tecnico responsavel", "responsavel tecnico", "analista"]));
@@ -50,7 +51,7 @@ function normalizeSupport(input) {
   const statusAbertura = normalizeText(getValueByAliases(input, ["status da abertura", "status abertura"]));
   const dataAbertura = normalizeText(getValueByAliases(input, ["carimbo de data/hora", "data abertura", "data de abertura", "abertura", "data"]));
 
-  return { protocolo, responsavelAbertura, cpfCnpj, contato, tipo, ac, tecnico, status, statusAbertura, dataAbertura };
+  return { protocolo, responsavelAbertura, cpfCnpj, contato, descricao, tipo, ac, tecnico, status, statusAbertura, dataAbertura };
 }
 
 module.exports = {
