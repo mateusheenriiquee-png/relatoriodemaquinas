@@ -1,5 +1,5 @@
 {
   "projects": {
-    "default": "relatorioteste-1771d"
+    "default": "<FIREBASE_PROJECT_ID>"
   }
 }
