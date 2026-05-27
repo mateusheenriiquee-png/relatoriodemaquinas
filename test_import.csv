@@ -1,4 +1,0 @@
-Máquina,Parceiro,Unidade,AGR,Situação,Pagamento,Email Contato,Telefone Parceiro,Valor Equipamento,Data Instalação,Observações,Status Atividade
-WEBCERT-SE-001,ABC Sistemas,São Paulo,AGR-001,PRODUCAO,NAO PENDENTE,contato@abc.com,11999999999,5000.00,2024-01-15,Equipamento instalado com sucesso,ATIVO
-WEBCERT-SE-002,XYZ Tecnologia,Rio de Janeiro,AGR-002,TREINAMENTO,PENDENTE,suporte@xyz.com,21988888888,7500.00,2024-02-20,Aguardando treinamento,PENDENTE
-WEBCERT-SE-003,Tech Solutions,Belo Horizonte,AGR-003,PRODUCAO,NAO PENDENTE,tech@techsol.com,31977777777,6000.00,2024-01-10,Funcionando normalmente,ATIVO
