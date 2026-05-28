@@ -103,6 +103,19 @@
     </footer>
   </div>
 
+  <div id="modalExcluir" class="modal hidden" role="dialog" aria-labelledby="modalExcluirTitulo" aria-modal="true">
+    <div class="modal-content modal-confirm">
+      <div class="modal-confirm-icon" aria-hidden="true">!</div>
+      <h2 id="modalExcluirTitulo">Excluir suporte?</h2>
+      <p class="modal-confirm-text">Esta ação não pode ser desfeita. O registro será removido permanentemente.</p>
+      <p id="modalExcluirDetalhes" class="modal-confirm-details"></p>
+      <div class="modal-confirm-actions">
+        <button id="btnCancelarExclusao" class="btn btn-ghost" type="button">Cancelar</button>
+        <button id="btnConfirmarExclusao" class="btn btn-danger" type="button">Excluir</button>
+      </div>
+    </div>
+  </div>
+
   <div id="modalSuporte" class="modal hidden">
     <div class="modal-content">
       <div class="modal-header">

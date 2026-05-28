@@ -47,6 +47,12 @@ const modalStatus = document.getElementById("modalStatus");
 const modalStatusAbertura = document.getElementById("modalStatusAbertura");
 const modalDataAbertura = document.getElementById("modalDataAbertura");
 const modalIdAtual = document.getElementById("modalIdAtual");
+const modalExcluir = document.getElementById("modalExcluir");
+const modalExcluirDetalhes = document.getElementById("modalExcluirDetalhes");
+const btnCancelarExclusao = document.getElementById("btnCancelarExclusao");
+const btnConfirmarExclusao = document.getElementById("btnConfirmarExclusao");
+
+let excluirIdPendente = null;
 
 const norm = (v) => String(v || "").trim().replace(/\s+/g, " ");
 function normStatus(v) {
@@ -288,9 +294,48 @@ function fecharModal() {
   modal.classList.add("hidden");
 }
 
+function abrirModalExcluir(item) {
+  excluirIdPendente = item.id;
+  const protocolo = item.protocolo || "—";
+  const responsavel = item.responsavelAbertura || "—";
+  modalExcluirDetalhes.textContent = `Protocolo ${protocolo} · ${responsavel}`;
+  btnConfirmarExclusao.disabled = false;
+  btnConfirmarExclusao.textContent = "Excluir";
+  modalExcluir.classList.remove("hidden");
+}
+
+function fecharModalExcluir() {
+  excluirIdPendente = null;
+  modalExcluir.classList.add("hidden");
+}
+
+async function confirmarExclusao() {
+  if (!excluirIdPendente) return;
+  btnConfirmarExclusao.disabled = true;
+  btnConfirmarExclusao.textContent = "Excluindo...";
+  try {
+    await deleteDoc(doc(db, COLLECTION, excluirIdPendente));
+    fecharModalExcluir();
+  } catch (err) {
+    btnConfirmarExclusao.disabled = false;
+    btnConfirmarExclusao.textContent = "Excluir";
+    alert(err.message || "Nao foi possivel excluir o suporte.");
+  }
+}
+
 document.getElementById("btnAdicionar").addEventListener("click", abrirModalAdicionar);
 document.getElementById("btnRecarregar").addEventListener("click", carregar);
 document.getElementById("btnFecharModal").addEventListener("click", fecharModal);
+btnCancelarExclusao.addEventListener("click", fecharModalExcluir);
+btnConfirmarExclusao.addEventListener("click", confirmarExclusao);
+modalExcluir.addEventListener("click", (e) => {
+  if (e.target === modalExcluir) fecharModalExcluir();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !modalExcluir.classList.contains("hidden")) {
+    fecharModalExcluir();
+  }
+});
 document.getElementById("btnPrevPage").addEventListener("click", () => { state.paginaAtual -= 1; render(); });
 document.getElementById("btnNextPage").addEventListener("click", () => { state.paginaAtual += 1; render(); });
 filtroStatusEl.addEventListener("change", (e) => { state.filtroStatus = e.target.value; state.paginaAtual = 1; render(); });
@@ -347,10 +392,9 @@ tbody.addEventListener("click", async (e) => {
       abrirModalEditar(item);
     }
     if (btn.dataset.action === "excluir") {
-      const ok = confirm("Deseja excluir este suporte?");
-      if (!ok) return;
-      await deleteDoc(doc(db, COLLECTION, id));
-      alert("Suporte excluido com sucesso.");
+      const item = state.registros.find((r) => r.id === id);
+      if (!item) throw new Error("Registro nao encontrado.");
+      abrirModalExcluir(item);
     }
   } catch (err) {
     alert(err.message || "Nao foi possivel concluir a operacao.");
