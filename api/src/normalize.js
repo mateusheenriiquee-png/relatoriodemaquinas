@@ -17,14 +17,41 @@ function normalizeKey(value) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
-function getValueByAliases(source, aliases) {
-  for (const [key, value] of Object.entries(source || {})) {
-    const normalizedKey = normalizeKey(key);
-    if (IGNORED_FIELDS.has(normalizedKey)) {
-      continue;
+function isMeaningfulValue(value) {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "string" && !normalizeText(value)) return false;
+  return true;
+}
+
+function getBodyPayload(input) {
+  const body = input?.body;
+  if (body && typeof body === "object" && !Array.isArray(body)) {
+    return body;
+  }
+  if (typeof body !== "string") {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(body);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed;
     }
-    if (aliases.includes(normalizedKey)) {
-      return value;
+  } catch (_error) {
+    return {};
+  }
+  return {};
+}
+
+function getValueByAliases(aliases, ...sources) {
+  for (const source of sources) {
+    for (const [key, value] of Object.entries(source || {})) {
+      const normalizedKey = normalizeKey(key);
+      if (IGNORED_FIELDS.has(normalizedKey)) {
+        continue;
+      }
+      if (aliases.includes(normalizedKey) && isMeaningfulValue(value)) {
+        return value;
+      }
     }
   }
   return "";
@@ -66,23 +93,25 @@ function normalizeStatusByRule(statusValue, stepValue) {
 }
 
 function normalizeSupport(input) {
-  const protocolo = normalizeText(getValueByAliases(input, ["protocolo", "ticket", "id suporte", "id"]));
-  const responsavelAbertura = normalizeText(getValueByAliases(input, ["responsavel da abertura", "responsavel", "cliente", "nome cliente", "razao social", "nome"]));
-  const cpfCnpj = normalizeText(getValueByAliases(input, ["cpf/cnpj", "cpf cnpj", "cpfcnpj", "cpf", "cnpj", "documento"]));
-  const contato = normalizeText(getValueByAliases(input, ["contato", "contato ou grupo", "telefone", "celular", "whatsapp", "email"]));
-  const descricao = normalizeText(getValueByAliases(input, ["descricao", "descrição", "description", "descricao do problema", "descrição do problema"]));
-  const tipo = normalizeText(getValueByAliases(input, ["tipo"]));
-  const ac = normalizeText(getValueByAliases(input, ["ac"]));
-  const tecnico = normalizeText(getValueByAliases(input, ["tecnico", "tecnico responsavel", "responsavel tecnico", "analista"]));
-  const statusRaw = getValueByAliases(input, [
+  const bodyPayload = getBodyPayload(input);
+
+  const protocolo = normalizeText(getValueByAliases(["protocolo", "ticket", "id suporte", "id"], input, bodyPayload));
+  const responsavelAbertura = normalizeText(getValueByAliases(["responsavel da abertura", "responsavel", "cliente", "nome cliente", "razao social", "nome"], input, bodyPayload));
+  const cpfCnpj = normalizeText(getValueByAliases(["cpf/cnpj", "cpf cnpj", "cpfcnpj", "cpf", "cnpj", "documento"], input, bodyPayload));
+  const contato = normalizeText(getValueByAliases(["contato", "contato ou grupo", "telefone", "celular", "whatsapp", "email"], input, bodyPayload));
+  const descricao = normalizeText(getValueByAliases(["descricao", "descrição", "description", "descricao do problema", "descrição do problema"], input, bodyPayload));
+  const tipo = normalizeText(getValueByAliases(["tipo"], input, bodyPayload));
+  const ac = normalizeText(getValueByAliases(["ac"], input, bodyPayload));
+  const tecnico = normalizeText(getValueByAliases(["tecnico", "tecnico responsavel", "responsavel tecnico", "analista"], input, bodyPayload));
+  const statusRaw = getValueByAliases([
     "status",
     "sit. atendimento",
     "situacao atendimento",
     "situacao",
     "situação",
     "coluna 8"
-  ]);
-  const stepTitle = getValueByAliases(input, [
+  ], input, bodyPayload);
+  const stepTitle = getValueByAliases([
     "step title",
     "steptitle",
     "etapa",
@@ -91,10 +120,10 @@ function normalizeSupport(input) {
     "status card",
     "status do card",
     "step"
-  ]);
+  ], input, bodyPayload);
   const status = normalizeStatusByRule(statusRaw, stepTitle);
-  const statusAbertura = normalizeText(getValueByAliases(input, ["status da abertura", "status abertura"]));
-  const dataAbertura = normalizeText(getValueByAliases(input, ["carimbo de data/hora", "data abertura", "data de abertura", "abertura", "data"]));
+  const statusAbertura = normalizeText(getValueByAliases(["status da abertura", "status abertura"], input, bodyPayload));
+  const dataAbertura = normalizeText(getValueByAliases(["carimbo de data/hora", "data abertura", "data de abertura", "abertura", "data"], input, bodyPayload));
 
   return { protocolo, responsavelAbertura, cpfCnpj, contato, descricao, tipo, ac, tecnico, status, statusAbertura, dataAbertura };
 }
