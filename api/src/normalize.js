@@ -42,9 +42,10 @@ function toObjectIfPossible(value) {
 }
 
 function getInputSources(input) {
-  const sources = [input || {}];
+  const root = input && typeof input === "object" ? input : {};
+  const sources = [root];
   const visited = new Set();
-  const queue = [input?.body, input?.json, input?.data, input?.payload];
+  const queue = [root];
 
   while (queue.length) {
     const current = queue.shift();
@@ -53,10 +54,19 @@ function getInputSources(input) {
 
     if (visited.has(parsed)) continue;
     visited.add(parsed);
-    sources.push(parsed);
+    if (parsed !== root) {
+      sources.push(parsed);
+    }
 
-    // Captura formatos comuns de encapsulamento vindos de integrações.
-    queue.push(parsed.body, parsed.json, parsed.data, parsed.payload);
+    for (const value of Object.values(parsed)) {
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          queue.push(item);
+        }
+        continue;
+      }
+      queue.push(value);
+    }
   }
 
   return sources;
