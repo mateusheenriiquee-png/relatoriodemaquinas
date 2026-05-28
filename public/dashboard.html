@@ -10,12 +10,11 @@
 <body class="dashboard-page">
   <div class="container dashboard-container">
     <header class="header dashboard-header">
-      <div>
-        <h1>Dashboard</h1>
-        <p class="subtitle">Visão geral dos atendimentos</p>
+      <a href="./index.html" class="dashboard-home" title="Voltar à lista">⌂</a>
+      <div class="dashboard-title-wrap">
+        <h1>dashboard <span class="dash-pipe">|</span> <strong>suporte técnico</strong></h1>
       </div>
       <div class="actions dashboard-actions">
-        <a href="./index.html" class="btn btn-ghost btn-small">← Lista</a>
         <button id="btnRecarregarDashboard" class="btn btn-primary btn-small" type="button">Atualizar</button>
       </div>
     </header>
@@ -40,13 +39,13 @@
       </div>
     </section>
 
-    <section class="dashboard-kpis">
-      <div class="kpi-chip kpi-highlight"><span>Total</span><strong id="kpiTotal">0</strong></div>
-      <div class="kpi-chip"><span>Finalizados</span><strong id="kpiFinalizados">0</strong></div>
-      <div class="kpi-chip"><span>Pendentes</span><strong id="kpiNaoFinalizados">0</strong></div>
-      <div class="kpi-chip"><span>Taxa</span><strong id="kpiTaxaFinalizacao">0%</strong></div>
-      <div class="kpi-chip"><span>T. médio</span><strong id="kpiTempoMedioGeral">—</strong></div>
-      <div class="kpi-chip"><span>S/ retorno</span><strong id="kpiSemRetorno">0</strong></div>
+    <section class="stats dashboard-kpis">
+      <div class="stat-card kpi-highlight"><span>Total</span><strong id="kpiTotal">0</strong></div>
+      <div class="stat-card"><span>Finalizados</span><strong id="kpiFinalizados">0</strong></div>
+      <div class="stat-card"><span>Pendentes</span><strong id="kpiNaoFinalizados">0</strong></div>
+      <div class="stat-card"><span>Taxa</span><strong id="kpiTaxaFinalizacao">0%</strong></div>
+      <div class="stat-card"><span>T. médio</span><strong id="kpiTempoMedioGeral">—</strong></div>
+      <div class="stat-card"><span>S/ retorno</span><strong id="kpiSemRetorno">0</strong></div>
     </section>
 
     <div class="dashboard-grid">

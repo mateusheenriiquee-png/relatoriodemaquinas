@@ -48,8 +48,9 @@ function mapStatus(value) {
   const v = norm(value).toUpperCase();
   if (v === "EM ABERTO" || v === "ABERTO") return "EM ABERTO";
   if (v === "FINALIZADO" || v === "CONCLUIDO" || v === "CONCLUÍDO") return "FINALIZADO";
-  if (v === "EM ANDAMENTO" || v === "EM_ATENDIMENTO") return "EM ANDAMENTO";
+  if (v === "EM ANDAMENTO" || v === "EM_ATENDIMENTO" || v.includes("TRATATIV")) return "EM ANDAMENTO";
   if (v === "SEM RETORNO") return "SEM RETORNO";
+  if (v === "REAGENDADO" || v.includes("REAGEND")) return "REAGENDADO";
   return "EM ABERTO";
 }
 

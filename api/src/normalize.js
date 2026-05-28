@@ -1,4 +1,4 @@
-const STATUS_OPTIONS = new Set(["EM ABERTO", "EM ANDAMENTO", "FINALIZADO", "SEM RETORNO"]);
+const STATUS_OPTIONS = new Set(["EM ABERTO", "EM ANDAMENTO", "FINALIZADO", "SEM RETORNO", "REAGENDADO"]);
 
 const IGNORED_FIELDS = new Set([
   "observacao",
@@ -92,6 +92,8 @@ function normalizeStatus(value) {
   if (STATUS_OPTIONS.has(status)) return status;
   if (status === "ABERTO") return "EM ABERTO";
   if (status === "CONCLUIDO" || status === "CONCLUÍDO") return "FINALIZADO";
+  if (/REAGEND/.test(status)) return "REAGENDADO";
+  if (/TRATATIV|ANDAMENTO/.test(status)) return "EM ANDAMENTO";
   return "EM ABERTO";
 }
 
@@ -112,6 +114,9 @@ function normalizeStatusByRule(statusValue, stepValue) {
   }
   if (/finalizado|concluido|concluido com sucesso|resolvido|encerrado|fechado/.test(combined)) {
     return "FINALIZADO";
+  }
+  if (/reagend/.test(combined)) {
+    return "REAGENDADO";
   }
   if (/em andamento|em atendimento|em tratativa|aguardando atendimento|em analise|analise tecnica|analise tecnica|triagem/.test(combined)) {
     return "EM ANDAMENTO";

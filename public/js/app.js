@@ -9,7 +9,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 import { db } from "./config/firebase.js";
 
-const STATUS_OPTIONS = ["EM ABERTO", "EM ANDAMENTO", "FINALIZADO", "SEM RETORNO"];
+const STATUS_OPTIONS = ["EM ABERTO", "EM ANDAMENTO", "FINALIZADO", "SEM RETORNO", "REAGENDADO"];
 const PAGE_SIZE = 10;
 const COLLECTION = "suportes_tecnicos";
 
@@ -49,11 +49,23 @@ const modalDataAbertura = document.getElementById("modalDataAbertura");
 const modalIdAtual = document.getElementById("modalIdAtual");
 
 const norm = (v) => String(v || "").trim().replace(/\s+/g, " ");
-const normStatus = (v) => STATUS_OPTIONS.includes(norm(v).toUpperCase()) ? norm(v).toUpperCase() : "EM ABERTO";
+function normStatus(v) {
+  const s = norm(v).toUpperCase();
+  if (STATUS_OPTIONS.includes(s)) return s;
+  if (/REAGEND/.test(s)) return "REAGENDADO";
+  if (/TRATATIV|ANDAMENTO|ATENDIMENTO/.test(s)) return "EM ANDAMENTO";
+  if (/FINALIZ|CONCLUID|RESOLVID|FECHAD/.test(s)) return "FINALIZADO";
+  if (/SEM RETORNO/.test(s)) return "SEM RETORNO";
+  if (/ABERTO|NOVO|BACKLOG/.test(s)) return "EM ABERTO";
+  return "EM ABERTO";
+}
 
 function statusClass(status) {
-  if (status === "EM ANDAMENTO") return "status-andamento";
-  if (status === "FINALIZADO") return "status-finalizado";
+  const s = normStatus(status);
+  if (s === "EM ANDAMENTO") return "status-andamento";
+  if (s === "FINALIZADO") return "status-finalizado";
+  if (s === "REAGENDADO") return "status-reagendado";
+  if (s === "SEM RETORNO") return "status-sem-retorno";
   return "status-aberto";
 }
 

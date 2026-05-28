@@ -3,7 +3,7 @@ import { db } from "./config/firebase.js";
 
 const COLLECTION = "suportes_tecnicos";
 const STATUS_FINALIZADO = "FINALIZADO";
-const STATUS_OPTIONS = ["EM ABERTO", "EM ANDAMENTO", "FINALIZADO", "SEM RETORNO"];
+const STATUS_OPTIONS = ["EM ABERTO", "EM ANDAMENTO", "FINALIZADO", "SEM RETORNO", "REAGENDADO"];
 
 const state = {
   registros: [],
@@ -19,10 +19,25 @@ const filtroAcEl = document.getElementById("filtroAcDashboard");
 const filtroTecnicoEl = document.getElementById("filtroTecnicoDashboard");
 
 const norm = (v) => String(v || "").trim().replace(/\s+/g, " ");
-const normStatus = (v) => {
+function normStatus(v) {
   const s = norm(v).toUpperCase();
-  return STATUS_OPTIONS.includes(s) ? s : "EM ABERTO";
-};
+  if (STATUS_OPTIONS.includes(s)) return s;
+  if (/REAGEND/.test(s)) return "REAGENDADO";
+  if (/TRATATIV|ANDAMENTO|ATENDIMENTO/.test(s)) return "EM ANDAMENTO";
+  if (/FINALIZ|CONCLUID|RESOLVID/.test(s)) return "FINALIZADO";
+  if (/SEM RETORNO/.test(s)) return "SEM RETORNO";
+  return "EM ABERTO";
+}
+
+function statusChartColor(status) {
+  const s = normStatus(status);
+  if (s === "EM ABERTO") return THEME.statusAberto;
+  if (s === "EM ANDAMENTO") return THEME.statusAndamento;
+  if (s === "FINALIZADO") return THEME.statusFinalizado;
+  if (s === "REAGENDADO") return THEME.statusReagendado;
+  if (s === "SEM RETORNO") return THEME.statusSemRetorno;
+  return THEME.primary;
+}
 
 function normStatusAbertura(v) {
   const s = norm(v).toUpperCase();
@@ -155,6 +170,23 @@ function destroyChart(id) {
   }
 }
 
+const THEME = {
+  primary: "#ea580c",
+  primaryDark: "#c2410c",
+  primaryLight: "#fff7ed",
+  primarySoft: "#ffedd5",
+  muted: "#78716c",
+  text: "#1c1917",
+  statusAberto: "#ef4444",
+  statusAndamento: "#3b82f6",
+  statusFinalizado: "#22c55e",
+  statusReagendado: "#8b5cf6",
+  statusSemRetorno: "#78716c"
+};
+const palette = [THEME.primary, "#f97316", "#fb923c", "#fdba74", THEME.primarySoft, THEME.primaryDark, "#f59e0b", "#fed7aa"];
+const chartText = THEME.muted;
+const chartGrid = "rgba(234, 88, 12, 0.15)";
+
 const chartDefaults = {
   responsive: true,
   maintainAspectRatio: false,
@@ -162,17 +194,37 @@ const chartDefaults = {
     legend: {
       display: true,
       position: "bottom",
-      labels: { boxWidth: 10, padding: 8, font: { size: 10 } }
+      labels: {
+        boxWidth: 10,
+        padding: 10,
+        color: chartText,
+        font: { size: 10, family: "Segoe UI" }
+      }
     }
   }
 };
 
+function axisStyle() {
+  return {
+    ticks: { color: chartText, font: { size: 9, family: "Segoe UI" } },
+    grid: { color: chartGrid },
+    border: { display: false }
+  };
+}
+
 function mergeChartOptions(custom = {}) {
+  const hasScales = custom.scales || custom.indexAxis !== undefined;
+  const baseScales = hasScales
+    ? {
+        x: { ...axisStyle(), ...(custom.scales?.x || {}) },
+        y: { ...axisStyle(), ...(custom.scales?.y || {}) }
+      }
+    : undefined;
   return {
     ...chartDefaults,
     ...custom,
     plugins: { ...chartDefaults.plugins, ...(custom.plugins || {}) },
-    scales: custom.scales
+    scales: custom.scales ? { ...baseScales, ...custom.scales } : baseScales
   };
 }
 
@@ -185,8 +237,6 @@ function renderChart(id, config) {
     options: mergeChartOptions(config.options || {})
   });
 }
-
-const palette = ["#2563eb", "#7c3aed", "#0f766e", "#ea580c", "#db2777", "#0891b2", "#65a30d", "#4f46e5"];
 
 function renderKpis(dados) {
   const total = dados.length;
@@ -213,13 +263,12 @@ function renderCharts(dados) {
     type: "bar",
     data: {
       labels: porTecnico.map(([k]) => k),
-      datasets: [{ label: "Suportes", data: porTecnico.map(([, v]) => v), backgroundColor: palette }]
+      datasets: [{ label: "Suportes", data: porTecnico.map(([, v]) => v), backgroundColor: THEME.primary, borderRadius: 8 }]
     },
     options: {
       plugins: { legend: { display: false } },
       scales: {
-        x: { ticks: { font: { size: 9 }, maxRotation: 45, minRotation: 0 } },
-        y: { ticks: { font: { size: 9 } } }
+        x: { ticks: { maxRotation: 45, minRotation: 0 } }
       }
     }
   });
@@ -230,9 +279,13 @@ function renderCharts(dados) {
     type: "doughnut",
     data: {
       labels: ["Fin.", "Pend."],
-      datasets: [{ data: [finalizados, naoFinalizados], backgroundColor: ["#16a34a", "#f97316"] }]
+      datasets: [{
+        data: [finalizados, naoFinalizados],
+        backgroundColor: [THEME.statusFinalizado, THEME.primarySoft],
+        borderWidth: 0
+      }]
     },
-    options: { plugins: { legend: { display: true, position: "bottom" } } }
+    options: { cutout: "62%", plugins: { legend: { display: true, position: "bottom" } } }
   });
 
   const porStatus = agruparContagem(dados, (r) => r.status);
@@ -240,9 +293,13 @@ function renderCharts(dados) {
     type: "doughnut",
     data: {
       labels: porStatus.map(([k]) => k),
-      datasets: [{ data: porStatus.map(([, v]) => v), backgroundColor: palette }]
+      datasets: [{
+        data: porStatus.map(([, v]) => v),
+        backgroundColor: porStatus.map(([k]) => statusChartColor(k)),
+        borderWidth: 0
+      }]
     },
-    options: { plugins: { legend: { display: true, position: "bottom" } } }
+    options: { cutout: "62%", plugins: { legend: { display: true, position: "bottom" } } }
   });
 
   const tempoPorTecnico = agruparContagem(
@@ -263,14 +320,15 @@ function renderCharts(dados) {
       datasets: [{
         label: "Horas",
         data: tempoPorTecnico.map(([, v]) => Number(v.toFixed(1))),
-        backgroundColor: "#0f766e"
+        backgroundColor: THEME.primary,
+        borderRadius: 8
       }]
     },
     options: {
       plugins: { legend: { display: false } },
       scales: {
-        x: { ticks: { font: { size: 9 }, maxRotation: 45 } },
-        y: { beginAtZero: true, ticks: { font: { size: 9 } } }
+        x: { ticks: { maxRotation: 45 } },
+        y: { beginAtZero: true }
       }
     }
   });
@@ -288,15 +346,15 @@ function renderCharts(dados) {
     data: {
       labels: responsaveis,
       datasets: [
-        { label: "Devido", data: devidoData, backgroundColor: "#2563eb" },
-        { label: "Indevido", data: indevidoData, backgroundColor: "#dc2626" }
+        { label: "Devido", data: devidoData, backgroundColor: THEME.primary, borderRadius: 6 },
+        { label: "Indevido", data: indevidoData, backgroundColor: "#fb923c", borderRadius: 6 }
       ]
     },
     options: {
       plugins: { legend: { display: true, position: "bottom" } },
       scales: {
-        x: { stacked: true, ticks: { font: { size: 8 }, maxRotation: 60 } },
-        y: { stacked: true, beginAtZero: true, ticks: { font: { size: 9 } } }
+        x: { stacked: true, ticks: { maxRotation: 60 } },
+        y: { stacked: true, beginAtZero: true }
       }
     }
   });
@@ -306,12 +364,11 @@ function renderCharts(dados) {
     type: "bar",
     data: {
       labels: porAc.map(([k]) => k),
-      datasets: [{ label: "Suportes", data: porAc.map(([, v]) => v), backgroundColor: "#7c3aed" }]
+      datasets: [{ label: "Suportes", data: porAc.map(([, v]) => v), backgroundColor: THEME.primary, borderRadius: 8 }]
     },
     options: {
       indexAxis: "y",
-      plugins: { legend: { display: false } },
-      scales: { x: { ticks: { font: { size: 9 } } }, y: { ticks: { font: { size: 9 } } } }
+      plugins: { legend: { display: false } }
     }
   });
 
@@ -320,12 +377,11 @@ function renderCharts(dados) {
     type: "bar",
     data: {
       labels: porTipo.map(([k]) => k),
-      datasets: [{ label: "Suportes", data: porTipo.map(([, v]) => v), backgroundColor: "#ea580c" }]
+      datasets: [{ label: "Suportes", data: porTipo.map(([, v]) => v), backgroundColor: "#fb923c", borderRadius: 8 }]
     },
     options: {
       indexAxis: "y",
-      plugins: { legend: { display: false } },
-      scales: { x: { ticks: { font: { size: 9 } } }, y: { ticks: { font: { size: 9 } } } }
+      plugins: { legend: { display: false } }
     }
   });
 }
