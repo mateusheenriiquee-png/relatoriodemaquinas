@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard — Suporte Tecnico</title>
+  <link rel="stylesheet" href="./css/main.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="container dashboard-container">
+    <header class="header">
+      <div>
+        <h1>Dashboard de Suportes</h1>
+        <p class="subtitle">Analise de desempenho, status e qualidade das aberturas</p>
+      </div>
+      <div class="actions">
+        <a href="./index.html" class="btn btn-ghost">← Voltar à lista</a>
+        <button id="btnRecarregarDashboard" class="btn btn-primary" type="button">Atualizar dados</button>
+      </div>
+    </header>
+
+    <section class="toolbar dashboard-toolbar">
+      <div class="field">
+        <label for="filtroPeriodo">Período</label>
+        <select id="filtroPeriodo">
+          <option value="todos">Todo o histórico</option>
+          <option value="7">Últimos 7 dias</option>
+          <option value="30" selected>Últimos 30 dias</option>
+          <option value="90">Últimos 90 dias</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="filtroAcDashboard">AC</label>
+        <select id="filtroAcDashboard">
+          <option value="todos">Todas</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="filtroTecnicoDashboard">Técnico</label>
+        <select id="filtroTecnicoDashboard">
+          <option value="todos">Todos</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="stats dashboard-kpis">
+      <div class="stat-card kpi-primary"><span>Total de suportes</span><strong id="kpiTotal">0</strong></div>
+      <div class="stat-card"><span>Finalizados</span><strong id="kpiFinalizados">0</strong></div>
+      <div class="stat-card"><span>Não finalizados</span><strong id="kpiNaoFinalizados">0</strong></div>
+      <div class="stat-card"><span>Taxa de finalização</span><strong id="kpiTaxaFinalizacao">0%</strong></div>
+      <div class="stat-card"><span>Tempo médio (finalizados)</span><strong id="kpiTempoMedioGeral">—</strong></div>
+      <div class="stat-card"><span>Sem retorno</span><strong id="kpiSemRetorno">0</strong></div>
+    </section>
+
+    <div class="dashboard-grid">
+      <article class="chart-card chart-card-wide">
+        <h3>Suportes por técnico</h3>
+        <canvas id="chartPorTecnico"></canvas>
+      </article>
+      <article class="chart-card">
+        <h3>Finalizados vs não finalizados</h3>
+        <canvas id="chartFinalizacao"></canvas>
+      </article>
+      <article class="chart-card">
+        <h3>Distribuição por status</h3>
+        <canvas id="chartStatus"></canvas>
+      </article>
+      <article class="chart-card chart-card-wide">
+        <h3>Tempo médio de finalização por técnico (horas)</h3>
+        <canvas id="chartTempoTecnico"></canvas>
+      </article>
+      <article class="chart-card chart-card-wide">
+        <h3>Devido x Indevido por responsável da abertura</h3>
+        <canvas id="chartDevidoResponsavel"></canvas>
+      </article>
+      <article class="chart-card">
+        <h3>Suportes por AC</h3>
+        <canvas id="chartPorAc"></canvas>
+      </article>
+      <article class="chart-card">
+        <h3>Suportes por tipo</h3>
+        <canvas id="chartPorTipo"></canvas>
+      </article>
+    </div>
+
+    <section class="dashboard-table-section">
+      <h2>Ranking de técnicos</h2>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Técnico</th>
+              <th>Total</th>
+              <th>Finalizados</th>
+              <th>Em andamento</th>
+              <th>Em aberto</th>
+              <th>Sem retorno</th>
+              <th>Taxa finalização</th>
+              <th>Tempo médio (h)</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyRanking"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="dashboard-table-section">
+      <h2>Aberturas por responsável (devido / indevido)</h2>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr>
+              <th>Responsável abertura</th>
+              <th>Total</th>
+              <th>Devido</th>
+              <th>Indevido</th>
+              <th>% Indevido</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyResponsavel"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <p id="dashboardLoading" class="dashboard-loading hidden">Carregando dados...</p>
+    <p id="dashboardEmpty" class="dashboard-empty hidden">Nenhum suporte encontrado para os filtros selecionados.</p>
+  </div>
+
+  <script type="module" src="./js/dashboard.js"></script>
+</body>
+</html>
