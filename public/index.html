@@ -103,6 +103,31 @@
     </footer>
   </div>
 
+  <div id="modalExportar" class="modal hidden" role="dialog" aria-labelledby="modalExportarTitulo" aria-modal="true">
+    <div class="modal-content modal-export">
+      <div class="modal-header">
+        <h2 id="modalExportarTitulo">Exportar CSV</h2>
+        <button id="btnFecharExportar" class="btn btn-ghost btn-small" type="button">Fechar</button>
+      </div>
+      <p class="modal-export-text">Selecione o período dos suportes que deseja exportar. Deixe em branco para exportar todos.</p>
+      <div class="modal-export-fields">
+        <div class="field">
+          <label for="exportDataInicio">Data inicial</label>
+          <input id="exportDataInicio" type="date">
+        </div>
+        <div class="field">
+          <label for="exportDataFim">Data final</label>
+          <input id="exportDataFim" type="date">
+        </div>
+      </div>
+      <p id="exportResumo" class="modal-export-resumo hidden"></p>
+      <div class="modal-confirm-actions">
+        <button id="btnCancelarExportar" class="btn btn-ghost" type="button">Cancelar</button>
+        <button id="btnConfirmarExportar" class="btn btn-export" type="button">Exportar</button>
+      </div>
+    </div>
+  </div>
+
   <div id="modalExcluir" class="modal hidden" role="dialog" aria-labelledby="modalExcluirTitulo" aria-modal="true">
     <div class="modal-content modal-confirm">
       <div class="modal-confirm-icon" aria-hidden="true">!</div>

@@ -198,38 +198,139 @@ async function writeToFirestore(records, mode) {
   })));
 }
 
-async function exportCSV() {
-  const snap = await getDocs(collection(db, COLLECTION));
-  const rows = snap.docs.map((d) => d.data());
-  if (!rows.length) {
-    alert("Nenhum registro para exportar.");
-    return;
+function resolverDataExport(data = {}) {
+  const dataWebhook = norm(data.dataAbertura || data.carimboDataHora || "");
+  if (dataWebhook) {
+    const parsed = new Date(dataWebhook);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
   }
+  if (data.createdAt && typeof data.createdAt.toDate === "function") {
+    return data.createdAt.toDate();
+  }
+  return null;
+}
+
+function parseFiltroData(dateStr, fimDoDia = false) {
+  if (!dateStr) return null;
+  const parsed = new Date(`${dateStr}T${fimDoDia ? "23:59:59.999" : "00:00:00"}`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatarDataCsv(value) {
+  if (!value) return "";
+  if (value && typeof value.toDate === "function") {
+    return value.toDate().toLocaleString("pt-BR");
+  }
+  const parsed = new Date(value);
+  if (!Number.isNaN(parsed.getTime())) return parsed.toLocaleString("pt-BR");
+  return String(value);
+}
+
+function filtrarPorPeriodo(docs, dataInicio, dataFim) {
+  const inicio = parseFiltroData(dataInicio, false);
+  const fim = parseFiltroData(dataFim, true);
+  if (!inicio && !fim) return docs;
+
+  return docs.filter((docSnap) => {
+    const data = docSnap.data();
+    const dataRegistro = resolverDataExport(data);
+    if (!dataRegistro) return false;
+    if (inicio && dataRegistro < inicio) return false;
+    if (fim && dataRegistro > fim) return false;
+    return true;
+  });
+}
+
+async function exportCSV(dataInicio = "", dataFim = "") {
+  const snap = await getDocs(collection(db, COLLECTION));
+  const filtrados = filtrarPorPeriodo(snap.docs, dataInicio, dataFim);
+  if (!filtrados.length) {
+    alert("Nenhum registro encontrado para o período selecionado.");
+    return 0;
+  }
+
   const headers = ["dataAbertura", "responsavelAbertura", "protocolo", "tipo", "ac", "contato", "status", "tecnico", "statusAbertura", "cpfCnpj"];
   const escape = (v) => `"${String(v || "").replace(/"/g, '""')}"`;
-  const csv = [headers.join(","), ...rows.map((r) => headers.map((h) => escape(r[h])).join(","))].join("\n");
+  const csv = [
+    headers.join(","),
+    ...filtrados.map((docSnap) => {
+      const r = docSnap.data();
+      const linha = {
+        ...r,
+        dataAbertura: formatarDataCsv(r.dataAbertura || r.carimboDataHora || r.createdAt)
+      };
+      return headers.map((h) => escape(linha[h])).join(",");
+    })
+  ].join("\n");
+
+  const sufixoInicio = dataInicio || "inicio";
+  const sufixoFim = dataFim || "fim";
   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `suportes_tecnicos_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `suportes_tecnicos_${sufixoInicio}_a_${sufixoFim}.csv`;
   a.click();
   URL.revokeObjectURL(url);
+  return filtrados.length;
+}
+
+function abrirModalExportar() {
+  const modal = document.getElementById("modalExportar");
+  const inicio = document.getElementById("exportDataInicio");
+  const fim = document.getElementById("exportDataFim");
+  const hoje = new Date();
+  const trintaDias = new Date(hoje);
+  trintaDias.setDate(trintaDias.getDate() - 30);
+  const pad = (n) => String(n).padStart(2, "0");
+  const toInput = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  inicio.value = toInput(trintaDias);
+  fim.value = toInput(hoje);
+  document.getElementById("exportResumo").classList.add("hidden");
+  modal.classList.remove("hidden");
+}
+
+function fecharModalExportar() {
+  document.getElementById("modalExportar").classList.add("hidden");
 }
 
 document.addEventListener("DOMContentLoaded", () => {
   const btnExportar = document.getElementById("btnExportar");
-  if (!btnExportar) return;
-  btnExportar.addEventListener("click", async () => {
+  const btnConfirmarExportar = document.getElementById("btnConfirmarExportar");
+  const btnCancelarExportar = document.getElementById("btnCancelarExportar");
+  const btnFecharExportar = document.getElementById("btnFecharExportar");
+  const modalExportar = document.getElementById("modalExportar");
+  if (!btnExportar || !btnConfirmarExportar) return;
+
+  btnExportar.addEventListener("click", abrirModalExportar);
+  btnCancelarExportar?.addEventListener("click", fecharModalExportar);
+  btnFecharExportar?.addEventListener("click", fecharModalExportar);
+  modalExportar?.addEventListener("click", (e) => {
+    if (e.target === modalExportar) fecharModalExportar();
+  });
+
+  btnConfirmarExportar.addEventListener("click", async () => {
+    const dataInicio = document.getElementById("exportDataInicio").value;
+    const dataFim = document.getElementById("exportDataFim").value;
+    if (dataInicio && dataFim && dataInicio > dataFim) {
+      alert("A data inicial não pode ser maior que a data final.");
+      return;
+    }
     try {
-      btnExportar.disabled = true;
-      btnExportar.textContent = "Exportando...";
-      await exportCSV();
+      btnConfirmarExportar.disabled = true;
+      btnConfirmarExportar.textContent = "Exportando...";
+      const total = await exportCSV(dataInicio, dataFim);
+      if (total > 0) {
+        const resumo = document.getElementById("exportResumo");
+        resumo.textContent = `${total} registro(s) exportado(s) com sucesso.`;
+        resumo.classList.remove("hidden");
+        setTimeout(fecharModalExportar, 1200);
+      }
     } catch (err) {
       alert("Erro ao exportar: " + (err.message || err));
     } finally {
-      btnExportar.disabled = false;
-      btnExportar.textContent = "⬇ Exportar CSV";
+      btnConfirmarExportar.disabled = false;
+      btnConfirmarExportar.textContent = "Exportar";
     }
   });
 });
