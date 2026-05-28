@@ -7,124 +7,121 @@
   <link rel="stylesheet" href="./css/main.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
-<body>
+<body class="dashboard-page">
   <div class="container dashboard-container">
-    <header class="header">
+    <header class="header dashboard-header">
       <div>
-        <h1>Dashboard de Suportes</h1>
-        <p class="subtitle">Analise de desempenho, status e qualidade das aberturas</p>
+        <h1>Dashboard</h1>
+        <p class="subtitle">Visão geral dos atendimentos</p>
       </div>
-      <div class="actions">
-        <a href="./index.html" class="btn btn-ghost">← Voltar à lista</a>
-        <button id="btnRecarregarDashboard" class="btn btn-primary" type="button">Atualizar dados</button>
+      <div class="actions dashboard-actions">
+        <a href="./index.html" class="btn btn-ghost btn-small">← Lista</a>
+        <button id="btnRecarregarDashboard" class="btn btn-primary btn-small" type="button">Atualizar</button>
       </div>
     </header>
 
-    <section class="toolbar dashboard-toolbar">
+    <section class="dashboard-filters">
       <div class="field">
         <label for="filtroPeriodo">Período</label>
         <select id="filtroPeriodo">
-          <option value="todos">Todo o histórico</option>
-          <option value="7">Últimos 7 dias</option>
-          <option value="30" selected>Últimos 30 dias</option>
-          <option value="90">Últimos 90 dias</option>
+          <option value="todos">Tudo</option>
+          <option value="7">7 dias</option>
+          <option value="30" selected>30 dias</option>
+          <option value="90">90 dias</option>
         </select>
       </div>
       <div class="field">
         <label for="filtroAcDashboard">AC</label>
-        <select id="filtroAcDashboard">
-          <option value="todos">Todas</option>
-        </select>
+        <select id="filtroAcDashboard"><option value="todos">Todas</option></select>
       </div>
       <div class="field">
         <label for="filtroTecnicoDashboard">Técnico</label>
-        <select id="filtroTecnicoDashboard">
-          <option value="todos">Todos</option>
-        </select>
+        <select id="filtroTecnicoDashboard"><option value="todos">Todos</option></select>
       </div>
     </section>
 
-    <section class="stats dashboard-kpis">
-      <div class="stat-card kpi-primary"><span>Total de suportes</span><strong id="kpiTotal">0</strong></div>
-      <div class="stat-card"><span>Finalizados</span><strong id="kpiFinalizados">0</strong></div>
-      <div class="stat-card"><span>Não finalizados</span><strong id="kpiNaoFinalizados">0</strong></div>
-      <div class="stat-card"><span>Taxa de finalização</span><strong id="kpiTaxaFinalizacao">0%</strong></div>
-      <div class="stat-card"><span>Tempo médio (finalizados)</span><strong id="kpiTempoMedioGeral">—</strong></div>
-      <div class="stat-card"><span>Sem retorno</span><strong id="kpiSemRetorno">0</strong></div>
+    <section class="dashboard-kpis">
+      <div class="kpi-chip kpi-highlight"><span>Total</span><strong id="kpiTotal">0</strong></div>
+      <div class="kpi-chip"><span>Finalizados</span><strong id="kpiFinalizados">0</strong></div>
+      <div class="kpi-chip"><span>Pendentes</span><strong id="kpiNaoFinalizados">0</strong></div>
+      <div class="kpi-chip"><span>Taxa</span><strong id="kpiTaxaFinalizacao">0%</strong></div>
+      <div class="kpi-chip"><span>T. médio</span><strong id="kpiTempoMedioGeral">—</strong></div>
+      <div class="kpi-chip"><span>S/ retorno</span><strong id="kpiSemRetorno">0</strong></div>
     </section>
 
     <div class="dashboard-grid">
-      <article class="chart-card chart-card-wide">
-        <h3>Suportes por técnico</h3>
-        <canvas id="chartPorTecnico"></canvas>
+      <article class="chart-card span-2">
+        <h3>Por técnico</h3>
+        <div class="chart-wrap chart-wrap-bar"><canvas id="chartPorTecnico"></canvas></div>
       </article>
       <article class="chart-card">
-        <h3>Finalizados vs não finalizados</h3>
-        <canvas id="chartFinalizacao"></canvas>
+        <h3>Finalização</h3>
+        <div class="chart-wrap chart-wrap-donut"><canvas id="chartFinalizacao"></canvas></div>
       </article>
       <article class="chart-card">
-        <h3>Distribuição por status</h3>
-        <canvas id="chartStatus"></canvas>
-      </article>
-      <article class="chart-card chart-card-wide">
-        <h3>Tempo médio de finalização por técnico (horas)</h3>
-        <canvas id="chartTempoTecnico"></canvas>
-      </article>
-      <article class="chart-card chart-card-wide">
-        <h3>Devido x Indevido por responsável da abertura</h3>
-        <canvas id="chartDevidoResponsavel"></canvas>
+        <h3>Status</h3>
+        <div class="chart-wrap chart-wrap-donut"><canvas id="chartStatus"></canvas></div>
       </article>
       <article class="chart-card">
-        <h3>Suportes por AC</h3>
-        <canvas id="chartPorAc"></canvas>
+        <h3>Tempo médio (h)</h3>
+        <div class="chart-wrap chart-wrap-bar"><canvas id="chartTempoTecnico"></canvas></div>
+      </article>
+      <article class="chart-card span-2">
+        <h3>Devido / Indevido — responsável</h3>
+        <div class="chart-wrap chart-wrap-bar"><canvas id="chartDevidoResponsavel"></canvas></div>
       </article>
       <article class="chart-card">
-        <h3>Suportes por tipo</h3>
-        <canvas id="chartPorTipo"></canvas>
+        <h3>Por AC</h3>
+        <div class="chart-wrap chart-wrap-bar-h"><canvas id="chartPorAc"></canvas></div>
+      </article>
+      <article class="chart-card">
+        <h3>Por tipo</h3>
+        <div class="chart-wrap chart-wrap-bar-h"><canvas id="chartPorTipo"></canvas></div>
       </article>
     </div>
 
-    <section class="dashboard-table-section">
-      <h2>Ranking de técnicos</h2>
-      <div class="table-wrapper">
-        <table>
-          <thead>
-            <tr>
-              <th>Técnico</th>
-              <th>Total</th>
-              <th>Finalizados</th>
-              <th>Em andamento</th>
-              <th>Em aberto</th>
-              <th>Sem retorno</th>
-              <th>Taxa finalização</th>
-              <th>Tempo médio (h)</th>
-            </tr>
-          </thead>
-          <tbody id="tbodyRanking"></tbody>
-        </table>
-      </div>
-    </section>
+    <div class="dashboard-tables">
+      <section class="dashboard-table-section">
+        <h2>Ranking técnicos</h2>
+        <div class="table-wrapper table-compact">
+          <table>
+            <thead>
+              <tr>
+                <th>Técnico</th>
+                <th>Total</th>
+                <th>Fin.</th>
+                <th>And.</th>
+                <th>Ab.</th>
+                <th>S/R</th>
+                <th>Taxa</th>
+                <th>T.médio</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyRanking"></tbody>
+          </table>
+        </div>
+      </section>
+      <section class="dashboard-table-section">
+        <h2>Responsável abertura</h2>
+        <div class="table-wrapper table-compact">
+          <table>
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th>Total</th>
+                <th>Dev.</th>
+                <th>Indev.</th>
+                <th>% Ind.</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyResponsavel"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
 
-    <section class="dashboard-table-section">
-      <h2>Aberturas por responsável (devido / indevido)</h2>
-      <div class="table-wrapper">
-        <table>
-          <thead>
-            <tr>
-              <th>Responsável abertura</th>
-              <th>Total</th>
-              <th>Devido</th>
-              <th>Indevido</th>
-              <th>% Indevido</th>
-            </tr>
-          </thead>
-          <tbody id="tbodyResponsavel"></tbody>
-        </table>
-      </div>
-    </section>
-
-    <p id="dashboardLoading" class="dashboard-loading hidden">Carregando dados...</p>
-    <p id="dashboardEmpty" class="dashboard-empty hidden">Nenhum suporte encontrado para os filtros selecionados.</p>
+    <p id="dashboardLoading" class="dashboard-loading hidden">Carregando...</p>
+    <p id="dashboardEmpty" class="dashboard-empty hidden">Nenhum dado para os filtros.</p>
   </div>
 
   <script type="module" src="./js/dashboard.js"></script>

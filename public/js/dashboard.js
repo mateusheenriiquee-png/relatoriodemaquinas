@@ -155,11 +155,35 @@ function destroyChart(id) {
   }
 }
 
+const chartDefaults = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: {
+      display: true,
+      position: "bottom",
+      labels: { boxWidth: 10, padding: 8, font: { size: 10 } }
+    }
+  }
+};
+
+function mergeChartOptions(custom = {}) {
+  return {
+    ...chartDefaults,
+    ...custom,
+    plugins: { ...chartDefaults.plugins, ...(custom.plugins || {}) },
+    scales: custom.scales
+  };
+}
+
 function renderChart(id, config) {
   destroyChart(id);
   const canvas = document.getElementById(id);
   if (!canvas) return;
-  charts[id] = new Chart(canvas, config);
+  charts[id] = new Chart(canvas, {
+    ...config,
+    options: mergeChartOptions(config.options || {})
+  });
 }
 
 const palette = ["#2563eb", "#7c3aed", "#0f766e", "#ea580c", "#db2777", "#0891b2", "#65a30d", "#4f46e5"];
@@ -191,7 +215,13 @@ function renderCharts(dados) {
       labels: porTecnico.map(([k]) => k),
       datasets: [{ label: "Suportes", data: porTecnico.map(([, v]) => v), backgroundColor: palette }]
     },
-    options: { responsive: true, plugins: { legend: { display: false } } }
+    options: {
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { font: { size: 9 }, maxRotation: 45, minRotation: 0 } },
+        y: { ticks: { font: { size: 9 } } }
+      }
+    }
   });
 
   const finalizados = dados.filter((r) => r.status === STATUS_FINALIZADO).length;
@@ -199,20 +229,20 @@ function renderCharts(dados) {
   renderChart("chartFinalizacao", {
     type: "doughnut",
     data: {
-      labels: ["Finalizados", "Não finalizados"],
+      labels: ["Fin.", "Pend."],
       datasets: [{ data: [finalizados, naoFinalizados], backgroundColor: ["#16a34a", "#f97316"] }]
     },
-    options: { responsive: true }
+    options: { plugins: { legend: { display: true, position: "bottom" } } }
   });
 
   const porStatus = agruparContagem(dados, (r) => r.status);
   renderChart("chartStatus", {
-    type: "pie",
+    type: "doughnut",
     data: {
       labels: porStatus.map(([k]) => k),
       datasets: [{ data: porStatus.map(([, v]) => v), backgroundColor: palette }]
     },
-    options: { responsive: true }
+    options: { plugins: { legend: { display: true, position: "bottom" } } }
   });
 
   const tempoPorTecnico = agruparContagem(
@@ -237,13 +267,15 @@ function renderCharts(dados) {
       }]
     },
     options: {
-      responsive: true,
       plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true, title: { display: true, text: "Horas" } } }
+      scales: {
+        x: { ticks: { font: { size: 9 }, maxRotation: 45 } },
+        y: { beginAtZero: true, ticks: { font: { size: 9 } } }
+      }
     }
   });
 
-  const responsaveis = [...new Set(dados.map((r) => r.responsavelAbertura))].slice(0, 15);
+  const responsaveis = [...new Set(dados.map((r) => r.responsavelAbertura))].slice(0, 8);
   const devidoData = responsaveis.map((nome) =>
     dados.filter((r) => r.responsavelAbertura === nome && r.statusAbertura === "DEVIDO").length
   );
@@ -261,29 +293,40 @@ function renderCharts(dados) {
       ]
     },
     options: {
-      responsive: true,
-      scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } }
+      plugins: { legend: { display: true, position: "bottom" } },
+      scales: {
+        x: { stacked: true, ticks: { font: { size: 8 }, maxRotation: 60 } },
+        y: { stacked: true, beginAtZero: true, ticks: { font: { size: 9 } } }
+      }
     }
   });
 
-  const porAc = agruparContagem(dados, (r) => r.ac).slice(0, 8);
+  const porAc = agruparContagem(dados, (r) => r.ac).slice(0, 6);
   renderChart("chartPorAc", {
     type: "bar",
     data: {
       labels: porAc.map(([k]) => k),
       datasets: [{ label: "Suportes", data: porAc.map(([, v]) => v), backgroundColor: "#7c3aed" }]
     },
-    options: { indexAxis: "y", responsive: true, plugins: { legend: { display: false } } }
+    options: {
+      indexAxis: "y",
+      plugins: { legend: { display: false } },
+      scales: { x: { ticks: { font: { size: 9 } } }, y: { ticks: { font: { size: 9 } } } }
+    }
   });
 
-  const porTipo = agruparContagem(dados, (r) => r.tipo).slice(0, 8);
+  const porTipo = agruparContagem(dados, (r) => r.tipo).slice(0, 6);
   renderChart("chartPorTipo", {
     type: "bar",
     data: {
       labels: porTipo.map(([k]) => k),
       datasets: [{ label: "Suportes", data: porTipo.map(([, v]) => v), backgroundColor: "#ea580c" }]
     },
-    options: { indexAxis: "y", responsive: true, plugins: { legend: { display: false } } }
+    options: {
+      indexAxis: "y",
+      plugins: { legend: { display: false } },
+      scales: { x: { ticks: { font: { size: 9 } } }, y: { ticks: { font: { size: 9 } } } }
+    }
   });
 }
 
