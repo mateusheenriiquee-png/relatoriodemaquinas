@@ -171,8 +171,8 @@ function destroyChart(id) {
 }
 
 const THEME = {
-  primary: "#ea580c",
-  primaryDark: "#c2410c",
+  primary: "#c079f7",
+  primaryDark: "#4f2770",
   primaryLight: "#fff7ed",
   primarySoft: "#ffedd5",
   muted: "#78716c",
@@ -183,9 +183,14 @@ const THEME = {
   statusReagendado: "#8b5cf6",
   statusSemRetorno: "#78716c"
 };
+const BAR_COLORS = [THEME.primary, THEME.primaryDark];
 const palette = [THEME.primary, "#f97316", "#fb923c", "#fdba74", THEME.primarySoft, THEME.primaryDark, "#f59e0b", "#fed7aa"];
 const chartText = THEME.muted;
-const chartGrid = "rgba(234, 88, 12, 0.15)";
+const chartGrid = "rgba(139, 92, 246, 0.15)";
+
+function getBarColors(count) {
+  return Array.from({ length: count }, (_, index) => BAR_COLORS[index % BAR_COLORS.length]);
+}
 
 const chartDefaults = {
   responsive: true,
@@ -263,7 +268,12 @@ function renderCharts(dados) {
     type: "bar",
     data: {
       labels: porTecnico.map(([k]) => k),
-      datasets: [{ label: "Suportes", data: porTecnico.map(([, v]) => v), backgroundColor: THEME.primary, borderRadius: 8 }]
+      datasets: [{
+        label: "Suportes",
+        data: porTecnico.map(([, v]) => v),
+        backgroundColor: getBarColors(porTecnico.length),
+        borderRadius: 8
+      }]
     },
     options: {
       plugins: { legend: { display: false } },
@@ -281,7 +291,7 @@ function renderCharts(dados) {
       labels: ["Fin.", "Pend."],
       datasets: [{
         data: [finalizados, naoFinalizados],
-        backgroundColor: [THEME.statusFinalizado, THEME.primarySoft],
+        backgroundColor: [THEME.statusFinalizado, "#f4c024"],
         borderWidth: 0
       }]
     },
@@ -320,7 +330,7 @@ function renderCharts(dados) {
       datasets: [{
         label: "Horas",
         data: tempoPorTecnico.map(([, v]) => Number(v.toFixed(1))),
-        backgroundColor: THEME.primary,
+        backgroundColor: getBarColors(tempoPorTecnico.length),
         borderRadius: 8
       }]
     },
@@ -347,7 +357,7 @@ function renderCharts(dados) {
       labels: responsaveis,
       datasets: [
         { label: "Devido", data: devidoData, backgroundColor: THEME.primary, borderRadius: 6 },
-        { label: "Indevido", data: indevidoData, backgroundColor: "#fb923c", borderRadius: 6 }
+        { label: "Indevido", data: indevidoData, backgroundColor: THEME.primaryDark, borderRadius: 6 }
       ]
     },
     options: {
@@ -364,7 +374,7 @@ function renderCharts(dados) {
     type: "bar",
     data: {
       labels: porAc.map(([k]) => k),
-      datasets: [{ label: "Suportes", data: porAc.map(([, v]) => v), backgroundColor: THEME.primary, borderRadius: 8 }]
+      datasets: [{ label: "Suportes", data: porAc.map(([, v]) => v), backgroundColor: getBarColors(porAc.length), borderRadius: 8 }]
     },
     options: {
       indexAxis: "y",
@@ -377,7 +387,7 @@ function renderCharts(dados) {
     type: "bar",
     data: {
       labels: porTipo.map(([k]) => k),
-      datasets: [{ label: "Suportes", data: porTipo.map(([, v]) => v), backgroundColor: "#fb923c", borderRadius: 8 }]
+      datasets: [{ label: "Suportes", data: porTipo.map(([, v]) => v), backgroundColor: getBarColors(porTipo.length), borderRadius: 8 }]
     },
     options: {
       indexAxis: "y",
