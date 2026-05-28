@@ -50,6 +50,10 @@ function hasMeaningfulSupportData(support = {}) {
   );
 }
 
+function hasAnyInputField(input) {
+  return Boolean(input && typeof input === "object" && !Array.isArray(input) && Object.keys(input).length);
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== "POST") {
     return {
@@ -80,8 +84,20 @@ exports.handler = async (event) => {
     let inserted = 0;
 
     for (const input of inputs) {
+      if (!hasAnyInputField(input)) {
+        continue;
+      }
       const support = normalizeSupport(input);
       if (!hasMeaningfulSupportData(support)) {
+        // Aceita objetos com valores nulos para evitar rejeicao de payloads parciais do webhook.
+        const ref = db.collection(COLLECTION).doc();
+        batch.set(ref, {
+          ...support,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          origemIntegracao: "webhook-netlify"
+        });
+        inserted += 1;
         continue;
       }
       const ref = db.collection(COLLECTION).doc();
