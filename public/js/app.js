@@ -3,7 +3,7 @@ import {
   collection,
   deleteDoc,
   doc,
-  getDocs,
+  onSnapshot,
   serverTimestamp,
   updateDoc
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
@@ -114,26 +114,45 @@ function configurarCamposModoEdicao(estaEditando) {
   modalStatusAbertura.disabled = false;
 }
 
-async function carregar() {
-  const snap = await getDocs(collection(db, COLLECTION));
-  state.registros = snap.docs.map((d) => {
-    const data = d.data();
-    return {
-      id: d.id,
-      protocolo: norm(data.protocolo || data.idSuporte || ""),
-      responsavelAbertura: norm(data.responsavelAbertura || data.responsavel || data.cliente || ""),
-      cpfCnpj: norm(data.cpfCnpj || data.cpf_cnpj || ""),
-      contato: norm(data.contato || data.telefone || ""),
-      descricao: norm(data.descricao || data.description || ""),
-      tipo: norm(data.tipo || ""),
-      ac: norm(data.ac || data.AC || ""),
-      tecnico: norm(data.tecnico || data.tecnicoResponsavel || ""),
-      status: normStatus(data.status || data.situacao || data.situacaoAtendimento || "EM ABERTO"),
-      statusAbertura: norm(data.statusAbertura || ""),
-      dataAbertura: resolverDataAbertura(data)
-    };
-  });
+function mapDocToRegistro(docSnap) {
+  const data = docSnap.data();
+  return {
+    id: docSnap.id,
+    protocolo: norm(data.protocolo || data.idSuporte || ""),
+    responsavelAbertura: norm(data.responsavelAbertura || data.responsavel || data.cliente || ""),
+    cpfCnpj: norm(data.cpfCnpj || data.cpf_cnpj || ""),
+    contato: norm(data.contato || data.telefone || ""),
+    descricao: norm(data.descricao || data.description || ""),
+    tipo: norm(data.tipo || ""),
+    ac: norm(data.ac || data.AC || ""),
+    tecnico: norm(data.tecnico || data.tecnicoResponsavel || ""),
+    status: normStatus(data.status || data.situacao || data.situacaoAtendimento || "EM ABERTO"),
+    statusAbertura: norm(data.statusAbertura || ""),
+    dataAbertura: resolverDataAbertura(data)
+  };
+}
+
+function aplicarSnapshot(snap) {
+  state.registros = snap.docs.map(mapDocToRegistro);
   atualizarFiltroAc();
+  render();
+}
+
+let unsubscribeTempoReal = null;
+
+function iniciarAtualizacaoTempoReal() {
+  if (unsubscribeTempoReal) return;
+  unsubscribeTempoReal = onSnapshot(
+    collection(db, COLLECTION),
+    aplicarSnapshot,
+    (err) => {
+      alert(`Erro ao sincronizar com o Firebase: ${String(err?.message || err || "")}`);
+    }
+  );
+}
+
+function carregar() {
+  iniciarAtualizacaoTempoReal();
   render();
 }
 
@@ -312,7 +331,6 @@ formSuporte.addEventListener("submit", async (e) => {
       alert("Suporte atualizado com sucesso.");
     }
     fecharModal();
-    await carregar();
   } catch (err) {
     alert(err.message || "Nao foi possivel salvar.");
   }
@@ -332,7 +350,6 @@ tbody.addEventListener("click", async (e) => {
       const ok = confirm("Deseja excluir este suporte?");
       if (!ok) return;
       await deleteDoc(doc(db, COLLECTION, id));
-      await carregar();
       alert("Suporte excluido com sucesso.");
     }
   } catch (err) {
@@ -340,6 +357,4 @@ tbody.addEventListener("click", async (e) => {
   }
 });
 
-carregar().catch((err) => {
-  alert(`Erro ao carregar dados do Firebase: ${String(err?.message || err || "")}`);
-});
+iniciarAtualizacaoTempoReal();
