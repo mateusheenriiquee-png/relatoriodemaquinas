@@ -1,3 +1,5 @@
+import crypto from "node:crypto";
+
 const crypto = require("node:crypto");
 const { normalizeText } = require("./normalize");
 
