@@ -3,9 +3,13 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDocs,
+  limit,
   onSnapshot,
+  query,
   serverTimestamp,
-  updateDoc
+  updateDoc,
+  writeBatch
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 import { db } from "./config/firebase.js";
 
@@ -53,6 +57,7 @@ const btnCancelarExclusao = document.getElementById("btnCancelarExclusao");
 const btnConfirmarExclusao = document.getElementById("btnConfirmarExclusao");
 
 let excluirIdPendente = null;
+let excluirTudoPendente = false;
 
 const norm = (v) => String(v || "").trim().replace(/\s+/g, " ");
 function normStatus(v) {
@@ -296,34 +301,65 @@ function fecharModal() {
 
 function abrirModalExcluir(item) {
   excluirIdPendente = item.id;
-  const protocolo = item.protocolo || "—";
-  const responsavel = item.responsavelAbertura || "—";
-  modalExcluirDetalhes.textContent = `Protocolo ${protocolo} · ${responsavel}`;
+  excluirTudoPendente = false;
+  modalExcluirDetalhes.textContent = `Protocolo ${item.protocolo || "—"} · ${item.responsavelAbertura || "—"}`;
+  document.getElementById("modalExcluirTitulo").textContent = "Excluir suporte?";
+  document.querySelector(".modal-confirm-text").textContent = "Esta ação não pode ser desfeita. O registro será removido permanentemente.";
   btnConfirmarExclusao.disabled = false;
   btnConfirmarExclusao.textContent = "Excluir";
   modalExcluir.classList.remove("hidden");
 }
 
+function abrirModalExcluirTudo() {
+  excluirIdPendente = null;
+  excluirTudoPendente = true;
+  modalExcluirDetalhes.textContent = "Todos os registros do suporte serão excluídos permanentemente.";
+  document.getElementById("modalExcluirTitulo").textContent = "Excluir todos os suportes?";
+  document.querySelector(".modal-confirm-text").textContent = "Esta ação não pode ser desfeita. Todos os registros serão removidos permanentemente.";
+  btnConfirmarExclusao.disabled = false;
+  btnConfirmarExclusao.textContent = "Excluir tudo";
+  modalExcluir.classList.remove("hidden");
+}
+
 function fecharModalExcluir() {
   excluirIdPendente = null;
+  excluirTudoPendente = false;
   modalExcluir.classList.add("hidden");
 }
 
+async function excluirTodosRegistros() {
+  const limite = 500;
+  while (true) {
+    const batchQuery = query(collection(db, COLLECTION), limit(limite));
+    const snapshot = await getDocs(batchQuery);
+    if (snapshot.empty) break;
+    const batch = writeBatch(db);
+    snapshot.docs.forEach((docSnap) => batch.delete(doc(db, COLLECTION, docSnap.id)));
+    await batch.commit();
+    if (snapshot.size < limite) break;
+  }
+}
+
 async function confirmarExclusao() {
-  if (!excluirIdPendente) return;
+  if (!excluirIdPendente && !excluirTudoPendente) return;
   btnConfirmarExclusao.disabled = true;
-  btnConfirmarExclusao.textContent = "Excluindo...";
+  btnConfirmarExclusao.textContent = excluirTudoPendente ? "Excluindo tudo..." : "Excluindo...";
   try {
-    await deleteDoc(doc(db, COLLECTION, excluirIdPendente));
+    if (excluirTudoPendente) {
+      await excluirTodosRegistros();
+    } else {
+      await deleteDoc(doc(db, COLLECTION, excluirIdPendente));
+    }
     fecharModalExcluir();
   } catch (err) {
     btnConfirmarExclusao.disabled = false;
-    btnConfirmarExclusao.textContent = "Excluir";
-    alert(err.message || "Nao foi possivel excluir o suporte.");
+    btnConfirmarExclusao.textContent = excluirTudoPendente ? "Excluir tudo" : "Excluir";
+    alert(err.message || "Nao foi possivel concluir a exclusao.");
   }
 }
 
 document.getElementById("btnAdicionar").addEventListener("click", abrirModalAdicionar);
+document.getElementById("btnExcluirTudo").addEventListener("click", abrirModalExcluirTudo);
 document.getElementById("btnRecarregar").addEventListener("click", carregar);
 document.getElementById("btnFecharModal").addEventListener("click", fecharModal);
 btnCancelarExclusao.addEventListener("click", fecharModalExcluir);
