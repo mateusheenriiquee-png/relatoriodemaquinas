@@ -10,6 +10,7 @@ const workerConfig = {
   main: "worker/index.js",
   compatibility_date: "2024-11-12",
   compatibility_flags: ["nodejs_compat"],
+  keep_vars: true,
   assets: {
     directory: "./public",
     binding: "ASSETS"
@@ -22,7 +23,7 @@ fs.writeFileSync(
   `${JSON.stringify(workerConfig, null, 2)}\n`
 );
 
-execSync("wrangler deploy", {
+execSync("wrangler deploy --yes --keep-vars", {
   stdio: "inherit",
   env: process.env
 });

@@ -1,4 +1,4 @@
-const { processWebhookPost } = require("../../api/src/webhook-core");
+const { processWebhookPost } = require("../../api/src/webhook-edge");
 
 function headersToObject(requestHeaders) {
   const headers = {};

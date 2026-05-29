@@ -1,4 +1,4 @@
-const { processWebhookPost } = require("../api/src/webhook-core");
+import { processWebhookPost } from "../api/src/webhook-edge.js";
 
 function jsonResponse(statusCode, body) {
   return new Response(JSON.stringify(body), {
@@ -7,7 +7,7 @@ function jsonResponse(statusCode, body) {
   });
 }
 
-module.exports = {
+export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 

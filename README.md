@@ -5,7 +5,8 @@ Painel web para gestao de suportes tecnicos com Firestore, importacao/exportacao
 ## Estrutura
 
 - `public/` — front-end (HTML, CSS, JS)
-- `api/src/` — API local (Express) e logica compartilhada do webhook
+- `api/src/` — API local (Express), webhook edge (Firestore REST) e webhook Node (firebase-admin)
+- `worker/` — entry-point do Cloudflare Worker (ESM + assets)
 - `functions/webhook/` — webhook no Cloudflare Pages
 - `netlify/` — webhook no Netlify (opcional)
 
@@ -54,13 +55,17 @@ Por isso use `wrangler deploy` (com assets), nao `wrangler pages deploy`.
 | **Deploy command** | `npm run cf:deploy` |
 | Root directory | `/` |
 
-### Variables (como no seu print)
+### Variables (Settings → Variables)
 
-- `FIREBASE_SERVICE_ACCOUNT`
+- `FIREBASE_SERVICE_ACCOUNT` — JSON da service account (uma linha)
 - `WEBHOOK_TOKEN`
 - `FIRESTORE_COLLECTION`
 
 Nao cadastre `CLOUDFLARE_API_TOKEN` nas Variables.
+
+O Worker usa a API REST do Firestore (`api/src/firestore-rest.js`), nao o pacote `firebase-admin`, porque o Admin SDK nao roda no runtime do Workers.
+
+**Seguranca:** se credenciais aparecerem em logs de build, revogue a chave no Google Cloud e gere uma nova service account.
 
 ### Deploy
 
