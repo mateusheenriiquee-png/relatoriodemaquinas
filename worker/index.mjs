@@ -1,4 +1,4 @@
-import { processWebhookPost } from "../api/src/webhook-edge.js";
+import { processWebhookPost } from "./webhook.mjs";
 
 function jsonResponse(statusCode, body) {
   return new Response(JSON.stringify(body), {

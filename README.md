@@ -6,7 +6,7 @@ Painel web para gestao de suportes tecnicos com Firestore, importacao/exportacao
 
 - `public/` — front-end (HTML, CSS, JS)
 - `api/src/` — API local (Express), webhook edge (Firestore REST) e webhook Node (firebase-admin)
-- `worker/` — entry-point do Cloudflare Worker (ESM + assets)
+- `worker/` — Cloudflare Worker (`index.mjs`, sem `firebase-admin`)
 - `functions/webhook/` — webhook no Cloudflare Pages
 - `netlify/` — webhook no Netlify (opcional)
 
