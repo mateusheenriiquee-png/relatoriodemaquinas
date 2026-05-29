@@ -7,7 +7,11 @@
     "start": "node api/src/server.js",
     "dev": "node api/src/server.js",
     "pages:dev": "wrangler pages dev public",
+    "cf:deploy": "wrangler pages deploy public --project-name=suportetecnico-api",
     "test": "echo \"No tests configured\""
+  },
+  "devDependencies": {
+    "wrangler": "^4.95.0"
   },
   "engines": {
     "node": ">=18"

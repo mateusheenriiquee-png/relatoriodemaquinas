@@ -49,22 +49,36 @@ Em **Workers & Pages → seu projeto → Settings → Builds**:
 |-------|--------|
 | Framework preset | **None** |
 | Build command | *(vazio)* |
-| **Deploy command** | ***(vazio — apague `npx wrangler deploy`)*** |
+| **Deploy command** | `npm run cf:deploy` |
 | Build output directory | `public` |
 | Root directory | `/` |
 
-> **Erro comum 1:** `npx wrangler deploy` e para **Workers**, nao para Pages.  
-> **Erro comum 2:** `npx wrangler pages deploy public` com *Authentication error [10000]* — o token de build nao tem permissao de Pages.  
-> **Solucao:** deixe **Deploy command vazio**. O Cloudflare publica `public/` e `functions/` sozinho apos o `npm install`.
+### Deploy command obrigatorio (painel nao deixa vazio)
 
-Opcional: marque **Use wrangler.toml** se aparecer na tela de build.
+Use exatamente:
 
-### Se o painel obrigar Deploy command
+```bash
+npm run cf:deploy
+```
 
-1. Em **Settings → Builds**, apague o comando e salve; ou  
-2. Regenerar o token: **My Profile → API Tokens → Create Token** → template **Edit Cloudflare Workers** (inclui Pages) → substituir o token do projeto em **Settings → Builds → API token**.
+Isso executa `wrangler pages deploy public --project-name=suportetecnico-api`.
 
-O nome em `wrangler.toml` (`name`) deve ser igual ao nome do projeto no Cloudflare (`suportetecnico-api`).
+### Corrigir Authentication error [10000]
+
+O log mostra token vindo de **variavel de ambiente** `CLOUDFLARE_API_TOKEN`:
+
+1. **Settings → Variables and secrets** do projeto  
+2. **Apague** `CLOUDFLARE_API_TOKEN` se existir (e `CLOUDFLARE_API_KEY`, se houver)  
+3. Salve e faca **Retry deployment**
+
+O build do Git ja injeta um token proprio; um token manual sem permissao de **Pages → Edit** quebra o deploy.
+
+Se ainda falhar: **My Profile → API Tokens → Create Token** → template **Edit Cloudflare Workers** → em **Settings → Builds** troque o API token do projeto.
+
+### Nao use
+
+- `npx wrangler deploy` (Worker puro, sem assets configurados)
+- `npx wrangler versions upload` (preview de Worker)
 
 ### Variaveis de ambiente
 
