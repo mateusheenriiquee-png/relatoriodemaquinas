@@ -132,58 +132,90 @@ function encodeFirestoreValue(value) {
   return { stringValue: String(value) };
 }
 
-function buildDocumentWrites(projectId, collection, records) {
-  const writes = [];
-
-  for (const record of records) {
-    const docId = crypto.randomUUID();
-    const documentName = `projects/${projectId}/databases/(default)/documents/${collection}/${docId}`;
-    const { createdAt: _createdAt, updatedAt: _updatedAt, ...fields } = record;
-
-    writes.push({
-      update: {
-        name: documentName,
-        fields: encodeFirestoreValue(fields).mapValue.fields
-      }
-    });
-    writes.push({
-      transform: {
-        document: documentName,
-        fieldTransforms: [
-          { fieldPath: "createdAt", setToServerValue: "REQUEST_TIME" },
-          { fieldPath: "updatedAt", setToServerValue: "REQUEST_TIME" }
-        ]
-      }
-    });
-  }
-
-  return writes;
+function toFirestoreFields(record) {
+  const encoded = encodeFirestoreValue(record);
+  return encoded?.mapValue?.fields || {};
 }
 
-export async function commitRecords({ serviceAccountRaw, collection, records }) {
+function isoTimestamp() {
+  return new Date().toISOString();
+}
+
+async function patchDocument({ documentName, fields, accessToken, updateMaskPaths }) {
+  const maskParams = updateMaskPaths
+    .map((path) => `updateMask.fieldPaths=${encodeURIComponent(path)}`)
+    .join("&");
+  const response = await fetch(`https://firestore.googleapis.com/v1/${documentName}?${maskParams}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ fields })
+  });
+  return response;
+}
+
+export async function upsertRecords({ serviceAccountRaw, collection, records }) {
   if (!records.length) {
     return 0;
   }
 
   const serviceAccount = parseServiceAccount(serviceAccountRaw);
   const accessToken = await getAccessToken(serviceAccountRaw);
-  const writes = buildDocumentWrites(serviceAccount.project_id, collection, records);
-  const response = await fetch(
-    `https://firestore.googleapis.com/v1/projects/${serviceAccount.project_id}/databases/(default)/documents:commit`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ writes })
-    }
-  );
+  const projectId = serviceAccount.project_id;
+  const parent = `projects/${projectId}/databases/(default)/documents/${collection}`;
+  let upserted = 0;
 
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error?.message || "Falha ao gravar no Firestore.");
+  for (const { docId, fields } of records) {
+    if (!docId) continue;
+
+    const { createdAt: _c, updatedAt: _u, ...payload } = fields;
+    const patchPayload = {
+      ...payload,
+      updatedAt: isoTimestamp()
+    };
+    const firestoreFields = toFirestoreFields(patchPayload);
+    const fieldPaths = Object.keys(firestoreFields);
+    if (!fieldPaths.length) continue;
+
+    const documentName = `${parent}/${docId}`;
+    let response = await patchDocument({
+      documentName,
+      fields: firestoreFields,
+      accessToken,
+      updateMaskPaths: fieldPaths
+    });
+
+    if (response.status === 404) {
+      const createFields = toFirestoreFields({
+        ...patchPayload,
+        createdAt: isoTimestamp()
+      });
+      response = await fetch(
+        `https://firestore.googleapis.com/v1/${parent}?documentId=${encodeURIComponent(docId)}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ fields: createFields })
+        }
+      );
+    }
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error?.message || "Falha ao gravar no Firestore.");
+    }
+
+    upserted += 1;
   }
 
-  return records.length;
+  return upserted;
+}
+
+export async function commitRecords(options) {
+  return upsertRecords(options);
 }

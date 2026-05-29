@@ -1,5 +1,6 @@
-const { normalizeSupport, normalizeText } = require("./normalize");
-const { commitRecords } = require("./firestore-rest");
+const { normalizeText } = require("./normalize");
+const { upsertRecords } = require("./firestore-rest");
+const { prepareWebhookRecords } = require("./webhook-shared");
 
 function getEnv(env) {
   return {
@@ -17,25 +18,6 @@ function isAuthorized({ headers = {}, queryStringParameters = {}, body = {} }, w
     normalizeText(queryStringParameters?.token) ||
     normalizeText(body?.token);
   return token === webhookToken;
-}
-
-function hasMeaningfulSupportData(support = {}) {
-  return Boolean(
-    support.protocolo ||
-    support.responsavelAbertura ||
-    support.cpfCnpj ||
-    support.contato ||
-    support.descricao ||
-    support.tipo ||
-    support.ac ||
-    support.tecnico ||
-    support.statusAbertura ||
-    support.dataAbertura
-  );
-}
-
-function hasAnyInputField(input) {
-  return Boolean(input && typeof input === "object" && !Array.isArray(input) && Object.keys(input).length);
 }
 
 function jsonResponse(statusCode, payload) {
@@ -73,35 +55,21 @@ async function processWebhookPost(
       return jsonResponse(400, { ok: false, error: "Payload vazio." });
     }
 
-    const records = [];
-
-    for (const input of inputs) {
-      if (!hasAnyInputField(input)) {
-        continue;
-      }
-      const support = normalizeSupport(input);
-      const record = {
-        ...support,
-        origemIntegracao
-      };
-      if (!hasMeaningfulSupportData(support)) {
-        records.push(record);
-        continue;
-      }
-      records.push(record);
-    }
-
+    const records = prepareWebhookRecords(inputs, origemIntegracao);
     if (!records.length) {
-      return jsonResponse(400, { ok: false, error: "Nenhum registro valido no payload." });
+      return jsonResponse(400, {
+        ok: false,
+        error: "Nenhum dado reconhecido no payload. Envie ao menos um campo com valor."
+      });
     }
 
-    const inserted = await commitRecords({
+    const upserted = await upsertRecords({
       serviceAccountRaw: config.serviceAccountRaw,
       collection: config.collection,
       records
     });
 
-    return jsonResponse(201, { ok: true, inserted });
+    return jsonResponse(201, { ok: true, upserted, inserted: upserted });
   } catch (error) {
     return jsonResponse(500, {
       ok: false,

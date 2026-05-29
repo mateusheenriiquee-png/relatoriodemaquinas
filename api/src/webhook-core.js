@@ -1,5 +1,6 @@
 const admin = require("firebase-admin");
-const { normalizeSupport, normalizeText } = require("./normalize");
+const { normalizeText } = require("./normalize");
+const { prepareWebhookRecords } = require("./webhook-shared");
 
 let dbInstance = null;
 
@@ -44,25 +45,6 @@ function isAuthorized({ headers = {}, queryStringParameters = {}, body = {} }, w
   return token === webhookToken;
 }
 
-function hasMeaningfulSupportData(support = {}) {
-  return Boolean(
-    support.protocolo ||
-    support.responsavelAbertura ||
-    support.cpfCnpj ||
-    support.contato ||
-    support.descricao ||
-    support.tipo ||
-    support.ac ||
-    support.tecnico ||
-    support.statusAbertura ||
-    support.dataAbertura
-  );
-}
-
-function hasAnyInputField(input) {
-  return Boolean(input && typeof input === "object" && !Array.isArray(input) && Object.keys(input).length);
-}
-
 function jsonResponse(statusCode, payload) {
   return {
     statusCode,
@@ -91,37 +73,33 @@ async function processWebhookPost(
       return jsonResponse(400, { ok: false, error: "Payload vazio." });
     }
 
-    const db = getDb(config.serviceAccountRaw);
-    const batch = db.batch();
-    let inserted = 0;
-
-    for (const input of inputs) {
-      if (!hasAnyInputField(input)) {
-        continue;
-      }
-      const support = normalizeSupport(input);
-      const ref = db.collection(config.collection).doc();
-      const record = {
-        ...support,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        origemIntegracao
-      };
-      if (!hasMeaningfulSupportData(support)) {
-        batch.set(ref, record);
-        inserted += 1;
-        continue;
-      }
-      batch.set(ref, record);
-      inserted += 1;
+    const records = prepareWebhookRecords(inputs, origemIntegracao);
+    if (!records.length) {
+      return jsonResponse(400, {
+        ok: false,
+        error: "Nenhum dado reconhecido no payload. Envie ao menos um campo com valor."
+      });
     }
 
-    if (!inserted) {
-      return jsonResponse(400, { ok: false, error: "Nenhum registro valido no payload." });
+    const db = getDb(config.serviceAccountRaw);
+    const batch = db.batch();
+    let upserted = 0;
+
+    for (const { docId, fields } of records) {
+      const ref = db.collection(config.collection).doc(docId);
+      batch.set(
+        ref,
+        {
+          ...fields,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        },
+        { merge: true }
+      );
+      upserted += 1;
     }
 
     await batch.commit();
-    return jsonResponse(201, { ok: true, inserted });
+    return jsonResponse(201, { ok: true, upserted, inserted: upserted });
   } catch (error) {
     return jsonResponse(500, {
       ok: false,

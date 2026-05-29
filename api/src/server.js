@@ -1,12 +1,11 @@
 const express = require("express");
 const cors = require("cors");
-const crypto = require("crypto");
 const { db, admin } = require("./firebase-admin");
-const { normalizeSupport, normalizeText } = require("./normalize");
+const { normalizeText } = require("./normalize");
+const { prepareWebhookRecords } = require("./webhook-shared");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const COLLECTION = process.env.FIRESTORE_COLLECTION || "suportes_tecnicos";
 const WEBHOOK_TOKEN = normalizeText(process.env.WEBHOOK_TOKEN || "");
 const MAX_ITEMS_PER_REQUEST = Number(process.env.MAX_ITEMS_PER_REQUEST || 100);
 const MAX_CONCURRENT_WEBHOOKS = Number(process.env.MAX_CONCURRENT_WEBHOOKS || 20);
@@ -22,50 +21,6 @@ function isAuthorized(req) {
     normalizeText(req.query.token) ||
     normalizeText(req.body?.token);
   return token && token === WEBHOOK_TOKEN;
-}
-
-function hasMeaningfulSupportData(support = {}) {
-  return Boolean(
-    support.protocolo ||
-    support.responsavelAbertura ||
-    support.cpfCnpj ||
-    support.contato ||
-    support.descricao ||
-    support.tipo ||
-    support.ac ||
-    support.tecnico ||
-    support.statusAbertura ||
-    support.dataAbertura
-  );
-}
-
-function hasAnyInputField(input) {
-  return Boolean(input && typeof input === "object" && !Array.isArray(input) && Object.keys(input).length);
-}
-
-function normalizeIdPart(value) {
-  return normalizeText(value)
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-}
-
-function getIdempotencyDocId(support) {
-  const keyParts = [support.protocolo, support.cpfCnpj, support.dataAbertura]
-    .map(normalizeIdPart)
-    .filter(Boolean);
-
-  if (keyParts.length) {
-    return `support_${keyParts.join("_")}`.slice(0, 200);
-  }
-
-  const fallbackHash = crypto
-    .createHash("sha1")
-    .update(JSON.stringify(support || {}))
-    .digest("hex");
-  return `support_hash_${fallbackHash}`;
 }
 
 app.get("/health", (_req, res) => {
@@ -98,40 +53,29 @@ app.post("/webhook/suportes", async (req, res) => {
       });
     }
 
+    const records = prepareWebhookRecords(inputs, "webhook");
+    if (!records.length) {
+      return res.status(400).json({
+        ok: false,
+        error: "Nenhum dado reconhecido no payload. Envie ao menos um campo com valor."
+      });
+    }
+
     const batch = db.batch();
-    let upserted = 0;
-
-    for (const input of inputs) {
-      if (!hasAnyInputField(input)) {
-        continue;
-      }
-      const support = normalizeSupport(input);
-      if (!hasMeaningfulSupportData(support)) {
-        continue;
-      }
-
-      const docId = getIdempotencyDocId(support);
-      const ref = db.collection(COLLECTION).doc(docId);
+    for (const { docId, fields } of records) {
+      const ref = db.collection(process.env.FIRESTORE_COLLECTION || "suportes_tecnicos").doc(docId);
       batch.set(
         ref,
         {
-        ...support,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        origemIntegracao: "webhook",
-        idempotencyKey: docId
-      },
+          ...fields,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        },
         { merge: true }
       );
-      upserted += 1;
-    }
-
-    if (!upserted) {
-      return res.status(400).json({ ok: false, error: "Nenhum registro valido no payload." });
     }
 
     await batch.commit();
-    return res.status(201).json({ ok: true, upserted });
+    return res.status(201).json({ ok: true, upserted: records.length, inserted: records.length });
   } catch (error) {
     return res.status(500).json({
       ok: false,

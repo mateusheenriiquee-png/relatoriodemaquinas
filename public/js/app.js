@@ -344,29 +344,48 @@ filtroTecnicoEl.addEventListener("change", (e) => { state.filtroTecnico = e.targ
 filtroCpfCnpjEl.addEventListener("input", (e) => { state.filtroCpfCnpj = e.target.value.trim(); state.paginaAtual = 1; render(); });
 filtroProtocoloEl.addEventListener("input", (e) => { state.filtroProtocolo = e.target.value.trim(); state.paginaAtual = 1; render(); });
 
+function buildPayloadFromForm(modo) {
+  const put = (target, key, value) => {
+    const text = norm(value);
+    if (text) target[key] = text;
+  };
+
+  if (modo === "editar") {
+    const payload = { updatedAt: serverTimestamp() };
+    put(payload, "tecnico", modalTecnico.value);
+    put(payload, "status", normStatus(modalStatus.value));
+    put(payload, "statusAbertura", modalStatusAbertura.value);
+    return payload;
+  }
+
+  const payload = {
+    dataAbertura: new Date().toISOString(),
+    updatedAt: serverTimestamp()
+  };
+  put(payload, "protocolo", modalProtocolo.value);
+  put(payload, "responsavelAbertura", modalResponsavelAbertura.value);
+  put(payload, "cpfCnpj", modalCpfCnpj.value);
+  put(payload, "tipo", modalTipo.value);
+  put(payload, "ac", modalAc.value);
+  put(payload, "contato", modalContato.value);
+  put(payload, "descricao", modalDescricao.value);
+  put(payload, "tecnico", modalTecnico.value);
+  put(payload, "status", normStatus(modalStatus.value));
+  put(payload, "statusAbertura", modalStatusAbertura.value);
+
+  if (!Object.keys(payload).some((k) => !["dataAbertura", "updatedAt"].includes(k))) {
+    return null;
+  }
+  return payload;
+}
+
 formSuporte.addEventListener("submit", async (e) => {
   e.preventDefault();
-  const payload = state.modalModo === "adicionar"
-    ? {
-      protocolo: norm(modalProtocolo.value),
-      responsavelAbertura: norm(modalResponsavelAbertura.value),
-      cpfCnpj: norm(modalCpfCnpj.value),
-      tipo: norm(modalTipo.value),
-      ac: norm(modalAc.value),
-      contato: norm(modalContato.value),
-      descricao: norm(modalDescricao.value),
-      tecnico: norm(modalTecnico.value),
-      status: normStatus(modalStatus.value),
-      statusAbertura: norm(modalStatusAbertura.value),
-      dataAbertura: new Date().toISOString(),
-      updatedAt: serverTimestamp()
-    }
-    : {
-      tecnico: norm(modalTecnico.value),
-      status: normStatus(modalStatus.value),
-      statusAbertura: norm(modalStatusAbertura.value),
-      updatedAt: serverTimestamp()
-    };
+  const payload = buildPayloadFromForm(state.modalModo);
+  if (!payload) {
+    alert("Preencha ao menos um campo para salvar.");
+    return;
+  }
   try {
     if (state.modalModo === "adicionar") {
       await addDoc(collection(db, COLLECTION), { ...payload, createdAt: serverTimestamp() });
