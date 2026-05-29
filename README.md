@@ -39,54 +39,28 @@ npm start
 
 Webhook: `POST http://localhost:3000/webhook/suportes`
 
-## Deploy — Cloudflare Pages (git push)
+## Deploy — Cloudflare Worker (git push)
 
-### Configuracao correta no painel
+O projeto no painel e um **Worker** (`workers/services/suportetecnico-api`), nao Pages.
+Por isso use `wrangler deploy` (com assets), nao `wrangler pages deploy`.
 
-Em **Workers & Pages → seu projeto → Settings → Builds**:
+### Configuracao no painel
+
+**Settings → Builds**:
 
 | Campo | Valor |
 |-------|--------|
-| Framework preset | **None** |
 | Build command | *(vazio)* |
 | **Deploy command** | `npm run cf:deploy` |
-| Build output directory | `public` |
 | Root directory | `/` |
 
-### Deploy command obrigatorio (painel nao deixa vazio)
-
-Use exatamente:
-
-```bash
-npm run cf:deploy
-```
-
-Isso executa `wrangler pages deploy public --project-name=suportetecnico-api`.
-
-### Corrigir Authentication error [10000]
-
-O log mostra token vindo de **variavel de ambiente** `CLOUDFLARE_API_TOKEN`:
-
-1. **Settings → Variables and secrets** do projeto  
-2. **Apague** `CLOUDFLARE_API_TOKEN` se existir (e `CLOUDFLARE_API_KEY`, se houver)  
-3. Salve e faca **Retry deployment**
-
-O build do Git ja injeta um token proprio; um token manual sem permissao de **Pages → Edit** quebra o deploy.
-
-Se ainda falhar: **My Profile → API Tokens → Create Token** → template **Edit Cloudflare Workers** → em **Settings → Builds** troque o API token do projeto.
-
-### Nao use
-
-- `npx wrangler deploy` (Worker puro, sem assets configurados)
-- `npx wrangler versions upload` (preview de Worker)
-
-### Variaveis de ambiente
-
-**Settings → Environment variables** (Production):
+### Variables (como no seu print)
 
 - `FIREBASE_SERVICE_ACCOUNT`
-- `WEBHOOK_TOKEN` (recomendado)
-- `FIRESTORE_COLLECTION` (opcional)
+- `WEBHOOK_TOKEN`
+- `FIRESTORE_COLLECTION`
+
+Nao cadastre `CLOUDFLARE_API_TOKEN` nas Variables.
 
 ### Deploy
 
@@ -94,16 +68,17 @@ Se ainda falhar: **My Profile → API Tokens → Create Token** → template **E
 git push origin main
 ```
 
-Webhook em producao: `https://seu-dominio.com/webhook/suportes`
+Site + webhook no mesmo Worker:
 
-### Deploy manual (opcional, pelo PC)
+- Site: arquivos em `public/`
+- Webhook: `POST /webhook/suportes`
+
+### Deploy manual (opcional)
 
 ```bash
 npm install
-npx wrangler pages deploy public
+npm run cf:deploy
 ```
-
-Use `wrangler pages deploy`, **nunca** `wrangler deploy`.
 
 ## Deploy — Netlify (opcional)
 

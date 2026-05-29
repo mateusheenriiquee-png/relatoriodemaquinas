@@ -5,29 +5,24 @@ const { execSync } = require("child_process");
 const projectRoot = path.resolve(__dirname, "..");
 process.chdir(projectRoot);
 
-function stripAssetsFromJsonc(filePath) {
-  if (!fs.existsSync(filePath)) return;
-  let raw = fs.readFileSync(filePath, "utf8");
-  raw = raw.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
-  const config = JSON.parse(raw);
-  delete config.assets;
-  fs.writeFileSync(filePath, `${JSON.stringify(config, null, 2)}\n`);
-}
-
-function stripAssetsFromToml(filePath) {
-  if (!fs.existsSync(filePath)) return;
-  const toml = fs.readFileSync(filePath, "utf8");
-  const cleaned = toml.replace(/\r?\n\[assets\][\s\S]*?(?=\r?\n\[|\r?\n*$)/g, "\n");
-  if (cleaned !== toml) {
-    fs.writeFileSync(filePath, cleaned);
+const workerConfig = {
+  name: "suportetecnico-api",
+  main: "worker/index.js",
+  compatibility_date: "2024-11-12",
+  compatibility_flags: ["nodejs_compat"],
+  assets: {
+    directory: "./public",
+    binding: "ASSETS"
   }
-}
+};
 
-// O painel Cloudflare (fluxo Worker+Git) pode gerar wrangler.jsonc com "assets".
-stripAssetsFromJsonc(path.join(projectRoot, "wrangler.jsonc"));
-stripAssetsFromToml(path.join(projectRoot, "wrangler.toml"));
+// Projeto no painel e Worker (workers/services), nao Pages — usar wrangler deploy.
+fs.writeFileSync(
+  path.join(projectRoot, "wrangler.jsonc"),
+  `${JSON.stringify(workerConfig, null, 2)}\n`
+);
 
-execSync("wrangler pages deploy public --project-name=suportetecnico-api", {
+execSync("wrangler deploy", {
   stdio: "inherit",
   env: process.env
 });
