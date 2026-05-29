@@ -29,14 +29,18 @@ function normStatus(v) {
   return "EM ABERTO";
 }
 
+/** Cores fixas por situação — não personalizáveis para manter leitura consistente */
+const STATUS_CHART_COLORS = {
+  "EM ABERTO": "#dc2626",
+  "EM ANDAMENTO": "#2563eb",
+  FINALIZADO: "#16a34a",
+  REAGENDADO: "#d97706",
+  "SEM RETORNO": "#6b7280"
+};
+
 function statusChartColor(status) {
   const s = normStatus(status);
-  if (s === "EM ABERTO") return THEME.statusAberto;
-  if (s === "EM ANDAMENTO") return THEME.statusAndamento;
-  if (s === "FINALIZADO") return THEME.statusFinalizado;
-  if (s === "REAGENDADO") return THEME.statusReagendado;
-  if (s === "SEM RETORNO") return THEME.statusSemRetorno;
-  return THEME.primary;
+  return STATUS_CHART_COLORS[s] || getChartTheme().barColors[0];
 }
 
 function normStatusAbertura(v) {
@@ -170,50 +174,130 @@ function destroyChart(id) {
   }
 }
 
-const THEME = {
-  primary: "#c079f7",
-  primaryDark: "#9333ea",
-  primaryNeon: "#e879f9",
-  primaryLight: "rgba(192, 121, 247, 0.35)",
-  primarySoft: "rgba(168, 85, 247, 0.5)",
-  muted: "#9b8fb8",
-  text: "#eee8f8",
-  statusAberto: "#f87171",
-  statusAndamento: "#60a5fa",
-  statusFinalizado: "#4ade80",
-  statusReagendado: "#c084fc",
-  statusSemRetorno: "#a8a29e"
-};
-const BAR_COLORS = [THEME.primary, THEME.primaryNeon, THEME.primaryDark, "#a855f7"];
-const palette = [THEME.primary, THEME.primaryNeon, "#a855f7", "#d946ef", THEME.primaryDark, "#7c3aed", "#c084fc", "#e879f9"];
-const chartText = THEME.muted;
-const chartGrid = "rgba(168, 85, 247, 0.22)";
+const CHART_COLORS_STORAGE_KEY = "suporte-dashboard-chart-colors";
 
-function getBarColors(count) {
-  return Array.from({ length: count }, (_, index) => BAR_COLORS[index % BAR_COLORS.length]);
+const DEFAULT_CHART_COLORS = {
+  bar1: "#E7B111",
+  bar2: "#f5c842",
+  bar3: "#c49a0e",
+  bar4: "#9a7b0a",
+  devido: "#E7B111",
+  indevido: "#c49a0e",
+  pendente: "#f5c842"
+};
+
+let chartColorPrefs = { ...DEFAULT_CHART_COLORS };
+
+function cssVar(name, fallback) {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
 }
 
-const chartDefaults = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: {
-      display: true,
-      position: "bottom",
-      labels: {
-        boxWidth: 10,
-        padding: 10,
-        color: chartText,
-        font: { size: 10, family: "Segoe UI" }
+function getChartTheme() {
+  return {
+    barColors: [
+      chartColorPrefs.bar1,
+      chartColorPrefs.bar2,
+      chartColorPrefs.bar3,
+      chartColorPrefs.bar4
+    ],
+    devido: chartColorPrefs.devido,
+    indevido: chartColorPrefs.indevido,
+    pendente: chartColorPrefs.pendente,
+    finalizado: STATUS_CHART_COLORS.FINALIZADO,
+    muted: cssVar("--muted", "#5c5c5c"),
+    grid: "rgba(231, 177, 17, 0.2)"
+  };
+}
+
+function loadChartColorPrefs() {
+  try {
+    const raw = localStorage.getItem(CHART_COLORS_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    chartColorPrefs = { ...DEFAULT_CHART_COLORS, ...parsed };
+  } catch {
+    chartColorPrefs = { ...DEFAULT_CHART_COLORS };
+  }
+}
+
+function saveChartColorPrefs() {
+  localStorage.setItem(CHART_COLORS_STORAGE_KEY, JSON.stringify(chartColorPrefs));
+}
+
+function syncChartColorInputs() {
+  const map = {
+    chartColor1: "bar1",
+    chartColor2: "bar2",
+    chartColor3: "bar3",
+    chartColor4: "bar4",
+    chartColorDevido: "devido",
+    chartColorIndevido: "indevido",
+    chartColorPendente: "pendente"
+  };
+  Object.entries(map).forEach(([id, key]) => {
+    const el = document.getElementById(id);
+    if (el) el.value = chartColorPrefs[key];
+  });
+}
+
+function bindChartColorControls() {
+  const map = {
+    chartColor1: "bar1",
+    chartColor2: "bar2",
+    chartColor3: "bar3",
+    chartColor4: "bar4",
+    chartColorDevido: "devido",
+    chartColorIndevido: "indevido",
+    chartColorPendente: "pendente"
+  };
+  Object.entries(map).forEach(([id, key]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("input", () => {
+      chartColorPrefs[key] = el.value;
+      saveChartColorPrefs();
+      render();
+    });
+  });
+  document.getElementById("btnResetChartColors")?.addEventListener("click", () => {
+    chartColorPrefs = { ...DEFAULT_CHART_COLORS };
+    saveChartColorPrefs();
+    syncChartColorInputs();
+    render();
+  });
+}
+
+function getBarColors(count) {
+  const colors = getChartTheme().barColors;
+  return Array.from({ length: count }, (_, index) => colors[index % colors.length]);
+}
+
+function chartDefaults() {
+  const theme = getChartTheme();
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: true,
+        position: "bottom",
+        labels: {
+          boxWidth: 10,
+          padding: 10,
+          color: theme.muted,
+          font: { size: 10, family: "Segoe UI" }
+        }
       }
     }
-  }
-};
+  };
+}
 
 function axisStyle() {
+  const theme = getChartTheme();
   return {
-    ticks: { color: chartText, font: { size: 9, family: "Segoe UI" } },
-    grid: { color: chartGrid },
+    ticks: { color: theme.muted, font: { size: 9, family: "Segoe UI" } },
+    grid: { color: theme.grid },
     border: { display: false }
   };
 }
@@ -226,10 +310,11 @@ function mergeChartOptions(custom = {}) {
         y: { ...axisStyle(), ...(custom.scales?.y || {}) }
       }
     : undefined;
+  const defaults = chartDefaults();
   return {
-    ...chartDefaults,
+    ...defaults,
     ...custom,
-    plugins: { ...chartDefaults.plugins, ...(custom.plugins || {}) },
+    plugins: { ...defaults.plugins, ...(custom.plugins || {}) },
     scales: custom.scales ? { ...baseScales, ...custom.scales } : baseScales
   };
 }
@@ -264,6 +349,7 @@ function renderKpis(dados) {
 }
 
 function renderCharts(dados) {
+  const theme = getChartTheme();
   const porTecnico = agruparContagem(dados, (r) => r.tecnico);
   renderChart("chartPorTecnico", {
     type: "bar",
@@ -292,7 +378,7 @@ function renderCharts(dados) {
       labels: ["Fin.", "Pend."],
       datasets: [{
         data: [finalizados, naoFinalizados],
-        backgroundColor: [THEME.statusFinalizado, THEME.primaryNeon],
+        backgroundColor: [theme.finalizado, theme.pendente],
         borderWidth: 0
       }]
     },
@@ -357,8 +443,8 @@ function renderCharts(dados) {
     data: {
       labels: responsaveis,
       datasets: [
-        { label: "Devido", data: devidoData, backgroundColor: THEME.primary, borderRadius: 6 },
-        { label: "Indevido", data: indevidoData, backgroundColor: THEME.primaryDark, borderRadius: 6 }
+        { label: "Devido", data: devidoData, backgroundColor: theme.devido, borderRadius: 6 },
+        { label: "Indevido", data: indevidoData, backgroundColor: theme.indevido, borderRadius: 6 }
       ]
     },
     options: {
@@ -491,6 +577,10 @@ filtroTecnicoEl.addEventListener("change", (e) => {
 document.getElementById("btnRecarregarDashboard").addEventListener("click", () => {
   carregar().catch((err) => alert(err.message || "Erro ao recarregar."));
 });
+
+loadChartColorPrefs();
+syncChartColorInputs();
+bindChartColorControls();
 
 carregar().catch((err) => {
   alert(`Erro ao carregar dashboard: ${String(err?.message || err || "")}`);

@@ -39,6 +39,53 @@
       </div>
     </section>
 
+    <details class="chart-colors-panel" id="chartColorsPanel">
+      <summary>Cores dos gráficos</summary>
+      <p class="chart-colors-hint">
+        Ajuste as cores dos gráficos de barras e comparações. O gráfico de <strong>Status</strong> usa cores fixas por situação (abaixo) para facilitar a leitura.
+      </p>
+      <div class="chart-colors-grid">
+        <div class="chart-color-field">
+          <label for="chartColor1">Cor principal</label>
+          <input type="color" id="chartColor1" value="#E7B111" />
+        </div>
+        <div class="chart-color-field">
+          <label for="chartColor2">Cor secundária</label>
+          <input type="color" id="chartColor2" value="#f5c842" />
+        </div>
+        <div class="chart-color-field">
+          <label for="chartColor3">Cor terciária</label>
+          <input type="color" id="chartColor3" value="#c49a0e" />
+        </div>
+        <div class="chart-color-field">
+          <label for="chartColor4">Cor quaternária</label>
+          <input type="color" id="chartColor4" value="#9a7b0a" />
+        </div>
+        <div class="chart-color-field">
+          <label for="chartColorDevido">Devido</label>
+          <input type="color" id="chartColorDevido" value="#E7B111" />
+        </div>
+        <div class="chart-color-field">
+          <label for="chartColorIndevido">Indevido</label>
+          <input type="color" id="chartColorIndevido" value="#c49a0e" />
+        </div>
+        <div class="chart-color-field">
+          <label for="chartColorPendente">Pendente (donut)</label>
+          <input type="color" id="chartColorPendente" value="#f5c842" />
+        </div>
+      </div>
+      <div class="status-legend" aria-label="Cores fixas por status">
+        <span class="status-legend-item"><span class="status-legend-swatch" style="background:#dc2626"></span> Em aberto</span>
+        <span class="status-legend-item"><span class="status-legend-swatch" style="background:#2563eb"></span> Em andamento</span>
+        <span class="status-legend-item"><span class="status-legend-swatch" style="background:#16a34a"></span> Finalizado</span>
+        <span class="status-legend-item"><span class="status-legend-swatch" style="background:#d97706"></span> Reagendado</span>
+        <span class="status-legend-item"><span class="status-legend-swatch" style="background:#6b7280"></span> Sem retorno</span>
+      </div>
+      <div class="chart-colors-actions">
+        <button type="button" id="btnResetChartColors" class="btn btn-ghost btn-small">Restaurar padrão</button>
+      </div>
+    </details>
+
     <section class="stats dashboard-kpis">
       <div class="stat-card kpi-highlight"><span>Total</span><strong id="kpiTotal">0</strong></div>
       <div class="stat-card"><span>Finalizados</span><strong id="kpiFinalizados">0</strong></div>
