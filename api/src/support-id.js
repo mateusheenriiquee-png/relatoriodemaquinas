@@ -1,6 +1,6 @@
-import crypto from "node:crypto";
 
-//const crypto = require("node:crypto");
+
+const crypto = require("crypto");
 const { normalizeText } = require("./normalize");
 
 function normalizeIdPart(value) {
