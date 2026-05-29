@@ -41,17 +41,48 @@ Webhook: `POST http://localhost:3000/webhook/suportes`
 
 ## Deploy — Cloudflare Pages (git push)
 
-1. Conecte o repositorio em **Workers & Pages → Create → Pages → Connect to Git**
-2. Build:
-   - **Build command:** (vazio)
-   - **Build output directory:** `public`
-3. Variaveis em **Settings → Environment variables**:
-   - `FIREBASE_SERVICE_ACCOUNT`
-   - `WEBHOOK_TOKEN` (recomendado)
-   - `FIRESTORE_COLLECTION` (opcional)
-4. `git push` na branch configurada dispara o deploy automatico
+### Configuracao correta no painel
+
+Em **Workers & Pages → seu projeto → Settings → Builds**:
+
+| Campo | Valor |
+|-------|--------|
+| Framework preset | **None** |
+| Build command | *(vazio)* |
+| **Deploy command** | ***(vazio — apague `npx wrangler deploy`)*** |
+| Build output directory | `public` |
+| Root directory | `/` |
+
+> **Erro comum:** `npx wrangler deploy` e para **Workers**, nao para Pages.  
+> Isso gera: *Missing entry-point to Worker script*.  
+> Com Git + Pages, **nao preencha Deploy command** — o Cloudflare publica `public/` e a pasta `functions/` sozinho.
+
+Opcional: marque **Use wrangler.toml** se aparecer na tela de build.
+
+### Variaveis de ambiente
+
+**Settings → Environment variables** (Production):
+
+- `FIREBASE_SERVICE_ACCOUNT`
+- `WEBHOOK_TOKEN` (recomendado)
+- `FIRESTORE_COLLECTION` (opcional)
+
+### Deploy
+
+```bash
+git push origin main
+```
 
 Webhook em producao: `https://seu-dominio.com/webhook/suportes`
+
+### Deploy manual (opcional, pelo PC)
+
+```bash
+npm install
+npx wrangler pages deploy public
+```
+
+Use `wrangler pages deploy`, **nunca** `wrangler deploy`.
 
 ## Deploy — Netlify (opcional)
 
