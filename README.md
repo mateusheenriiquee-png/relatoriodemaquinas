@@ -53,11 +53,18 @@ Em **Workers & Pages → seu projeto → Settings → Builds**:
 | Build output directory | `public` |
 | Root directory | `/` |
 
-> **Erro comum:** `npx wrangler deploy` e para **Workers**, nao para Pages.  
-> Isso gera: *Missing entry-point to Worker script*.  
-> Com Git + Pages, **nao preencha Deploy command** — o Cloudflare publica `public/` e a pasta `functions/` sozinho.
+> **Erro comum 1:** `npx wrangler deploy` e para **Workers**, nao para Pages.  
+> **Erro comum 2:** `npx wrangler pages deploy public` com *Authentication error [10000]* — o token de build nao tem permissao de Pages.  
+> **Solucao:** deixe **Deploy command vazio**. O Cloudflare publica `public/` e `functions/` sozinho apos o `npm install`.
 
 Opcional: marque **Use wrangler.toml** se aparecer na tela de build.
+
+### Se o painel obrigar Deploy command
+
+1. Em **Settings → Builds**, apague o comando e salve; ou  
+2. Regenerar o token: **My Profile → API Tokens → Create Token** → template **Edit Cloudflare Workers** (inclui Pages) → substituir o token do projeto em **Settings → Builds → API token**.
+
+O nome em `wrangler.toml` (`name`) deve ser igual ao nome do projeto no Cloudflare (`suportetecnico-api`).
 
 ### Variaveis de ambiente
 
