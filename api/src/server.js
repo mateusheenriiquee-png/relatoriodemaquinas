@@ -3,6 +3,7 @@ const cors = require("cors");
 const { db, admin } = require("./firebase-admin");
 const { normalizeText } = require("./normalize");
 const { prepareWebhookRecords } = require("./webhook-shared");
+const { upsertSheetRow, deleteSheetRow, clearSheet } = require("./sheets");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -87,6 +88,97 @@ app.post("/webhook/suportes", async (req, res) => {
   }
 });
 
+function isSheetsAuthorized(req) {
+  const token = (req.headers["x-sync-token"] || "").toString();
+  const expected = (process.env.SHEETS_SYNC_TOKEN || "").toString();
+  // If no token configured, allow requests (useful for local/dev). If configured, require match.
+  if (!expected) return true;
+  return token && token === expected;
+}
+
+app.post("/sheets/upsert", async (req, res) => {
+  if (!isSheetsAuthorized(req)) return res.status(401).json({ ok: false, error: "Nao autorizado." });
+  const doc = req.body?.doc;
+  if (!doc || !doc.id) return res.status(400).json({ ok: false, error: "doc com id necessario." });
+  try {
+    const spreadsheetId = process.env.SHEETS_SPREADSHEET_ID;
+    const sheetName = process.env.SHEETS_SHEET_NAME || "Sheet1";
+    const serviceAccountRaw = process.env.SHEETS_SERVICE_ACCOUNT || process.env.FIREBASE_SERVICE_ACCOUNT;
+    await upsertSheetRow({ serviceAccountRaw, spreadsheetId, sheetName, doc });
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: String(err?.message || err) });
+  }
+});
+
+app.post("/sheets/delete", async (req, res) => {
+  if (!isSheetsAuthorized(req)) return res.status(401).json({ ok: false, error: "Nao autorizado." });
+  const docId = req.body?.docId;
+  if (!docId) return res.status(400).json({ ok: false, error: "docId requerido." });
+  try {
+    const spreadsheetId = process.env.SHEETS_SPREADSHEET_ID;
+    const sheetName = process.env.SHEETS_SHEET_NAME || "Sheet1";
+    const serviceAccountRaw = process.env.SHEETS_SERVICE_ACCOUNT || process.env.FIREBASE_SERVICE_ACCOUNT;
+    await deleteSheetRow({ serviceAccountRaw, spreadsheetId, sheetName, docId });
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: String(err?.message || err) });
+  }
+});
+
+app.post("/sheets/clear", async (req, res) => {
+  if (!isSheetsAuthorized(req)) return res.status(401).json({ ok: false, error: "Nao autorizado." });
+  try {
+    const spreadsheetId = process.env.SHEETS_SPREADSHEET_ID;
+    const sheetName = process.env.SHEETS_SHEET_NAME || "Sheet1";
+    const serviceAccountRaw = process.env.SHEETS_SERVICE_ACCOUNT || process.env.FIREBASE_SERVICE_ACCOUNT;
+    await clearSheet({ serviceAccountRaw, spreadsheetId, sheetName });
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: String(err?.message || err) });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Webhook API rodando em http://localhost:${PORT}`);
 });
+
+// Start Firestore real-time listener to sync changes to Google Sheets
+function startFirestoreSync() {
+  const collectionName = process.env.FIRESTORE_COLLECTION || "suportes_tecnicos";
+  const spreadsheetId = process.env.SHEETS_SPREADSHEET_ID;
+  const sheetName = process.env.SHEETS_SHEET_NAME || "Sheet1";
+  const serviceAccountRaw = process.env.SHEETS_SERVICE_ACCOUNT || process.env.FIREBASE_SERVICE_ACCOUNT;
+
+  if (!spreadsheetId || !serviceAccountRaw) {
+    console.log("Sheets sync disabled: missing SHEETS_SPREADSHEET_ID or SHEETS_SERVICE_ACCOUNT");
+    return;
+  }
+
+  const coll = db.collection(collectionName);
+  coll.onSnapshot(
+    (snapshot) => {
+      (async () => {
+        for (const change of snapshot.docChanges()) {
+          try {
+            const docId = change.doc.id;
+            const data = change.doc.data() || {};
+            if (change.type === "added" || change.type === "modified") {
+              const docForSheet = { id: docId, ...data };
+              await upsertSheetRow({ serviceAccountRaw, spreadsheetId, sheetName, doc: docForSheet });
+            } else if (change.type === "removed") {
+              await deleteSheetRow({ serviceAccountRaw, spreadsheetId, sheetName, docId });
+            }
+          } catch (err) {
+            console.error("Failed to sync change to sheet:", err?.message || err);
+          }
+        }
+      })();
+    },
+    (err) => {
+      console.error("Firestore listener error:", err?.message || err);
+    }
+  );
+}
+
+startFirestoreSync();

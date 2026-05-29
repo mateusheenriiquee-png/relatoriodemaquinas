@@ -60,6 +60,8 @@ let excluirIdPendente = null;
 let excluirTudoPendente = false;
 
 const norm = (v) => String(v || "").trim().replace(/\s+/g, " ");
+
+// Sheets sync: handled server-side via Firestore listener
 function normStatus(v) {
   const s = norm(v).toUpperCase();
   if (STATUS_OPTIONS.includes(s)) return s;
@@ -310,17 +312,6 @@ function abrirModalExcluir(item) {
   modalExcluir.classList.remove("hidden");
 }
 
-function abrirModalExcluirTudo() {
-  excluirIdPendente = null;
-  excluirTudoPendente = true;
-  modalExcluirDetalhes.textContent = "Todos os registros do suporte serão excluídos permanentemente.";
-  document.getElementById("modalExcluirTitulo").textContent = "Excluir todos os suportes?";
-  document.querySelector(".modal-confirm-text").textContent = "Esta ação não pode ser desfeita. Todos os registros serão removidos permanentemente.";
-  btnConfirmarExclusao.disabled = false;
-  btnConfirmarExclusao.textContent = "Excluir tudo";
-  modalExcluir.classList.remove("hidden");
-}
-
 function fecharModalExcluir() {
   excluirIdPendente = null;
   excluirTudoPendente = false;
@@ -337,6 +328,7 @@ async function excluirTodosRegistros() {
     snapshot.docs.forEach((docSnap) => batch.delete(doc(db, COLLECTION, docSnap.id)));
     await batch.commit();
     if (snapshot.size < limite) break;
+  }
   }
 }
 
@@ -359,7 +351,6 @@ async function confirmarExclusao() {
 }
 
 document.getElementById("btnAdicionar").addEventListener("click", abrirModalAdicionar);
-document.getElementById("btnExcluirTudo").addEventListener("click", abrirModalExcluirTudo);
 document.getElementById("btnRecarregar").addEventListener("click", carregar);
 document.getElementById("btnFecharModal").addEventListener("click", fecharModal);
 btnCancelarExclusao.addEventListener("click", fecharModalExcluir);
