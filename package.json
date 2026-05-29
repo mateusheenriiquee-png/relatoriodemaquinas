@@ -7,7 +7,7 @@
     "start": "node api/src/server.js",
     "dev": "node api/src/server.js",
     "pages:dev": "wrangler pages dev public",
-    "cf:deploy": "wrangler pages deploy public --project-name=suportetecnico-api",
+    "cf:deploy": "node scripts/cf-pages-deploy.js",
     "test": "echo \"No tests configured\""
   },
   "devDependencies": {
