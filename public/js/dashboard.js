@@ -172,21 +172,22 @@ function destroyChart(id) {
 
 const THEME = {
   primary: "#c079f7",
-  primaryDark: "#4f2770",
-  primaryLight: "#fff7ed",
-  primarySoft: "#ffedd5",
-  muted: "#78716c",
-  text: "#1c1917",
-  statusAberto: "#ef4444",
-  statusAndamento: "#3b82f6",
-  statusFinalizado: "#22c55e",
-  statusReagendado: "#8b5cf6",
-  statusSemRetorno: "#78716c"
+  primaryDark: "#9333ea",
+  primaryNeon: "#e879f9",
+  primaryLight: "rgba(192, 121, 247, 0.35)",
+  primarySoft: "rgba(168, 85, 247, 0.5)",
+  muted: "#9b8fb8",
+  text: "#eee8f8",
+  statusAberto: "#f87171",
+  statusAndamento: "#60a5fa",
+  statusFinalizado: "#4ade80",
+  statusReagendado: "#c084fc",
+  statusSemRetorno: "#a8a29e"
 };
-const BAR_COLORS = [THEME.primary, THEME.primaryDark];
-const palette = [THEME.primary, "#f97316", "#fb923c", "#fdba74", THEME.primarySoft, THEME.primaryDark, "#f59e0b", "#fed7aa"];
+const BAR_COLORS = [THEME.primary, THEME.primaryNeon, THEME.primaryDark, "#a855f7"];
+const palette = [THEME.primary, THEME.primaryNeon, "#a855f7", "#d946ef", THEME.primaryDark, "#7c3aed", "#c084fc", "#e879f9"];
 const chartText = THEME.muted;
-const chartGrid = "rgba(139, 92, 246, 0.15)";
+const chartGrid = "rgba(168, 85, 247, 0.22)";
 
 function getBarColors(count) {
   return Array.from({ length: count }, (_, index) => BAR_COLORS[index % BAR_COLORS.length]);
@@ -291,7 +292,7 @@ function renderCharts(dados) {
       labels: ["Fin.", "Pend."],
       datasets: [{
         data: [finalizados, naoFinalizados],
-        backgroundColor: [THEME.statusFinalizado, "#f4c024"],
+        backgroundColor: [THEME.statusFinalizado, THEME.primaryNeon],
         borderWidth: 0
       }]
     },

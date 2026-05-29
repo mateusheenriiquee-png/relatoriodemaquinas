@@ -6,7 +6,11 @@
   "scripts": {
     "start": "node api/src/server.js",
     "dev": "node api/src/server.js",
+    "pages:dev": "wrangler pages dev public",
     "test": "echo \"No tests configured\""
+  },
+  "engines": {
+    "node": ">=18"
   },
   "repository": {
     "type": "git",
