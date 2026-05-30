@@ -1,4 +1,4 @@
-import {
+﻿import {
   addDoc,
   collection,
   deleteDoc,
@@ -59,16 +59,16 @@ const btnConfirmarExclusao = document.getElementById("btnConfirmarExclusao");
 let excluirIdPendente = null;
 let excluirTudoPendente = false;
 
-// In-page notification helper (replaces native alert popups)
 function showNotification(message, type = "info", timeout = 2500) {
   try {
-    // Create a centered modal using existing modal styles so it matches the app look
     const existing = document.getElementById("inpageNotificationModal");
     if (existing) existing.remove();
+
     const modalWrap = document.createElement("div");
     modalWrap.id = "inpageNotificationModal";
     modalWrap.className = "modal";
     modalWrap.setAttribute("role", "dialog");
+    modalWrap.style.zIndex = "1200";
 
     const inner = document.createElement("div");
     inner.className = "modal-content modal-confirm";
@@ -88,12 +88,12 @@ function showNotification(message, type = "info", timeout = 2500) {
     const actions = document.createElement("div");
     actions.className = "modal-confirm-actions";
 
-    const btnCancel = document.createElement("button");
-    btnCancel.className = "btn btn-ghost";
-    btnCancel.textContent = "OK";
-    btnCancel.addEventListener("click", () => modalWrap.remove());
+    const btnOk = document.createElement("button");
+    btnOk.className = "btn btn-ghost";
+    btnOk.textContent = "OK";
+    btnOk.addEventListener("click", () => modalWrap.remove());
 
-    actions.appendChild(btnCancel);
+    actions.appendChild(btnOk);
     inner.appendChild(icon);
     inner.appendChild(title);
     inner.appendChild(p);
@@ -101,11 +101,15 @@ function showNotification(message, type = "info", timeout = 2500) {
     modalWrap.appendChild(inner);
     document.body.appendChild(modalWrap);
 
-    // also allow clicking backdrop to close
-    modalWrap.addEventListener("click", (e) => { if (e.target === modalWrap) modalWrap.remove(); });
+    modalWrap.addEventListener("click", (e) => {
+      if (e.target === modalWrap) modalWrap.remove();
+    });
 
-    // Auto-close for non-error messages after timeout
-    if (type !== "error" && timeout > 0) setTimeout(() => { modalWrap.remove(); }, timeout);
+    if (type !== "error" && timeout > 0) {
+      setTimeout(() => {
+        modalWrap.remove();
+      }, timeout);
+    }
   } catch (err) {
     try { alert(message); } catch (e) { /* ignore */ }
   }
@@ -113,7 +117,6 @@ function showNotification(message, type = "info", timeout = 2500) {
 
 const norm = (v) => String(v || "").trim().replace(/\s+/g, " ");
 
-// Sheets sync: handled server-side via Firestore listener
 function normStatus(v) {
   const s = norm(v).toUpperCase();
   if (STATUS_OPTIONS.includes(s)) return s;
@@ -381,7 +384,7 @@ async function excluirTodosRegistros() {
     await batch.commit();
     if (snapshot.size < limite) break;
   }
-  }
+}
 
 async function confirmarExclusao() {
   if (!excluirIdPendente && !excluirTudoPendente) return;
@@ -400,27 +403,6 @@ async function confirmarExclusao() {
     showNotification(err.message || "Nao foi possivel concluir a exclusao.", "error", 3500);
   }
 }
-
-document.getElementById("btnAdicionar").addEventListener("click", abrirModalAdicionar);
-document.getElementById("btnRecarregar").addEventListener("click", carregar);
-document.getElementById("btnFecharModal").addEventListener("click", fecharModal);
-btnCancelarExclusao.addEventListener("click", fecharModalExcluir);
-btnConfirmarExclusao.addEventListener("click", confirmarExclusao);
-modalExcluir.addEventListener("click", (e) => {
-  if (e.target === modalExcluir) fecharModalExcluir();
-});
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && !modalExcluir.classList.contains("hidden")) {
-    fecharModalExcluir();
-  }
-});
-document.getElementById("btnPrevPage").addEventListener("click", () => { state.paginaAtual -= 1; render(); });
-document.getElementById("btnNextPage").addEventListener("click", () => { state.paginaAtual += 1; render(); });
-filtroStatusEl.addEventListener("change", (e) => { state.filtroStatus = e.target.value; state.paginaAtual = 1; render(); });
-filtroAcEl.addEventListener("change", (e) => { state.filtroAc = e.target.value; state.paginaAtual = 1; render(); });
-filtroTecnicoEl.addEventListener("change", (e) => { state.filtroTecnico = e.target.value; state.paginaAtual = 1; render(); });
-filtroCpfCnpjEl.addEventListener("input", (e) => { state.filtroCpfCnpj = e.target.value.trim(); state.paginaAtual = 1; render(); });
-filtroProtocoloEl.addEventListener("input", (e) => { state.filtroProtocolo = e.target.value.trim(); state.paginaAtual = 1; render(); });
 
 function buildPayloadFromForm(modo) {
   const put = (target, key, value) => {
@@ -497,5 +479,26 @@ tbody.addEventListener("click", async (e) => {
     showNotification(err.message || "Nao foi possivel concluir a operacao.", "error", 3500);
   }
 });
+
+document.getElementById("btnAdicionar").addEventListener("click", abrirModalAdicionar);
+document.getElementById("btnRecarregar").addEventListener("click", carregar);
+document.getElementById("btnFecharModal").addEventListener("click", fecharModal);
+btnCancelarExclusao.addEventListener("click", fecharModalExcluir);
+btnConfirmarExclusao.addEventListener("click", confirmarExclusao);
+modalExcluir.addEventListener("click", (e) => {
+  if (e.target === modalExcluir) fecharModalExcluir();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !modalExcluir.classList.contains("hidden")) {
+    fecharModalExcluir();
+  }
+});
+document.getElementById("btnPrevPage").addEventListener("click", () => { state.paginaAtual -= 1; render(); });
+document.getElementById("btnNextPage").addEventListener("click", () => { state.paginaAtual += 1; render(); });
+filtroStatusEl.addEventListener("change", (e) => { state.filtroStatus = e.target.value; state.paginaAtual = 1; render(); });
+filtroAcEl.addEventListener("change", (e) => { state.filtroAc = e.target.value; state.paginaAtual = 1; render(); });
+filtroTecnicoEl.addEventListener("change", (e) => { state.filtroTecnico = e.target.value; state.paginaAtual = 1; render(); });
+filtroCpfCnpjEl.addEventListener("input", (e) => { state.filtroCpfCnpj = e.target.value.trim(); state.paginaAtual = 1; render(); });
+filtroProtocoloEl.addEventListener("input", (e) => { state.filtroProtocolo = e.target.value.trim(); state.paginaAtual = 1; render(); });
 
 iniciarAtualizacaoTempoReal();
