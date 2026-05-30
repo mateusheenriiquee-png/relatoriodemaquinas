@@ -330,7 +330,6 @@ async function excluirTodosRegistros() {
     if (snapshot.size < limite) break;
   }
   }
-}
 
 async function confirmarExclusao() {
   if (!excluirIdPendente && !excluirTudoPendente) return;
