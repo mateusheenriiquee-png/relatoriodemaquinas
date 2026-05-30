@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Suporte Tecnico</title>
+  <link rel="stylesheet" href="./css/main.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div>
+        <h1>Suporte Tecnico</h1>
+      </div>
+      <div class="actions">
+        <a href="./dashboard.html" class="btn btn-dashboard">Dashboard</a>
+        <button id="btnAdicionar" class="btn btn-primary">+ Novo Suporte</button>
+        <button id="btnRecarregar" class="btn btn-ghost">Atualizar Lista</button>
+        <button id="btnExportar" class="btn btn-export">⬇ Exportar CSV</button>
+      </div>
+    </header>
+
+    <section class="toolbar">
+      <div class="field">
+        <label for="filtroStatus">Status do suporte</label>
+        <select id="filtroStatus">
+          <option value="todos">Todos</option>
+          <option value="EM ABERTO">EM ABERTO</option>
+          <option value="EM ANDAMENTO">EM ANDAMENTO</option>
+          <option value="FINALIZADO">FINALIZADO</option>
+          <option value="REAGENDADO">REAGENDADO</option>
+          <option value="SEM RETORNO">SEM RETORNO</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="filtroAc">AC</label>
+        <select id="filtroAc">
+          <option value="todos">Todos</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="filtroTecnico">Tecnico Responsavel</label>
+        <select id="filtroTecnico">
+          <option value="todos">Todos</option>
+          <option value="MATHEUS">MATHEUS</option>
+          <option value="HENRIQUE">HENRIQUE</option>
+          <option value="VICTOR">VICTOR</option>
+          <option value="ISABELE">ISABELE</option>
+          <option value="MALU">MALU</option>
+          <option value="AGNY">AGNY</option>
+          <option value="IANCA">IANCA</option>
+          <option value="EMYLE">EMYLE</option>
+          <option value="VINICIUS">VINICIUS</option>
+          <option value="JUNIOR">JUNIOR</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="filtroCpfCnpj">CPF/CNPJ</label>
+        <input id="filtroCpfCnpj" type="text" placeholder="Digite CPF ou CNPJ">
+      </div>
+      <div class="field">
+        <label for="filtroProtocolo">Protocolo</label>
+        <input id="filtroProtocolo" type="text" placeholder="Digite o protocolo">
+      </div>
+    </section>
+
+    <section class="stats">
+      <div class="stat-card"><span>Total</span><strong id="statTotal">0</strong></div>
+      <div class="stat-card"><span>Em aberto</span><strong id="statAbertos">0</strong></div>
+      <div class="stat-card"><span>Em andamento</span><strong id="statAndamento">0</strong></div>
+      <div class="stat-card"><span>Finalizados</span><strong id="statFinalizados">0</strong></div>
+    </section>
+
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Data/Hora</th>
+            <th>Resp. Abertura</th>
+            <th>Protocolo</th>
+            <th>CPF/CNPJ</th>
+            <th>Tipo</th>
+            <th>AC</th>
+            <th>Contato/Grupo</th>
+            <th>Descrição</th>
+            <th>Sit. Atendimento</th>
+            <th>Tecnico</th>
+            <th>Status Abertura</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+
+    <footer class="table-footer">
+      <span id="paginationInfo">Mostrando 0 de 0</span>
+      <div class="pagination-actions">
+        <button id="btnPrevPage" class="btn btn-ghost btn-small">Anterior</button>
+        <button id="btnNextPage" class="btn btn-ghost btn-small">Proxima</button>
+      </div>
+    </footer>
+  </div>
+
+  <div id="modalExportar" class="modal hidden" role="dialog" aria-labelledby="modalExportarTitulo" aria-modal="true">
+    <div class="modal-content modal-export">
+      <div class="modal-header">
+        <h2 id="modalExportarTitulo">Exportar CSV</h2>
+        <button id="btnFecharExportar" class="btn btn-ghost btn-small" type="button">Fechar</button>
+      </div>
+      <p class="modal-export-text">Selecione o período dos suportes que deseja exportar. Deixe em branco para exportar todos.</p>
+      <div class="modal-export-fields">
+        <div class="field">
+          <label for="exportDataInicio">Data inicial</label>
+          <input id="exportDataInicio" type="date">
+        </div>
+        <div class="field">
+          <label for="exportDataFim">Data final</label>
+          <input id="exportDataFim" type="date">
+        </div>
+      </div>
+      <p id="exportResumo" class="modal-export-resumo hidden"></p>
+      <div class="modal-confirm-actions">
+        <button id="btnCancelarExportar" class="btn btn-ghost" type="button">Cancelar</button>
+        <button id="btnConfirmarExportar" class="btn btn-export" type="button">Exportar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalExcluir" class="modal hidden" role="dialog" aria-labelledby="modalExcluirTitulo" aria-modal="true">
+    <div class="modal-content modal-confirm">
+      <div class="modal-confirm-icon" aria-hidden="true">!</div>
+      <h2 id="modalExcluirTitulo">Excluir suporte?</h2>
+      <p class="modal-confirm-text">Esta ação não pode ser desfeita. O registro será removido permanentemente.</p>
+      <p id="modalExcluirDetalhes" class="modal-confirm-details"></p>
+      <div class="modal-confirm-actions">
+        <button id="btnCancelarExclusao" class="btn btn-ghost" type="button">Cancelar</button>
+        <button id="btnConfirmarExclusao" class="btn btn-danger" type="button">Excluir</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalSuporte" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modalTitulo">Novo Suporte</h2>
+        <button id="btnFecharModal" class="btn btn-ghost btn-small" type="button">Fechar</button>
+      </div>
+      <form id="formSuporte" class="modal-form">
+        <div class="field"><label for="modalProtocolo">Protocolo</label><input id="modalProtocolo" maxlength="80" placeholder="Opcional"></div>
+        <div class="field"><label for="modalResponsavelAbertura">Responsavel da abertura</label><input id="modalResponsavelAbertura" maxlength="120"></div>
+        <div class="field"><label for="modalCpfCnpj">CPF/CNPJ</label><input id="modalCpfCnpj" maxlength="32"></div>
+        <div class="field">
+          <label for="modalTipo">Tipo</label>
+          <select id="modalTipo">
+            <option value="Suporte tecnico">Suporte tecnico</option>
+            <option value="Instalção">Instalação</option>
+            <option value="Configuração de Maquina">Configuração de Maquina</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="modalAc">AC</label>
+          <select id="modalAc">
+            <option value="CONSULTI">CONSULTI</option>
+            <option value="VALID">VALID</option>
+          </select>
+        </div>
+        <div class="field"><label for="modalContato">Contato ou grupo</label><input id="modalContato" maxlength="120"></div>
+        <div class="field"><label for="modalDescricao">Descrição</label><input id="modalDescricao" maxlength="240"></div>
+        <div class="field">
+          <label for="modalTecnico">Tecnico responsavel</label>
+          <select id="modalTecnico">
+            <option value="MATHEUS">MATHEUS</option>
+            <option value="HENRIQUE">HENRIQUE</option>
+            <option value="VICTOR">VICTOR</option>
+            <option value="ISABELE">ISABELE</option>
+            <option value="MALU">MALU</option>
+            <option value="AGNY">AGNY</option>
+            <option value="IANCA">IANCA</option>
+            <option value="EMYLE">EMYLE</option>
+            <option value="VINICIUS">VINICIUS</option>
+            <option value="JUNIOR">JUNIOR</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="modalStatus">Situacao do atendimento</label>
+          <select id="modalStatus">
+            <option value="EM ABERTO">EM ABERTO</option>
+            <option value="EM ANDAMENTO">EM ANDAMENTO</option>
+            <option value="FINALIZADO">FINALIZADO</option>
+            <option value="REAGENDADO">REAGENDADO</option>
+            <option value="SEM RETORNO">SEM RETORNO</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="modalStatusAbertura">Status da abertura</label>
+          <select id="modalStatusAbertura">
+            <option value="DEVIDO">Devido</option>
+            <option value="INDEVIDO">indevido</option>
+          </select>
+        </div>
+        <div class="field"><label for="modalDataAbertura">Carimbo de data/hora</label><input id="modalDataAbertura" type="datetime-local"></div>
+        <input id="modalIdAtual" type="hidden">
+        <div class="modal-actions">
+          <button id="btnSalvarModal" class="btn btn-primary" type="submit">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="./js/app.js"></script>
+  <script type="module" src="./js/services/import-export.js"></script>
+</body>
+</html>
