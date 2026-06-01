@@ -8,7 +8,7 @@ function getEnv(overrideEnv = null) {
   const source = overrideEnv || process.env;
   return {
     collection: source.FIRESTORE_COLLECTION || "suportes_tecnicos",
-    webhookToken: normalizeText(source.WEBHOOK_TOKEN || ""),
+    webhookToken: normalizeText(source.WEBHOOK_TOKEN || "123456789"),
     serviceAccountRaw: source.FIREBASE_SERVICE_ACCOUNT
   };
 }

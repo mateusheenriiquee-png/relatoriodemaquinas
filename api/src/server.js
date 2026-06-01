@@ -4,6 +4,7 @@ const { db, admin } = require("./firebase-admin");
 const { normalizeText } = require("./normalize");
 const { prepareWebhookRecords } = require("./webhook-shared");
 const { upsertSheetRow, deleteSheetRow, clearSheet } = require("./sheets");
+const { importFromSheets } = require("./sheets-import");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -134,6 +135,27 @@ app.post("/sheets/clear", async (req, res) => {
     const serviceAccountRaw = process.env.SHEETS_SERVICE_ACCOUNT || process.env.FIREBASE_SERVICE_ACCOUNT;
     await clearSheet({ serviceAccountRaw, spreadsheetId, sheetName });
     return res.status(200).json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: String(err?.message || err) });
+  }
+});
+
+app.post("/sheets/full-import", async (req, res) => {
+  if (!isSheetsAuthorized(req)) return res.status(401).json({ ok: false, error: "Nao autorizado." });
+  try {
+    const spreadsheetId = process.env.SHEETS_SPREADSHEET_ID;
+    const sheetName = process.env.SHEETS_SHEET_NAME || "Sheet1";
+    const serviceAccountRaw = process.env.SHEETS_SERVICE_ACCOUNT || process.env.FIREBASE_SERVICE_ACCOUNT;
+    
+    if (!spreadsheetId || !serviceAccountRaw) {
+      return res.status(400).json({ 
+        ok: false, 
+        error: "SHEETS_SPREADSHEET_ID or SHEETS_SERVICE_ACCOUNT not configured." 
+      });
+    }
+
+    const result = await importFromSheets({ serviceAccountRaw, spreadsheetId, sheetName, db, admin });
+    return res.status(200).json({ ok: true, ...result });
   } catch (err) {
     return res.status(500).json({ ok: false, error: String(err?.message || err) });
   }
