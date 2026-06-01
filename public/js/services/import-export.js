@@ -9,7 +9,9 @@ import {
 import { db } from "../config/firebase.js";
 
 const COLLECTION = "suportes_tecnicos";
-const IGNORED_FIELDS = new Set(["observacao", "observacao do tecnico", "observacao do técnico"]);
+// No CSV vindo do Forms, "OBSERVAÇÃO" é a descrição do atendimento.
+// Mantemos apenas os campos que não devem virar colunas principais.
+const IGNORED_FIELDS = new Set(["observacao do tecnico", "observacao do técnico"]);
 const BATCH_SIZE = 400;
 
 let XLSX_LIB = null;
@@ -66,7 +68,8 @@ const FIELD_ALIASES = {
   status: ["status", "sit. atendimento", "situacao atendimento", "situacao", "situação", "coluna 8"],
   statusAbertura: ["status da abertura", "status abertura"],
   dataAbertura: ["data abertura", "data de abertura", "abertura", "created at", "data", "carimbo de data/hora", "carimbo de data hora"],
-  descricao: ["descricao", "descrição", "description", "descricao do problema", "descrição do problema"]
+  descricao: ["descricao", "descrição", "description", "descricao do problema", "descrição do problema", "observacao", "observação"],
+  observacaoTecnico: ["observacao do tecnico", "observacao do técnico"]
 };
 
 function findField(row, key) {
@@ -77,6 +80,15 @@ function findField(row, key) {
     if (aliases.includes(normalizedHeader)) return value;
   }
   return "";
+}
+
+function digitsOnly(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function looksLikeCpfCnpj(value) {
+  const d = digitsOnly(value);
+  return d.length === 11 || d.length === 14;
 }
 
 function sanitizeDocId(value, fallbackKey) {
@@ -125,11 +137,19 @@ function parseRows(rows) {
         ac: norm(findField(row, "ac")) || "Não informado",
         contato: norm(findField(row, "contato")),
         descricao: norm(findField(row, "descricao")),
+        observacaoTecnico: norm(findField(row, "observacaoTecnico")),
         tecnico: norm(findField(row, "tecnico")) || "Não atribuído",
         status: mapStatus(findField(row, "status")),
         statusAbertura: norm(findField(row, "statusAbertura")),
         dataAbertura: normalizeDateTime(findField(row, "dataAbertura"))
       };
+
+      // Alguns registros colocam CPF/CNPJ dentro de "OBSERVAÇÃO".
+      if (!record.cpfCnpj && looksLikeCpfCnpj(record.descricao)) {
+        record.cpfCnpj = digitsOnly(record.descricao);
+        record.descricao = "";
+      }
+
       return { ...record, docId: buildDocId(record, rowIndex) };
     })
     .filter((row) => row.protocolo || row.cpfCnpj || row.contato);
