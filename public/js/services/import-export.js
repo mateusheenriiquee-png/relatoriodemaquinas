@@ -102,26 +102,27 @@ function sanitizeDocId(value, fallbackKey) {
   return `import_${fallbackKey}_${Math.random().toString(36).slice(2, 11)}`;
 }
 
+// Gera IDs determinísticos para reduzir sobrescrita quando o CSV
+// tem múltiplas linhas para o mesmo protocolo.
+function normalizeIdPart(value) {
+  return norm(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
 function buildDocId(record, rowIndex) {
-  const proto = norm(record.protocolo);
-  if (proto) {
-    const fromProto = proto
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-z0-9]+/g, "_");
-    return sanitizeDocId(fromProto, `row${rowIndex}`);
-  }
-  const parts = [record.cpfCnpj, record.dataAbertura]
-    .map((v) =>
-      norm(v)
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "_")
-    )
+  const keyParts = [record.protocolo, record.cpfCnpj, record.dataAbertura]
+    .map((v) => normalizeIdPart(v))
     .filter(Boolean);
-  if (parts.length) {
-    return sanitizeDocId(`support_${parts.join("_")}`, `row${rowIndex}`);
+
+  if (keyParts.length) {
+    return sanitizeDocId(`support_${keyParts.join("_")}`, `row${rowIndex}`);
   }
+
+  // Fallback raro: quando a linha não tem protocolo/cpf/data.
   return sanitizeDocId("", `row${rowIndex}`);
 }
 
@@ -152,7 +153,9 @@ function parseRows(rows) {
 
       return { ...record, docId: buildDocId(record, rowIndex) };
     })
-    .filter((row) => row.protocolo || row.cpfCnpj || row.contato);
+    // Não filtramos por protocolo/cpf/contato para não perder registros.
+    // Se não houver protocolo, o docId é gerado via fallback (único por linha).
+    ;
 }
 
 function parseCSVText(text) {
