@@ -127,7 +127,7 @@ function buildDocId(record, rowIndex) {
 }
 
 function parseRows(rows) {
-  return rows
+  const parsed = rows
     .filter((row) => Object.values(row).some((v) => norm(v)))
     .map((row, rowIndex) => {
       const record = {
@@ -156,51 +156,45 @@ function parseRows(rows) {
     // Não filtramos por protocolo/cpf/contato para não perder registros.
     // Se não houver protocolo, o docId é gerado via fallback (único por linha).
     ;
+
+  // Evita duplicatas exatas que podem surgir em exports de CSV.
+  const seen = new Set();
+  return parsed.filter((r) => {
+    const signature = [
+      r.protocolo,
+      r.responsavelAbertura,
+      r.cpfCnpj,
+      r.tipo,
+      r.ac,
+      r.contato,
+      r.descricao,
+      r.observacaoTecnico,
+      r.tecnico,
+      r.status,
+      r.statusAbertura,
+      r.dataAbertura
+    ]
+      .map((v) => norm(v))
+      .join("|");
+    if (seen.has(signature)) return false;
+    seen.add(signature);
+    return true;
+  });
 }
 
-function parseCSVText(text) {
-  const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
-  function parseLine(line) {
-    const cols = [];
-    let cur = "";
-    let inQ = false;
-    for (let i = 0; i < line.length; i += 1) {
-      const ch = line[i];
-      if (inQ) {
-        if (ch === '"' && line[i + 1] === '"') {
-          cur += '"';
-          i += 1;
-        } else if (ch === '"') {
-          inQ = false;
-        } else {
-          cur += ch;
-        }
-      } else if (ch === '"') {
-        inQ = true;
-      } else if (ch === "," || ch === ";") {
-        cols.push(cur);
-        cur = "";
-      } else {
-        cur += ch;
-      }
-    }
-    cols.push(cur);
-    return cols;
-  }
-  const headerLine = lines.find((line) => line.trim());
-  if (!headerLine) return [];
-  const headers = parseLine(headerLine);
-  return lines
-    .slice(lines.indexOf(headerLine) + 1)
-    .filter((line) => line.trim())
-    .map((line) => {
-      const cols = parseLine(line);
-      const obj = {};
-      headers.forEach((h, i) => {
-        obj[h] = cols[i] !== undefined ? cols[i] : "";
-      });
-      return obj;
-    });
+async function parseCSVFile(arrayBuffer) {
+  const XLSX = await getXLSX();
+  const wb = XLSX.read(arrayBuffer, {
+    type: "array",
+    raw: false,
+    cellDates: false
+  });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(ws, {
+    defval: "",
+    blankrows: false,
+    raw: false
+  });
 }
 
 async function getXLSX() {
@@ -410,8 +404,7 @@ async function processarArquivoImport(file) {
     const name = (file.name || "").toLowerCase();
     let rows = [];
     if (name.endsWith(".csv")) {
-      const text = await file.text();
-      rows = parseCSVText(text);
+      rows = await parseCSVFile(await file.arrayBuffer());
     } else if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
       rows = await parseXLSXFile(await file.arrayBuffer());
     } else {
