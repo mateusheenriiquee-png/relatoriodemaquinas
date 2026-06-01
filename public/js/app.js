@@ -12,6 +12,7 @@
   writeBatch
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 import { db } from "./config/firebase.js";
+import { syncDocToSheet, deleteDocFromSheet } from "./services/sheets-sync.js";
 
 const STATUS_OPTIONS = ["EM ABERTO", "EM ANDAMENTO", "FINALIZADO", "SEM RETORNO", "REAGENDADO"];
 const PAGE_SIZE = 10;
@@ -386,6 +387,18 @@ async function excluirTodosRegistros() {
   }
 }
 
+async function syncToSheet(id, data) {
+  try {
+    await syncDocToSheet(id, data);
+  } catch (err) {
+    showNotification(
+      `Salvo no sistema, mas a planilha não foi atualizada: ${err.message || err}`,
+      "error",
+      4500
+    );
+  }
+}
+
 async function confirmarExclusao() {
   if (!excluirIdPendente && !excluirTudoPendente) return;
   btnConfirmarExclusao.disabled = true;
@@ -394,7 +407,9 @@ async function confirmarExclusao() {
     if (excluirTudoPendente) {
       await excluirTodosRegistros();
     } else {
-      await deleteDoc(doc(db, COLLECTION, excluirIdPendente));
+      const docId = excluirIdPendente;
+      await deleteDoc(doc(db, COLLECTION, docId));
+      await deleteDocFromSheet(docId);
     }
     fecharModalExcluir();
   } catch (err) {
@@ -448,10 +463,27 @@ formSuporte.addEventListener("submit", async (e) => {
   }
   try {
     if (state.modalModo === "adicionar") {
-      await addDoc(collection(db, COLLECTION), { ...payload, createdAt: serverTimestamp() });
+      const ref = await addDoc(collection(db, COLLECTION), {
+        ...payload,
+        createdAt: serverTimestamp()
+      });
+      const docData = {
+        ...payload,
+        id: ref.id,
+        createdAt: payload.dataAbertura || new Date().toISOString()
+      };
+      await syncToSheet(ref.id, docData);
       showNotification("Suporte adicionado com sucesso.", "success", 2200);
     } else {
-      await updateDoc(doc(db, COLLECTION, modalIdAtual.value), payload);
+      const docId = modalIdAtual.value;
+      const atual = state.registros.find((r) => r.id === docId) || {};
+      await updateDoc(doc(db, COLLECTION, docId), payload);
+      await syncToSheet(docId, {
+        ...atual,
+        ...payload,
+        id: docId,
+        dataAbertura: atual.dataAbertura || payload.dataAbertura
+      });
       showNotification("Suporte atualizado com sucesso.", "success", 2200);
     }
     fecharModal();

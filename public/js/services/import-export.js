@@ -1,15 +1,16 @@
 import {
-  addDoc,
   collection,
   deleteDoc,
   doc,
   getDocs,
-  serverTimestamp
+  serverTimestamp,
+  writeBatch
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 import { db } from "../config/firebase.js";
 
 const COLLECTION = "suportes_tecnicos";
 const IGNORED_FIELDS = new Set(["observacao", "observacao do tecnico", "observacao do técnico"]);
+const BATCH_SIZE = 400;
 
 let XLSX_LIB = null;
 let pendingImportRecords = [];
@@ -64,7 +65,8 @@ const FIELD_ALIASES = {
   tecnico: ["tecnico", "tecnico responsavel", "responsavel tecnico", "analista"],
   status: ["status", "sit. atendimento", "situacao atendimento", "situacao", "situação", "coluna 8"],
   statusAbertura: ["status da abertura", "status abertura"],
-  dataAbertura: ["data abertura", "data de abertura", "abertura", "created at", "data"]
+  dataAbertura: ["data abertura", "data de abertura", "abertura", "created at", "data", "carimbo de data/hora", "carimbo de data hora"],
+  descricao: ["descricao", "descrição", "description", "descricao do problema", "descrição do problema"]
 };
 
 function findField(row, key) {
@@ -77,22 +79,48 @@ function findField(row, key) {
   return "";
 }
 
+function buildDocId(record) {
+  const proto = norm(record.protocolo);
+  if (proto) {
+    return proto
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 200);
+  }
+  const parts = [record.cpfCnpj, record.dataAbertura]
+    .map((v) =>
+      norm(v)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+    )
+    .filter(Boolean);
+  if (parts.length) return `support_${parts.join("_")}`.slice(0, 200);
+  return `import_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
 function parseRows(rows) {
   return rows
     .filter((row) => Object.values(row).some((v) => norm(v)))
-    .map((row) => ({
-      protocolo: norm(findField(row, "protocolo")),
-      responsavelAbertura: norm(findField(row, "responsavelAbertura")),
-      cpfCnpj: norm(findField(row, "cpfCnpj")),
-      tipo: norm(findField(row, "tipo")),
-      ac: norm(findField(row, "ac")),
-      contato: norm(findField(row, "contato")),
-      tecnico: norm(findField(row, "tecnico")),
-      status: mapStatus(findField(row, "status")),
-      statusAbertura: norm(findField(row, "statusAbertura")),
-      dataAbertura: normalizeDateTime(findField(row, "dataAbertura"))
-    }))
-    .filter((row) => row.protocolo || row.cliente || row.cpfCnpj);
+    .map((row) => {
+      const record = {
+        protocolo: norm(findField(row, "protocolo")),
+        responsavelAbertura: norm(findField(row, "responsavelAbertura")) || "Não informado",
+        cpfCnpj: norm(findField(row, "cpfCnpj")),
+        tipo: norm(findField(row, "tipo")) || "Não informado",
+        ac: norm(findField(row, "ac")) || "Não informado",
+        contato: norm(findField(row, "contato")),
+        descricao: norm(findField(row, "descricao")),
+        tecnico: norm(findField(row, "tecnico")) || "Não atribuído",
+        status: mapStatus(findField(row, "status")),
+        statusAbertura: norm(findField(row, "statusAbertura")),
+        dataAbertura: normalizeDateTime(findField(row, "dataAbertura"))
+      };
+      return { ...record, docId: buildDocId(record) };
+    })
+    .filter((row) => row.protocolo || row.cpfCnpj || row.contato);
 }
 
 function parseCSVText(text) {
@@ -133,7 +161,9 @@ function parseCSVText(text) {
     .map((line) => {
       const cols = parseLine(line);
       const obj = {};
-      headers.forEach((h, i) => { obj[h] = cols[i] !== undefined ? cols[i] : ""; });
+      headers.forEach((h, i) => {
+        obj[h] = cols[i] !== undefined ? cols[i] : "";
+      });
       return obj;
     });
 }
@@ -175,27 +205,56 @@ function showPreview(records) {
   const infoEl = document.getElementById("importPreviewInfo");
   const tableEl = document.getElementById("importPreviewTable");
   const preview = records.slice(0, 5);
-  infoEl.textContent = `${records.length} registro(s) encontrados. Pre-visualizacao (primeiros 5):`;
+  infoEl.textContent = `${records.length} registro(s) encontrados. Pré-visualização (primeiros 5):`;
   tableEl.innerHTML = `
-    <thead><tr><th>Protocolo</th><th>Resp. Abertura</th><th>CPF/CNPJ</th><th>AC</th><th>Tecnico</th><th>Sit. Atendimento</th></tr></thead>
-    <tbody>${preview.map((r) => `<tr><td>${r.protocolo || "-"}</td><td>${r.responsavelAbertura || "-"}</td><td>${r.cpfCnpj || "-"}</td><td>${r.ac || "-"}</td><td>${r.tecnico || "-"}</td><td>${r.status}</td></tr>`).join("")}</tbody>
+    <thead><tr><th>Protocolo</th><th>Resp. Abertura</th><th>CPF/CNPJ</th><th>AC</th><th>Técnico</th><th>Sit. Atendimento</th></tr></thead>
+    <tbody>${preview
+      .map(
+        (r) =>
+          `<tr><td>${r.protocolo || "-"}</td><td>${r.responsavelAbertura || "-"}</td><td>${r.cpfCnpj || "-"}</td><td>${r.ac || "-"}</td><td>${r.tecnico || "-"}</td><td>${r.status}</td></tr>`
+      )
+      .join("")}</tbody>
   `;
   previewArea.classList.remove("hidden");
   hideStatus();
 }
 
+async function deleteAllRecords() {
+  const limite = 500;
+  while (true) {
+    const snap = await getDocs(collection(db, COLLECTION));
+    if (snap.empty) break;
+    const batch = writeBatch(db);
+    snap.docs.slice(0, limite).forEach((docSnap) => batch.delete(doc(db, COLLECTION, docSnap.id)));
+    await batch.commit();
+    if (snap.size <= limite) break;
+  }
+}
+
 async function writeToFirestore(records, mode) {
   if (mode === "substituir") {
     showStatus("Excluindo registros existentes...", "loading");
-    const snap = await getDocs(collection(db, COLLECTION));
-    await Promise.all(snap.docs.map((d) => deleteDoc(doc(db, COLLECTION, d.id))));
+    await deleteAllRecords();
   }
+
   showStatus(`Salvando ${records.length} registro(s)...`, "loading");
-  await Promise.all(records.map((r) => addDoc(collection(db, COLLECTION), {
-    ...r,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp()
-  })));
+  for (let i = 0; i < records.length; i += BATCH_SIZE) {
+    const chunk = records.slice(i, i + BATCH_SIZE);
+    const batch = writeBatch(db);
+    chunk.forEach(({ docId, ...fields }) => {
+      batch.set(
+        doc(db, COLLECTION, docId),
+        {
+          ...fields,
+          origemIntegracao: "import-csv",
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        },
+        { merge: true }
+      );
+    });
+    await batch.commit();
+  }
 }
 
 function resolverDataExport(data = {}) {
@@ -249,7 +308,7 @@ async function exportCSV(dataInicio = "", dataFim = "") {
     return 0;
   }
 
-  const headers = ["dataAbertura", "responsavelAbertura", "protocolo", "tipo", "ac", "contato", "status", "tecnico", "statusAbertura", "cpfCnpj"];
+  const headers = ["dataAbertura", "responsavelAbertura", "protocolo", "tipo", "ac", "contato", "descricao", "status", "tecnico", "statusAbertura", "cpfCnpj"];
   const escape = (v) => `"${String(v || "").replace(/"/g, '""')}"`;
   const csv = [
     headers.join(","),
@@ -275,6 +334,18 @@ async function exportCSV(dataInicio = "", dataFim = "") {
   return filtrados.length;
 }
 
+function abrirModalImportar() {
+  pendingImportRecords = [];
+  document.getElementById("importPreviewArea").classList.add("hidden");
+  document.getElementById("inputImportFile").value = "";
+  hideStatus();
+  document.getElementById("modalImportar").classList.remove("hidden");
+}
+
+function fecharModalImportar() {
+  document.getElementById("modalImportar").classList.add("hidden");
+}
+
 function abrirModalExportar() {
   const modal = document.getElementById("modalExportar");
   const inicio = document.getElementById("exportDataInicio");
@@ -294,12 +365,78 @@ function fecharModalExportar() {
   document.getElementById("modalExportar").classList.add("hidden");
 }
 
+async function processarArquivoImport(file) {
+  if (!file) return;
+  showStatus("Lendo arquivo...", "loading");
+  try {
+    const name = (file.name || "").toLowerCase();
+    let rows = [];
+    if (name.endsWith(".csv")) {
+      const text = await file.text();
+      rows = parseCSVText(text);
+    } else if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
+      rows = await parseXLSXFile(await file.arrayBuffer());
+    } else {
+      throw new Error("Formato não suportado. Use CSV ou XLSX.");
+    }
+
+    const records = parseRows(rows);
+    if (!records.length) {
+      showStatus("Nenhum registro válido encontrado no arquivo.", "error");
+      return;
+    }
+    showPreview(records);
+  } catch (err) {
+    showStatus(err.message || "Erro ao ler o arquivo.", "error");
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
+  const btnImportar = document.getElementById("btnImportar");
   const btnExportar = document.getElementById("btnExportar");
+  const btnConfirmarImportar = document.getElementById("btnConfirmarImportar");
   const btnConfirmarExportar = document.getElementById("btnConfirmarExportar");
   const btnCancelarExportar = document.getElementById("btnCancelarExportar");
   const btnFecharExportar = document.getElementById("btnFecharExportar");
+  const btnFecharImportar = document.getElementById("btnFecharImportar");
   const modalExportar = document.getElementById("modalExportar");
+  const modalImportar = document.getElementById("modalImportar");
+  const inputImportFile = document.getElementById("inputImportFile");
+
+  if (btnImportar) {
+    btnImportar.addEventListener("click", abrirModalImportar);
+    btnFecharImportar?.addEventListener("click", fecharModalImportar);
+    modalImportar?.addEventListener("click", (e) => {
+      if (e.target === modalImportar) fecharModalImportar();
+    });
+    inputImportFile?.addEventListener("change", (e) => {
+      const file = e.target.files?.[0];
+      processarArquivoImport(file);
+    });
+    btnConfirmarImportar?.addEventListener("click", async () => {
+      if (!pendingImportRecords.length) {
+        showStatus("Selecione um arquivo antes de importar.", "error");
+        return;
+      }
+      const mode = document.querySelector('input[name="importMode"]:checked')?.value || "adicionar";
+      try {
+        btnConfirmarImportar.disabled = true;
+        btnConfirmarImportar.textContent = "Importando...";
+        await writeToFirestore(pendingImportRecords, mode);
+        showStatus(`${pendingImportRecords.length} registro(s) importado(s) com sucesso.`, "success");
+        setTimeout(() => {
+          fecharModalImportar();
+          window.dispatchEvent(new CustomEvent("suportes-importados"));
+        }, 1200);
+      } catch (err) {
+        showStatus(err.message || "Erro ao importar.", "error");
+      } finally {
+        btnConfirmarImportar.disabled = false;
+        btnConfirmarImportar.textContent = "Importar";
+      }
+    });
+  }
+
   if (!btnExportar || !btnConfirmarExportar) return;
 
   btnExportar.addEventListener("click", abrirModalExportar);

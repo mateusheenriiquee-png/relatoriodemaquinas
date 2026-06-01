@@ -16,6 +16,7 @@
         <a href="./dashboard.html" class="btn btn-dashboard">Dashboard</a>
         <button id="btnAdicionar" class="btn btn-primary">+ Novo Suporte</button>
         <button id="btnRecarregar" class="btn btn-ghost">Atualizar Lista</button>
+        <button id="btnImportar" class="btn btn-import" type="button">⬆ Importar CSV</button>
         <button id="btnExportar" class="btn btn-export">⬇ Exportar CSV</button>
       </div>
     </header>
@@ -100,6 +101,36 @@
         <button id="btnNextPage" class="btn btn-ghost btn-small">Proxima</button>
       </div>
     </footer>
+  </div>
+
+  <div id="modalImportar" class="modal hidden" role="dialog" aria-labelledby="modalImportarTitulo" aria-modal="true">
+    <div class="modal-content modal-import-content">
+      <div class="modal-header">
+        <h2 id="modalImportarTitulo">Importar CSV / Excel</h2>
+        <button id="btnFecharImportar" class="btn btn-ghost btn-small" type="button">Fechar</button>
+      </div>
+      <div class="import-option-card">
+        <div class="import-option-body">
+          <p>Arquivo com cabeçalho na primeira linha (CSV ou XLSX). Colunas reconhecidas: protocolo, responsável, CPF/CNPJ, contato, tipo, AC, técnico, situação, data, descrição.</p>
+          <label class="btn btn-import" for="inputImportFile">Escolher arquivo</label>
+          <input id="inputImportFile" class="hidden-input" type="file" accept=".csv,.xlsx,.xls,text/csv">
+        </div>
+      </div>
+      <div id="importPreviewArea" class="import-preview hidden">
+        <p id="importPreviewInfo"></p>
+        <div class="import-preview-scroll">
+          <table id="importPreviewTable" class="import-preview-table"></table>
+        </div>
+        <div class="import-actions-row">
+          <div class="import-mode-group">
+            <label><input type="radio" name="importMode" value="adicionar" checked> Adicionar aos existentes</label>
+            <label><input type="radio" name="importMode" value="substituir"> Substituir todos os registros</label>
+          </div>
+          <button id="btnConfirmarImportar" class="btn btn-primary" type="button">Importar</button>
+        </div>
+      </div>
+      <p id="importStatusMsg" class="import-status hidden"></p>
+    </div>
   </div>
 
   <div id="modalExportar" class="modal hidden" role="dialog" aria-labelledby="modalExportarTitulo" aria-modal="true">
