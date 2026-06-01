@@ -79,16 +79,26 @@ function findField(row, key) {
   return "";
 }
 
-function buildDocId(record) {
+function sanitizeDocId(value, fallbackKey) {
+  const id = String(value || "")
+    .replace(/\//g, "_")
+    .replace(/\s+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 200);
+  if (id) return id;
+  return `import_${fallbackKey}_${Math.random().toString(36).slice(2, 11)}`;
+}
+
+function buildDocId(record, rowIndex) {
   const proto = norm(record.protocolo);
   if (proto) {
-    return proto
+    const fromProto = proto
       .toLowerCase()
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-z0-9]+/g, "_")
-      .replace(/^_+|_+$/g, "")
-      .slice(0, 200);
+      .replace(/[^a-z0-9]+/g, "_");
+    return sanitizeDocId(fromProto, `row${rowIndex}`);
   }
   const parts = [record.cpfCnpj, record.dataAbertura]
     .map((v) =>
@@ -97,14 +107,16 @@ function buildDocId(record) {
         .replace(/[^a-z0-9]+/g, "_")
     )
     .filter(Boolean);
-  if (parts.length) return `support_${parts.join("_")}`.slice(0, 200);
-  return `import_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  if (parts.length) {
+    return sanitizeDocId(`support_${parts.join("_")}`, `row${rowIndex}`);
+  }
+  return sanitizeDocId("", `row${rowIndex}`);
 }
 
 function parseRows(rows) {
   return rows
     .filter((row) => Object.values(row).some((v) => norm(v)))
-    .map((row) => {
+    .map((row, rowIndex) => {
       const record = {
         protocolo: norm(findField(row, "protocolo")),
         responsavelAbertura: norm(findField(row, "responsavelAbertura")) || "Não informado",
@@ -118,7 +130,7 @@ function parseRows(rows) {
         statusAbertura: norm(findField(row, "statusAbertura")),
         dataAbertura: normalizeDateTime(findField(row, "dataAbertura"))
       };
-      return { ...record, docId: buildDocId(record) };
+      return { ...record, docId: buildDocId(record, rowIndex) };
     })
     .filter((row) => row.protocolo || row.cpfCnpj || row.contato);
 }
@@ -241,7 +253,10 @@ async function writeToFirestore(records, mode) {
   for (let i = 0; i < records.length; i += BATCH_SIZE) {
     const chunk = records.slice(i, i + BATCH_SIZE);
     const batch = writeBatch(db);
-    chunk.forEach(({ docId, ...fields }) => {
+    chunk.forEach((record, chunkIndex) => {
+      const { docId: rawDocId, ...fields } = record;
+      const docId = sanitizeDocId(rawDocId, `b${i + chunkIndex}`);
+      if (!docId) return;
       batch.set(
         doc(db, COLLECTION, docId),
         {
