@@ -1,11 +1,85 @@
 import admin from "firebase-admin";
 
-// Inicializar Firebase Admin SDK se ainda não estiver
+/**
+ * Parse da variável de ambiente FIREBASE_SERVICE_ACCOUNT
+ * Trata diferentes formatos (JSON string, escapado, com quebras de linha, etc)
+ */
+function parseServiceAccount(raw) {
+  if (!raw) return null;
+
+  try {
+    let serviceAccount;
+    
+    if (typeof raw === "string") {
+      // Se for string, tentar fazer parse JSON
+      // Primeiro, substitui quebras de linha escapadas
+      const cleaned = raw
+        .replace(/\\n/g, "\n")   // Converte \n literal para quebra real
+        .replace(/\\t/g, "\t")   // Converte \t literal para tab real
+        .replace(/\\"/g, '"');   // Converte \" literal para aspas reais
+      
+      serviceAccount = JSON.parse(cleaned);
+    } else {
+      serviceAccount = raw;
+    }
+
+    // Validar que tem os campos essenciais
+    if (!serviceAccount.project_id || !serviceAccount.private_key || !serviceAccount.client_email) {
+      console.error("[Firebase] Service account inválido - campos:", Object.keys(serviceAccount));
+      console.error("[Firebase] Faltam:", {
+        project_id: !serviceAccount.project_id,
+        private_key: !serviceAccount.private_key,
+        client_email: !serviceAccount.client_email
+      });
+      return null;
+    }
+
+    console.log("[Firebase] ✓ Service account parseado com sucesso");
+    console.log("[Firebase] Project ID:", serviceAccount.project_id);
+    console.log("[Firebase] Client Email:", serviceAccount.client_email);
+
+    return serviceAccount;
+  } catch (error) {
+    console.error("[Firebase] Erro ao parsear service account:", error.message);
+    console.error("[Firebase] Raw input tipo:", typeof raw);
+    console.error("[Firebase] Raw input length:", raw?.length);
+    return null;
+  }
+}
+
+// Inicializar Firebase Admin SDK
 if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || "{}")),
-    projectId: process.env.FIREBASE_PROJECT_ID || "suportetecnico-api"
-  });
+  const serviceAccountRaw = process.env.FIREBASE_SERVICE_ACCOUNT;
+  const projectId = process.env.FIREBASE_PROJECT_ID || "suportetecnico-api";
+
+  console.log("[Firebase] Inicializando Admin SDK...");
+  console.log("[Firebase] Project ID:", projectId);
+  console.log("[Firebase] Service Account disponível:", !!serviceAccountRaw);
+
+  if (!serviceAccountRaw) {
+    throw new Error(
+      "FIREBASE_SERVICE_ACCOUNT não está configurada. Configure no Cloudflare Dashboard."
+    );
+  }
+
+  const serviceAccount = parseServiceAccount(serviceAccountRaw);
+
+  if (!serviceAccount) {
+    throw new Error(
+      "Erro ao parsear FIREBASE_SERVICE_ACCOUNT. Verifique o formato JSON no Cloudflare."
+    );
+  }
+
+  try {
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+      projectId: projectId
+    });
+    console.log("[Firebase] ✓ Admin SDK inicializado com sucesso");
+  } catch (error) {
+    console.error("[Firebase] Erro ao inicializar:", error.message);
+    throw error;
+  }
 }
 
 const db = admin.firestore();
@@ -20,7 +94,7 @@ const db = admin.firestore();
  */
 export async function createUserInFirebase(email, password, displayName, cargo = "operador") {
   try {
-    console.log(`[Cloudflare] Criando novo usuário: ${email}`);
+    console.log(`[Firebase] Criando novo usuário: ${email}`);
 
     // Criar usuário em Firebase Authentication
     const userRecord = await admin.auth().createUser({
@@ -29,7 +103,7 @@ export async function createUserInFirebase(email, password, displayName, cargo =
       displayName: displayName || email
     });
 
-    console.log(`[Cloudflare] UID gerado: ${userRecord.uid}`);
+    console.log(`[Firebase] UID gerado: ${userRecord.uid}`);
 
     // Criar documento em Firestore
     const usuariosCollection = process.env.USUARIOS_COLLECTION || "usuarios";
@@ -42,7 +116,7 @@ export async function createUserInFirebase(email, password, displayName, cargo =
       updatedAt: new Date().toISOString()
     });
 
-    console.log(`[Cloudflare] Documento Firestore criado para ${userRecord.uid}`);
+    console.log(`[Firebase] Documento Firestore criado para ${userRecord.uid}`);
 
     return {
       ok: true,
@@ -50,7 +124,7 @@ export async function createUserInFirebase(email, password, displayName, cargo =
       message: `Usuário ${email} criado com sucesso!`
     };
   } catch (error) {
-    console.error(`[Cloudflare] Erro ao criar usuário: ${error.message}`);
+    console.error(`[Firebase] Erro ao criar usuário: ${error.message}`);
 
     let errorMessage = "Erro ao criar usuário.";
     if (error.code === "auth/email-already-exists") {
