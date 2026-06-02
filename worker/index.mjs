@@ -17,10 +17,27 @@ function isSheetsAuthorized(request, env) {
 }
 
 function getSheetsConfig(env) {
+  // Tentar primeiro FIREBASE_SERVICE_ACCOUNT_BASE64, depois fallback
+  const firebaseBase64 = env.FIREBASE_SERVICE_ACCOUNT_BASE64;
+  const firebaseRaw = env.FIREBASE_SERVICE_ACCOUNT;
+  const sheetsServiceAccount = env.SHEETS_SERVICE_ACCOUNT;
+  
+  let serviceAccountRaw = sheetsServiceAccount || firebaseBase64 || firebaseRaw;
+  let isBase64 = !sheetsServiceAccount && !!firebaseBase64;
+  
+  // Se for Base64, decodificar
+  if (isBase64 && serviceAccountRaw) {
+    try {
+      serviceAccountRaw = atob(serviceAccountRaw);
+    } catch (e) {
+      console.error("[Sheets] Erro ao decodificar Base64:", e.message);
+    }
+  }
+  
   return {
     spreadsheetId: env.SHEETS_SPREADSHEET_ID,
     sheetName: env.SHEETS_SHEET_NAME || "Sheet1",
-    serviceAccountRaw: env.SHEETS_SERVICE_ACCOUNT || env.FIREBASE_SERVICE_ACCOUNT
+    serviceAccountRaw
   };
 }
 

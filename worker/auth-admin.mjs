@@ -4,25 +4,38 @@ let adminApp = null;
 
 /**
  * Parse da variável de ambiente FIREBASE_SERVICE_ACCOUNT
+ * Suporta Base64 (FIREBASE_SERVICE_ACCOUNT_BASE64) ou JSON string direto
  * Trata diferentes formatos (JSON string, escapado, com quebras de linha, etc)
  */
-function parseServiceAccount(raw) {
+function parseServiceAccount(raw, isBase64 = false) {
   if (!raw) return null;
 
   try {
     let serviceAccount;
+    let jsonString = raw;
     
-    if (typeof raw === "string") {
+    // Se for Base64, decodificar primeiro
+    if (isBase64) {
+      try {
+        jsonString = atob(raw);
+        console.log("[Firebase] ✓ Base64 decodificado com sucesso");
+      } catch (e) {
+        console.error("[Firebase] Erro ao decodificar Base64:", e.message);
+        return null;
+      }
+    }
+    
+    if (typeof jsonString === "string") {
       // Se for string, tentar fazer parse JSON
       // Primeiro, substitui quebras de linha escapadas
-      const cleaned = raw
+      const cleaned = jsonString
         .replace(/\\n/g, "\n")   // Converte \n literal para quebra real
         .replace(/\\t/g, "\t")   // Converte \t literal para tab real
         .replace(/\\"/g, '"');   // Converte \" literal para aspas reais
       
       serviceAccount = JSON.parse(cleaned);
     } else {
-      serviceAccount = raw;
+      serviceAccount = jsonString;
     }
 
     // Validar que tem os campos essenciais
@@ -58,20 +71,26 @@ function initializeFirebaseAdmin() {
     return adminApp;
   }
 
+  // Tentar primeiro FIREBASE_SERVICE_ACCOUNT_BASE64, depois fallback para FIREBASE_SERVICE_ACCOUNT
+  const serviceAccountBase64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
   const serviceAccountRaw = process.env.FIREBASE_SERVICE_ACCOUNT;
+  const isBase64 = !!serviceAccountBase64;
+  const credentialToUse = serviceAccountBase64 || serviceAccountRaw;
+  
   const projectId = process.env.FIREBASE_PROJECT_ID || "suportetecnico-api";
 
   console.log("[Firebase] Inicializando Admin SDK...");
   console.log("[Firebase] Project ID:", projectId);
-  console.log("[Firebase] Service Account disponível:", !!serviceAccountRaw);
+  console.log("[Firebase] Using Base64:", isBase64);
+  console.log("[Firebase] Service Account disponível:", !!credentialToUse);
 
-  if (!serviceAccountRaw) {
-    const errorMsg = "❌ FIREBASE_SERVICE_ACCOUNT não está configurada. Configure no Cloudflare Dashboard → Settings → Environment variables.";
+  if (!credentialToUse) {
+    const errorMsg = "❌ FIREBASE_SERVICE_ACCOUNT ou FIREBASE_SERVICE_ACCOUNT_BASE64 não estão configuradas. Configure no Cloudflare Dashboard → Settings → Variables and Secrets.";
     console.error(errorMsg);
     throw new Error(errorMsg);
   }
 
-  const serviceAccount = parseServiceAccount(serviceAccountRaw);
+  const serviceAccount = parseServiceAccount(credentialToUse, isBase64);
 
   if (!serviceAccount) {
     const errorMsg = "❌ Erro ao parsear FIREBASE_SERVICE_ACCOUNT. Verifique o formato JSON no Cloudflare Dashboard.";
