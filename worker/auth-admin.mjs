@@ -112,6 +112,7 @@ export async function createUserInFirebase(email, password, displayName, cargo =
     const db = admin.firestore();
 
     console.log(`[Firebase] Criando novo usuário: ${email}`);
+    console.log(`[Firebase] Cargo: ${cargo}`);
 
     // Criar usuário em Firebase Authentication
     const userRecord = await admin.auth().createUser({
@@ -120,10 +121,12 @@ export async function createUserInFirebase(email, password, displayName, cargo =
       displayName: displayName || email
     });
 
-    console.log(`[Firebase] UID gerado: ${userRecord.uid}`);
+    console.log(`[Firebase] ✓ Auth user criado. UID: ${userRecord.uid}`);
 
     // Criar documento em Firestore
     const usuariosCollection = process.env.USUARIOS_COLLECTION || "usuarios";
+    console.log(`[Firebase] Salvando no Firestore - Coleção: ${usuariosCollection}`);
+
     await db.collection(usuariosCollection).doc(userRecord.uid).set({
       uid: userRecord.uid,
       email: email,
@@ -133,7 +136,7 @@ export async function createUserInFirebase(email, password, displayName, cargo =
       updatedAt: new Date().toISOString()
     });
 
-    console.log(`[Firebase] Documento Firestore criado para ${userRecord.uid}`);
+    console.log(`[Firebase] ✓ Documento Firestore criado para ${userRecord.uid}`);
 
     return {
       ok: true,
@@ -141,7 +144,9 @@ export async function createUserInFirebase(email, password, displayName, cargo =
       message: `Usuário ${email} criado com sucesso!`
     };
   } catch (error) {
-    console.error(`[Firebase] Erro ao criar usuário: ${error.message}`);
+    console.error(`[Firebase] ❌ Erro ao criar usuário:`, error);
+    console.error(`[Firebase] Código de erro:`, error.code);
+    console.error(`[Firebase] Mensagem:`, error.message);
 
     let errorMessage = "Erro ao criar usuário.";
     if (error.code === "auth/email-already-exists") {
@@ -150,6 +155,8 @@ export async function createUserInFirebase(email, password, displayName, cargo =
       errorMessage = "Email inválido.";
     } else if (error.code === "auth/weak-password") {
       errorMessage = "Senha muito fraca. Use pelo menos 6 caracteres.";
+    } else if (error.message?.includes("PERMISSION_DENIED")) {
+      errorMessage = "Sem permissão. Verifique as Firestore Rules.";
     }
 
     return {
