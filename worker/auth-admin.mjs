@@ -66,17 +66,17 @@ function initializeFirebaseAdmin() {
   console.log("[Firebase] Service Account disponível:", !!serviceAccountRaw);
 
   if (!serviceAccountRaw) {
-    throw new Error(
-      "FIREBASE_SERVICE_ACCOUNT não está configurada. Configure no Cloudflare Dashboard → Environment variables."
-    );
+    const errorMsg = "❌ FIREBASE_SERVICE_ACCOUNT não está configurada. Configure no Cloudflare Dashboard → Settings → Environment variables.";
+    console.error(errorMsg);
+    throw new Error(errorMsg);
   }
 
   const serviceAccount = parseServiceAccount(serviceAccountRaw);
 
   if (!serviceAccount) {
-    throw new Error(
-      "Erro ao parsear FIREBASE_SERVICE_ACCOUNT. Verifique o formato JSON no Cloudflare."
-    );
+    const errorMsg = "❌ Erro ao parsear FIREBASE_SERVICE_ACCOUNT. Verifique o formato JSON no Cloudflare Dashboard.";
+    console.error(errorMsg);
+    throw new Error(errorMsg);
   }
 
   try {
@@ -91,8 +91,9 @@ function initializeFirebaseAdmin() {
     console.log("[Firebase] ✓ Admin SDK inicializado com sucesso");
     return adminApp;
   } catch (error) {
-    console.error("[Firebase] Erro ao inicializar:", error.message);
-    throw error;
+    console.error("[Firebase] ❌ Erro ao inicializar:", error.message);
+    console.error("[Firebase] Stack:", error.stack);
+    throw new Error(`Erro ao inicializar Firebase: ${error.message}`);
   }
 }
 

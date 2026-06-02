@@ -102,6 +102,30 @@ export default {
       }
     }
 
+    // Endpoint para diagnóstico de Firebase
+    if (url.pathname === "/admin/health") {
+      try {
+        const hasFBServiceAccount = !!process.env.FIREBASE_SERVICE_ACCOUNT;
+        const hasFBProjectId = !!process.env.FIREBASE_PROJECT_ID;
+        const hasUsuariosCollection = !!process.env.USUARIOS_COLLECTION;
+
+        return jsonResponse(200, {
+          ok: true,
+          environment: {
+            FIREBASE_SERVICE_ACCOUNT: hasFBServiceAccount ? "✓ Configurada" : "✗ Faltando",
+            FIREBASE_PROJECT_ID: hasFBProjectId ? "✓ Configurada" : "✗ Faltando",
+            USUARIOS_COLLECTION: hasUsuariosCollection ? "✓ Configurada" : "✗ Faltando"
+          },
+          message: "Verifique se todas as variáveis estão ✓"
+        });
+      } catch (error) {
+        return jsonResponse(500, {
+          ok: false,
+          error: error.message
+        });
+      }
+    }
+
     // Endpoint para criar novo usuário via Cloudflare Worker
     if (url.pathname === "/admin/create-user") {
       if (request.method !== "POST") {
@@ -127,7 +151,7 @@ export default {
           return jsonResponse(400, result);
         }
       } catch (error) {
-        console.error("[Cloudflare] Erro:", error);
+        console.error("[Worker] Erro ao processar /admin/create-user:", error);
         return jsonResponse(500, {
           ok: false,
           error: "Erro ao processar requisição.",
