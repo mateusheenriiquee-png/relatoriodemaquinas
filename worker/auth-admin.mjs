@@ -1,5 +1,7 @@
 import admin from "firebase-admin";
 
+let adminApp = null;
+
 /**
  * Parse da variável de ambiente FIREBASE_SERVICE_ACCOUNT
  * Trata diferentes formatos (JSON string, escapado, com quebras de linha, etc)
@@ -47,8 +49,15 @@ function parseServiceAccount(raw) {
   }
 }
 
-// Inicializar Firebase Admin SDK
-if (!admin.apps.length) {
+/**
+ * Inicializa Firebase Admin SDK (lazy initialization)
+ * Chamado apenas quando necessário (primeira requisição)
+ */
+function initializeFirebaseAdmin() {
+  if (adminApp) {
+    return adminApp;
+  }
+
   const serviceAccountRaw = process.env.FIREBASE_SERVICE_ACCOUNT;
   const projectId = process.env.FIREBASE_PROJECT_ID || "suportetecnico-api";
 
@@ -58,7 +67,7 @@ if (!admin.apps.length) {
 
   if (!serviceAccountRaw) {
     throw new Error(
-      "FIREBASE_SERVICE_ACCOUNT não está configurada. Configure no Cloudflare Dashboard."
+      "FIREBASE_SERVICE_ACCOUNT não está configurada. Configure no Cloudflare Dashboard → Environment variables."
     );
   }
 
@@ -71,18 +80,21 @@ if (!admin.apps.length) {
   }
 
   try {
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
-      projectId: projectId
-    });
+    if (!admin.apps.length) {
+      adminApp = admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+        projectId: projectId
+      });
+    } else {
+      adminApp = admin.app();
+    }
     console.log("[Firebase] ✓ Admin SDK inicializado com sucesso");
+    return adminApp;
   } catch (error) {
     console.error("[Firebase] Erro ao inicializar:", error.message);
     throw error;
   }
 }
-
-const db = admin.firestore();
 
 /**
  * Criar novo usuário no Firebase Auth e Firestore
@@ -94,6 +106,10 @@ const db = admin.firestore();
  */
 export async function createUserInFirebase(email, password, displayName, cargo = "operador") {
   try {
+    // Inicializar Firebase (se não estiver já)
+    const app = initializeFirebaseAdmin();
+    const db = admin.firestore();
+
     console.log(`[Firebase] Criando novo usuário: ${email}`);
 
     // Criar usuário em Firebase Authentication
