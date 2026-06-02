@@ -1,5 +1,6 @@
 import { collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 import { db } from "./config/firebase.js";
+import { authManager } from "./auth.js";
 
 const COLLECTION = "suportes_tecnicos";
 const STATUS_FINALIZADO = "FINALIZADO";
@@ -581,6 +582,44 @@ document.getElementById("btnRecarregarDashboard").addEventListener("click", () =
 loadChartColorPrefs();
 syncChartColorInputs();
 bindChartColorControls();
+
+async function protegerPaginaDashboard() {
+  await authManager.initialize();
+
+  if (!authManager.isAuthenticated()) {
+    window.location.href = "./login.html";
+    return;
+  }
+
+  // Apenas admins podem acessar o dashboard
+  if (!authManager.isAdmin()) {
+    alert("Você não tem permissão para acessar o dashboard. Apenas administradores podem visualizar este relatório.");
+    window.location.href = "./index.html";
+    return;
+  }
+
+  const userDisplayName = authManager.getUserDisplayName();
+  const header = document.querySelector("header");
+  if (header) {
+    const actionsDiv = header.querySelector(".dashboard-actions");
+    if (actionsDiv) {
+      const userInfo = document.createElement("span");
+      userInfo.className = "user-info";
+      userInfo.innerHTML = `
+        <span style="margin-right: 12px;">👤 ${userDisplayName}</span>
+        <button id="btnLogoutDash" class="btn btn-ghost btn-small" style="margin: 0;">Logout</button>
+      `;
+      actionsDiv.appendChild(userInfo);
+
+      document.getElementById("btnLogoutDash").addEventListener("click", async () => {
+        await authManager.logout();
+        window.location.href = "./login.html";
+      });
+    }
+  }
+}
+
+protegerPaginaDashboard();
 
 carregar().catch((err) => {
   alert(`Erro ao carregar dashboard: ${String(err?.message || err || "")}`);

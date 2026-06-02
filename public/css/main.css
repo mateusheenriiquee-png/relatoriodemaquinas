@@ -811,3 +811,27 @@ tbody tr:last-child td { border-bottom: 0; }
     margin-top: 2px;
   }
 }
+
+/* Estilos para User Info e Autenticação */
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--card-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.btn-danger {
+  background: #dc2626;
+  color: white;
+  border-color: #b91c1c;
+}
+
+.btn-danger:hover {
+  background: #b91c1c;
+  box-shadow: 0 0 12px rgba(220, 38, 38, 0.3);
+}

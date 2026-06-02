@@ -125,6 +125,69 @@ app.post("/sheets/delete", async (req, res) => {
   }
 });
 
+// Endpoint para criar novo usuário (requer ser admin)
+app.post("/admin/create-user", async (req, res) => {
+  const { email, password, displayName, cargo } = req.body;
+
+  // Validação básica
+  if (!email || !password) {
+    return res.status(400).json({
+      ok: false,
+      error: "Email e senha são obrigatórios."
+    });
+  }
+
+  try {
+    console.log(`[Admin] Criando novo usuário: ${email}`);
+
+    // Criar usuário no Firebase Authentication
+    const userRecord = await admin.auth().createUser({
+      email,
+      password,
+      displayName: displayName || email
+    });
+
+    console.log(`[Admin] UID gerado: ${userRecord.uid}`);
+
+    // Criar documento na coleção "usuarios" do Firestore
+    const usuariosCollection = process.env.USUARIOS_COLLECTION || "usuarios";
+    await db.collection(usuariosCollection).doc(userRecord.uid).set({
+      uid: userRecord.uid,
+      email: email,
+      displayName: displayName || "",
+      cargo: cargo || "operador",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    console.log(`[Admin] Documento Firestore criado para ${userRecord.uid}`);
+
+    return res.status(201).json({
+      ok: true,
+      uid: userRecord.uid,
+      message: `Usuário ${email} criado com sucesso!`
+    });
+  } catch (error) {
+    console.error(`[Admin] Erro ao criar usuário: ${error.message}`);
+    
+    // Mapear erro específico do Firebase
+    let errorMessage = "Erro ao criar usuário.";
+    if (error.code === "auth/email-already-exists") {
+      errorMessage = "Este email já está cadastrado.";
+    } else if (error.code === "auth/invalid-email") {
+      errorMessage = "Email inválido.";
+    } else if (error.code === "auth/weak-password") {
+      errorMessage = "Senha muito fraca. Use pelo menos 6 caracteres.";
+    }
+
+    return res.status(400).json({
+      ok: false,
+      error: errorMessage,
+      details: error.message
+    });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Webhook API rodando em http://localhost:${PORT}`);
 });

@@ -3,6 +3,7 @@
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   limit,
   onSnapshot,
@@ -12,6 +13,7 @@
   writeBatch
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 import { db } from "./config/firebase.js";
+import { authManager } from "./auth.js";
 import { syncDocToSheet, deleteDocFromSheet } from "./services/sheets-sync.js";
 
 const STATUS_OPTIONS = ["EM ABERTO", "EM ANDAMENTO", "FINALIZADO", "SEM RETORNO", "REAGENDADO"];
@@ -170,7 +172,7 @@ function resolverDataAbertura(data = {}) {
 
 function configurarCamposModoEdicao(estaEditando) {
   modalProtocolo.disabled = estaEditando;
-  modalResponsavelAbertura.disabled = estaEditando;
+  modalResponsavelAbertura.disabled = true; // SEMPRE desabilitado (não deve ser editável)
   modalCpfCnpj.disabled = estaEditando;
   modalTipo.disabled = estaEditando;
   modalAc.disabled = estaEditando;
@@ -320,7 +322,6 @@ function abrirModalAdicionar() {
   configurarCamposModoEdicao(false);
   modalTitulo.textContent = "Novo Suporte";
   modalProtocolo.value = "";
-  modalResponsavelAbertura.value = "";
   modalCpfCnpj.value = "";
   modalTipo.value = "SUPORTE TECNICO";
   modalAc.value = "CONSULTI";
@@ -331,6 +332,14 @@ function abrirModalAdicionar() {
   modalStatusAbertura.value = "DEVIDO";
   modalDataAbertura.value = toDatetimeLocal(new Date().toISOString());
   modalIdAtual.value = "";
+  
+  // Preencher responsável com fallback síncrono
+  const userDisplayName = authManager.getUserDisplayName();
+  const email = authManager.getCurrentUser()?.email || "";
+  const responsavel = userDisplayName || (email ? email.split("@")[0] : "Responsável");
+  modalResponsavelAbertura.value = responsavel;
+  modalResponsavelAbertura.disabled = true;
+  
   modal.classList.remove("hidden");
 }
 
@@ -391,11 +400,8 @@ async function syncToSheet(id, data) {
   try {
     await syncDocToSheet(id, data);
   } catch (err) {
-    showNotification(
-      `Salvo no sistema, mas a planilha não foi atualizada: ${err.message || err}`,
-      "error",
-      4500
-    );
+    // Silenciosamente falha na sincronização com sheets (não mostra ao usuário)
+    console.warn("Sync com sheets falhou:", err.message);
   }
 }
 
@@ -533,4 +539,84 @@ filtroTecnicoEl.addEventListener("change", (e) => { state.filtroTecnico = e.targ
 filtroCpfCnpjEl.addEventListener("input", (e) => { state.filtroCpfCnpj = e.target.value.trim(); state.paginaAtual = 1; render(); });
 filtroProtocoloEl.addEventListener("input", (e) => { state.filtroProtocolo = e.target.value.trim(); state.paginaAtual = 1; render(); });
 
+async function protegerPagina() {
+  await authManager.initialize();
+
+  if (!authManager.isAuthenticated()) {
+    window.location.href = "./login.html";
+    return;
+  }
+
+  const userDisplayName = authManager.getUserDisplayName();
+  const isAdmin = authManager.isAdmin();
+  
+  const btnAdmin = document.getElementById("btnAdmin");
+  const btnDashboard = document.getElementById("btnDashboard");
+  
+  // Mostrar botões apenas para admins
+  if (btnAdmin && isAdmin) {
+    btnAdmin.style.display = "inline-block";
+  }
+  if (btnDashboard && isAdmin) {
+    btnDashboard.style.display = "inline-block";
+  }
+
+  const header = document.querySelector("header");
+  if (header) {
+    const userInfo = document.createElement("span");
+    userInfo.className = "user-info";
+    userInfo.innerHTML = `
+      <span style="margin-right: 12px;">👤 ${userDisplayName}</span>
+      <button id="btnLogout" class="btn btn-ghost btn-small" style="margin: 0;">Logout</button>
+    `;
+    const actions = header.querySelector(".actions");
+    if (actions) {
+      actions.appendChild(userInfo);
+    }
+
+    document.getElementById("btnLogout").addEventListener("click", async () => {
+      await authManager.logout();
+      window.location.href = "./login.html";
+    });
+  }
+}
+
+async function preencherResponsavelAbertura() {
+  try {
+    const uid = authManager.getCurrentUser()?.uid;
+    if (!uid) throw new Error("Sem UID");
+
+    // Busca do Firestore (sincronamente via await)
+    const userSnap = await getDoc(doc(db, "usuarios", uid));
+    const displayName = userSnap.exists() ? (userSnap.data().displayName || "") : "";
+    
+    // Se tiver displayName, usa
+    if (displayName) {
+      modalResponsavelAbertura.value = displayName;
+      modalResponsavelAbertura.disabled = true;
+      return;
+    }
+
+    // Fallback para email
+    const email = authManager.getCurrentUser()?.email || "";
+    const emailUser = email.split("@")[0] || "Responsável";
+    modalResponsavelAbertura.value = emailUser;
+    modalResponsavelAbertura.disabled = true;
+  } catch (err) {
+    // Se tudo falhar, usa email mesmo assim
+    const email = authManager.getCurrentUser()?.email || "";
+    const emailUser = email.split("@")[0] || "Responsável";
+    modalResponsavelAbertura.value = emailUser;
+    modalResponsavelAbertura.disabled = true;
+  }
+}
+
+const originalAbrirModalAdicionar = abrirModalAdicionar;
+abrirModalAdicionar = async function() {
+  originalAbrirModalAdicionar.call(this);
+  // Tenta melhorar o preenchimento com dados do Firestore
+  await preencherResponsavelAbertura();
+};
+
 iniciarAtualizacaoTempoReal();
+protegerPagina();
