@@ -34,11 +34,39 @@ export function parseServiceAccount(raw) {
   if (!raw) {
     throw new Error("FIREBASE_SERVICE_ACCOUNT nao configurada.");
   }
-  const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
-  if (parsed.private_key) {
-    parsed.private_key = parsed.private_key.replace(/\\n/g, "\n");
+  
+  try {
+    let jsonString = raw;
+    
+    // Verificar se é Base64
+    try {
+      const decoded = atob(raw);
+      // Se conseguir decodificar e for um JSON válido, usar o decodificado
+      JSON.parse(decoded);
+      jsonString = decoded;
+    } catch (e) {
+      // Não é Base64, usar direto
+    }
+    
+    // Remover caracteres de controle problemáticos
+    const cleaned = typeof jsonString === "string"
+      ? jsonString
+          .replace(/[\f\r\t\v\b]/g, "")  // Remove caracteres de controle
+          .replace(/\\n/g, "\n")
+          .replace(/\\t/g, "\t")
+          .replace(/\\"/g, '"')
+      : jsonString;
+    
+    const parsed = JSON.parse(cleaned);
+    
+    // Normalizar quebras de linha na private_key
+    if (parsed.private_key) {
+      parsed.private_key = parsed.private_key.replace(/\\n/g, "\n");
+    }
+    return parsed;
+  } catch (error) {
+    throw new Error("Erro ao parsear FIREBASE_SERVICE_ACCOUNT: " + error.message);
   }
-  return parsed;
 }
 
 async function signJwt(serviceAccount, scope) {

@@ -1,4 +1,4 @@
-import { APP_CONFIG } from "../config/app-config.js";
+/*import { APP_CONFIG } from "../config/app-config.js";
 
 function norm(value) {
   return String(value || "").trim();
@@ -62,4 +62,4 @@ export async function syncDocToSheet(id, data) {
 export async function deleteDocFromSheet(docId) {
   if (!docId) return;
   return postSheet("/sheets/delete", { docId });
-}
+}*/

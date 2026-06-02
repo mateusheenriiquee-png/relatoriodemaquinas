@@ -1,11 +1,17 @@
 import admin from "firebase-admin";
+import { normalizarCargo } from "./funcoes.mjs";
 
 let adminApp = null;
+let cachedEnv = null;
 
 /**
  * Parse da variável de ambiente FIREBASE_SERVICE_ACCOUNT
  * Suporta Base64 (FIREBASE_SERVICE_ACCOUNT_BASE64) ou JSON string direto
  * Trata diferentes formatos (JSON string, escapado, com quebras de linha, etc)
+ * 
+ * 📝 DICA: Para encodar JSON em Base64, use:
+ *   cat firebase-service-account.json | base64 -w0 > firebase-base64.txt (Linux/Mac)
+ *   ou no Node.js: console.log(Buffer.from(JSON.stringify(obj)).toString('base64'))
  */
 function parseServiceAccount(raw, isBase64 = false) {
   if (!raw) return null;
@@ -17,36 +23,58 @@ function parseServiceAccount(raw, isBase64 = false) {
     // Se for Base64, decodificar primeiro
     if (isBase64) {
       try {
-        jsonString = atob(raw);
+        // 🔧 Limpar caracteres de controle e espaços ANTES de usar atob()
+        const cleanedBase64 = raw
+          .replace(/[\s\n\r\t]/g, "")              // Remove quebras de linha, tabs, espaços
+          .replace(/[^A-Za-z0-9+/=]/g, "");       // Remove caracteres inválidos (segurança)
+        
+        jsonString = atob(cleanedBase64);
         console.log("[Firebase] ✓ Base64 decodificado com sucesso");
       } catch (e) {
-        console.error("[Firebase] Erro ao decodificar Base64:", e.message);
+        console.error("[Firebase] ❌ Erro ao decodificar Base64:", e.message);
+        console.error("[Firebase] Verifique se a string Base64 está correta e bem formatada");
         return null;
       }
     }
     
     if (typeof jsonString === "string") {
-      // Se for string, tentar fazer parse JSON
-      // Primeiro, substitui quebras de linha escapadas
+      // Remover caracteres de controle problemáticos (\f, \r sem \n, etc)
       const cleaned = jsonString
-        .replace(/\\n/g, "\n")   // Converte \n literal para quebra real
-        .replace(/\\t/g, "\t")   // Converte \t literal para tab real
-        .replace(/\\"/g, '"');   // Converte \" literal para aspas reais
+        .replace(/[\f\r\t\v\b]/g, "")  // Remove form feed, carriage return (sem newline), tab, etc
+        .replace(/\\n/g, "\n")          // Converte \n literal para newline real (para private_key)
+        .replace(/\\t/g, "\t")          // Converte \t literal para tab real
+        .replace(/\\"/g, '"')           // Converte \" literal para aspas
+        .trim();
       
-      serviceAccount = JSON.parse(cleaned);
+      try {
+        serviceAccount = JSON.parse(cleaned);
+      } catch (parseError) {
+        console.error("[Firebase] ❌ Erro ao parsear JSON:", parseError.message);
+        console.error("[Firebase] Raw length:", jsonString.length);
+        console.error("[Firebase] Primeiros 100 chars:", cleaned.substring(0, 100));
+        throw parseError;
+      }
     } else {
       serviceAccount = jsonString;
     }
 
     // Validar que tem os campos essenciais
     if (!serviceAccount.project_id || !serviceAccount.private_key || !serviceAccount.client_email) {
-      console.error("[Firebase] Service account inválido - campos:", Object.keys(serviceAccount));
-      console.error("[Firebase] Faltam:", {
+      console.error("[Firebase] ❌ Service account inválido");
+      console.error("[Firebase] Campos encontrados:", Object.keys(serviceAccount));
+      console.error("[Firebase] Campos faltando:", {
         project_id: !serviceAccount.project_id,
         private_key: !serviceAccount.private_key,
         client_email: !serviceAccount.client_email
       });
       return null;
+    }
+
+    // ✅ Normalizar private_key
+    if (serviceAccount.private_key) {
+      serviceAccount.private_key = serviceAccount.private_key
+        .replace(/\\n/g, "\n")  // Converter \n literal para quebra real
+        .trim();                 // Remover espaços extras
     }
 
     console.log("[Firebase] ✓ Service account parseado com sucesso");
@@ -55,7 +83,7 @@ function parseServiceAccount(raw, isBase64 = false) {
 
     return serviceAccount;
   } catch (error) {
-    console.error("[Firebase] Erro ao parsear service account:", error.message);
+    console.error("[Firebase] ❌ Erro ao parsear service account:", error.message);
     console.error("[Firebase] Raw input tipo:", typeof raw);
     console.error("[Firebase] Raw input length:", raw?.length);
     return null;
@@ -66,34 +94,35 @@ function parseServiceAccount(raw, isBase64 = false) {
  * Inicializa Firebase Admin SDK (lazy initialization)
  * Chamado apenas quando necessário (primeira requisição)
  */
-function initializeFirebaseAdmin() {
+function initializeFirebaseAdmin(env) {
   if (adminApp) {
     return adminApp;
   }
 
-  // Tentar primeiro FIREBASE_SERVICE_ACCOUNT_BASE64, depois fallback para FIREBASE_SERVICE_ACCOUNT
-  const serviceAccountBase64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
-  const serviceAccountRaw = process.env.FIREBASE_SERVICE_ACCOUNT;
-  const isBase64 = !!serviceAccountBase64;
-  const credentialToUse = serviceAccountBase64 || serviceAccountRaw;
+  // Tentar primeiro FIREBASE_SERVICE_ACCOUNT_BASE64, depois fallback
+  const firebaseBase64 = env?.FIREBASE_SERVICE_ACCOUNT_BASE64;
+  const firebaseRaw = env?.FIREBASE_SERVICE_ACCOUNT;
   
-  const projectId = process.env.FIREBASE_PROJECT_ID || "suportetecnico-api";
+  let serviceAccountRaw = firebaseBase64 || firebaseRaw;
+  let isBase64 = !!firebaseBase64;
+  
+  const projectId = env?.FIREBASE_PROJECT_ID || "suportetecnico-api";
 
   console.log("[Firebase] Inicializando Admin SDK...");
   console.log("[Firebase] Project ID:", projectId);
   console.log("[Firebase] Using Base64:", isBase64);
-  console.log("[Firebase] Service Account disponível:", !!credentialToUse);
+  console.log("[Firebase] Service Account disponível:", !!serviceAccountRaw);
 
-  if (!credentialToUse) {
+  if (!serviceAccountRaw) {
     const errorMsg = "❌ FIREBASE_SERVICE_ACCOUNT ou FIREBASE_SERVICE_ACCOUNT_BASE64 não estão configuradas. Configure no Cloudflare Dashboard → Settings → Variables and Secrets.";
     console.error(errorMsg);
     throw new Error(errorMsg);
   }
 
-  const serviceAccount = parseServiceAccount(credentialToUse, isBase64);
+  const serviceAccount = parseServiceAccount(serviceAccountRaw, isBase64);
 
   if (!serviceAccount) {
-    const errorMsg = "❌ Erro ao parsear FIREBASE_SERVICE_ACCOUNT. Verifique o formato JSON no Cloudflare Dashboard.";
+    const errorMsg = "❌ Erro ao parsear FIREBASE_SERVICE_ACCOUNT. Verifique o formato JSON ou Base64 no Cloudflare Dashboard.";
     console.error(errorMsg);
     throw new Error(errorMsg);
   }
@@ -122,16 +151,19 @@ function initializeFirebaseAdmin() {
  * @param {string} password
  * @param {string} displayName
  * @param {string} cargo
+ * @param {object} env - Variáveis de ambiente do Cloudflare
  * @returns {Promise<{ok: boolean, uid?: string, error?: string}>}
  */
-export async function createUserInFirebase(email, password, displayName, cargo = "operador") {
+export async function createUserInFirebase(email, password, displayName, cargo = "Operador", env = {}) {
   try {
     // Inicializar Firebase (se não estiver já)
-    const app = initializeFirebaseAdmin();
+    const app = initializeFirebaseAdmin(env);
     const db = admin.firestore();
 
     console.log(`[Firebase] Criando novo usuário: ${email}`);
     console.log(`[Firebase] Cargo: ${cargo}`);
+    
+    const cargoNormalizado = normalizarCargo(cargo);
 
     // Criar usuário em Firebase Authentication
     const userRecord = await admin.auth().createUser({
@@ -143,14 +175,14 @@ export async function createUserInFirebase(email, password, displayName, cargo =
     console.log(`[Firebase] ✓ Auth user criado. UID: ${userRecord.uid}`);
 
     // Criar documento em Firestore
-    const usuariosCollection = process.env.USUARIOS_COLLECTION || "usuarios";
+    const usuariosCollection = env?.USUARIOS_COLLECTION || "usuarios";
     console.log(`[Firebase] Salvando no Firestore - Coleção: ${usuariosCollection}`);
 
     await db.collection(usuariosCollection).doc(userRecord.uid).set({
       uid: userRecord.uid,
       email: email,
       displayName: displayName || "",
-      cargo: cargo || "operador",
+      cargo: cargoNormalizado,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
@@ -180,6 +212,65 @@ export async function createUserInFirebase(email, password, displayName, cargo =
 
     return {
       ok: false,
+      error: errorMessage,
+      details: error.message
+    };
+  }
+}
+
+/**
+ * Validar Firebase ID Token
+ * @param {string} token - Firebase ID Token
+ * @param {object} env - Variáveis de ambiente do Cloudflare
+ * @returns {Promise<{valid: boolean, uid?: string, email?: string, error?: string}>}
+ */
+export async function verifyFirebaseToken(token, env = {}) {
+  try {
+    if (!token) {
+      console.error(`[Firebase] ❌ Token não fornecido`);
+      return {
+        valid: false,
+        error: "Token não fornecido"
+      };
+    }
+
+    console.log(`[Firebase] Iniciando validação de token...`);
+    console.log(`[Firebase] Token preview: ${token.substring(0, 50)}...`);
+
+    // Inicializar Firebase (se não estiver já)
+    const app = initializeFirebaseAdmin(env);
+    console.log(`[Firebase] Admin SDK inicializado`);
+
+    // Verificar token com Firebase Admin SDK
+    console.log(`[Firebase] Chamando verifyIdToken...`);
+    const decodedToken = await admin.auth().verifyIdToken(token);
+
+    console.log(`[Firebase] ✅ Token validado com sucesso`);
+    console.log(`[Firebase] UID: ${decodedToken.uid}`);
+    console.log(`[Firebase] Email: ${decodedToken.email}`);
+    console.log(`[Firebase] Exp: ${new Date(decodedToken.exp * 1000).toISOString()}`);
+
+    return {
+      valid: true,
+      uid: decodedToken.uid,
+      email: decodedToken.email
+    };
+  } catch (error) {
+    console.error(`[Firebase] ❌ Erro ao validar token:`, error.message);
+    console.error(`[Firebase] Código de erro:`, error.code);
+    console.error(`[Firebase] Stack:`, error.stack);
+
+    let errorMessage = "Token inválido.";
+    if (error.code === "auth/id-token-expired") {
+      errorMessage = "Token expirado.";
+    } else if (error.code === "auth/id-token-revoked") {
+      errorMessage = "Token revogado.";
+    } else if (error.code === "auth/invalid-id-token") {
+      errorMessage = "Token inválido.";
+    }
+
+    return {
+      valid: false,
       error: errorMessage,
       details: error.message
     };

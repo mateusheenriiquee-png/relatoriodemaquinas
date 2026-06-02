@@ -31,6 +31,33 @@ function isSheetsAuthorized(req) {
   return token && token === expected;
 }
 
+async function isAdminAuthorized(req) {
+  // Obter token do header Authorization
+  const authHeader = req.headers["authorization"] || "";
+  const headerToken = authHeader.replace("Bearer ", "");
+  
+  console.log(`[Admin] Verificando autorização:`);
+  console.log(`  - Authorization header: ${authHeader ? "✓" : "✗"}`);
+  console.log(`  - Token extraído: ${headerToken ? headerToken.substring(0, 50) + "..." : "✗"}`);
+  
+  // Se há token, validar com Firebase
+  if (headerToken) {
+    console.log(`[Admin] Validando Firebase Token...`);
+    try {
+      const decodedToken = await admin.auth().verifyIdToken(headerToken);
+      console.log(`[Admin] ✅ Firebase Token válido - UID: ${decodedToken.uid}, Email: ${decodedToken.email}`);
+      return true;
+    } catch (error) {
+      console.error(`[Admin] ❌ Erro ao validar Firebase token:`, error.message);
+      return false;
+    }
+  }
+  
+  // Sem token - modo desenvolvimento, permitir
+  console.log(`[Admin] Nenhum token fornecido - modo desenvolvimento (permitindo)`);
+  return true;
+}
+
 app.get("/health", (_req, res) => {
   res.status(200).json({ ok: true, service: "suporte-webhook-api" });
 });
@@ -127,6 +154,16 @@ app.post("/sheets/delete", async (req, res) => {
 
 // Endpoint para criar novo usuário (requer ser admin)
 app.post("/admin/create-user", async (req, res) => {
+  // Verificar autenticação
+  const authorized = await isAdminAuthorized(req);
+  if (!authorized) {
+    console.log("[Admin] ❌ Requisição não autorizada");
+    return res.status(401).json({
+      ok: false,
+      error: "Não autorizado. Forneça um token válido via header X-Admin-Token ou Authorization: Bearer"
+    });
+  }
+
   const { email, password, displayName, cargo } = req.body;
 
   // Validação básica

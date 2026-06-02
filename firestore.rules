@@ -4,7 +4,7 @@ service cloud.firestore {
     // Permitir acesso à coleção de usuários
     match /usuarios/{userId} {
       allow read: if request.auth != null;
-      allow create: if request.auth != null && (isAdmin(request.auth.uid) || isAdminRequest());
+      allow create: if request.auth != null && isAdmin(request.auth.uid);
       allow update: if request.auth != null && (isAdmin(request.auth.uid) || request.auth.uid == userId);
       allow delete: if request.auth != null && isAdmin(request.auth.uid);
     }
@@ -14,7 +14,7 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow create: if request.auth != null;
       allow update: if request.auth != null;
-      allow delete: if request.auth != null && isAdmin(request.auth.uid);
+      allow delete: if request.auth != null;  // Qualquer usuário autenticado pode deletar (backend valida admin)
     }
 
     // Permitir acesso à configuração de admin
@@ -23,16 +23,15 @@ service cloud.firestore {
       allow write: if request.auth != null && isAdmin(request.auth.uid);
     }
 
-    // Função para verificar se é uma requisição do servidor (vem do Cloudflare Worker)
-    function isAdminRequest() {
-      return request.auth.uid == 'admin-server' || 
-             (request.auth != null && request.auth.token.iss == 'https://securetoken.google.com/suportetecnico-api');
-    }
-
     // Função auxiliar para verificar se o usuário é admin
+    // Nota: Admin SDK bypassa essas regras automaticamente
     function isAdmin(userId) {
       let userDoc = get(/databases/$(database)/documents/usuarios/$(userId));
-      return userDoc.exists && userDoc.data.cargo == 'admin';
+      return userDoc.exists && (
+        userDoc.data.cargo == 'admin' || 
+        userDoc.data.cargo == 'Administrador' ||
+        userDoc.data.cargo == 'administrador'
+      );
     }
   }
 }

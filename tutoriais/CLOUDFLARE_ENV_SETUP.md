@@ -1,0 +1,49 @@
+# 🔧 Configuração de Variáveis de Ambiente - Cloudflare Dashboard
+
+## ❌ Erro Atual
+```
+FIREBASE_SERVICE_ACCOUNT não está configurada. Configure no Cloudflare Dashboard
+```
+
+## ✅ Solução: 3 Passos
+
+### Passo 1: Copiar a Base64
+Copie este valor COMPLETO (3156 caracteres):
+
+```
+eyJ0eXBlIjoic2VydmljZV9hY2NvdW50IiwicHJvamVjdF9pZCI6InN1cG9ydGV0ZWNuaWNvLWFwaS05Mzg2YiIsInByaXZhdGVfa2V5X2lkIjoiY2MwZDc0OTU5NWEzOWVkMjEzNWU3NWJhYTczOTI5YTJiMmYyZmFjZSIsInByaXZhdGVfa2V5IjoiLS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tXG5NSUlFdlFJQkFEQU5CZ2txaGtpRzl3MEJBUUVGQUFTQ0JLY3dnZ1NqQWdFQUFvSUJBUURrSTFpNGRxZENIUE9RXG5XVjJ6RnNCV1JCQ3pUaURxaDlJbCswRlluZEVaL0dTRUpNS3FkVW1XUzVNdWVwZDRBNTkxWnMzcmxBa1RBVHVLXG43UEdEWHRURjZ6SmloeVk5d0dObVBuQ2FTc1VvTUFsMGhCTXkyNUh4ZS92bFNZZTRpNDdNWFcwZng1Z21HV3dEXG5CeXk4TnlLdDBVWk83MEJQR20xbkhaMXVZZjJmQ1Bqbi8rK0VicVFMNkxKNmdiMEszMU14MlloUFhLamgvMThBXG56dXErWGFQWnFZSHAwd0M3SWxNazcxOThONENpQU5GUmxIeTRHQ3RIDCY5cEhYeDJyUm9sQXpJUy9OQXFLSlVQeFhqQ3kyemJWWFhpcVhCK3hLWFRTM1lwTDc0ZWcrMHlsXG4wZzZuTDZGNzZSNjFZajZRbHc0VFNIOHA2eXE2NVJ2UlZkSElsSjNOVEFIWVJ4b3k3b3JVZHNxWHdCTzFCUzVGXG5aZDhJSGhDVElBMVlVdUFhR25NMEA0Tk44MzVHbGZCTndSeWxFNFEzNlFLQmdRRDRmczc4dEV2amRlNTZ3S0llXG5BblBEanZjdG9lelIxVkJjOVZPQ3pKUkJWUllJWE5SZGV0eHFPd1Nza01zL0FBY0ZoWnNlOFlIeFlIeFMrVUFIXG50Qm94VU92dFRtMCtNSmJMOHpaMzNSdFF4WElMbEMrS0ZxNkJTVzZaVlNXcDVOU2tHNFZHcERFb09oNmlPa3V2XG5lL2pWT2s5ZFdNbEdxaHZqOCtmOWJRc3hPUUtCZ1FEckJ5WmV5TlpkdCtCdG1wNDBEZVo3VXo0ZjhKUWxlSmhKXG51RklOY09EY3RkT3ZOYmp2USszNUpXUGUxK2hObkNsTmNockovU3VzZkFYZ0hxblJHSThzYTB6MVpTL2FrNjd3XG5wdlpabnViSTZjNGcwVm4zeUZ0STJaZGdRN2w3NVVOVzZtVVZQbm9QT1ZlSlcrL29TNWtMcXlKMTlRT2UwQlYrXG5nVkpXY1h6UGt3S0JnUUNSVC9aU3FFeEljMHBGMWlmM1RJL05wK2k3Y3BrK0MzTzNLRzd4YWhpNEs3MTZubTVCXG5TL3RnMDZwa0R6Z0xXMFMvNGVWWUx2cEI0SjVURnhadWFzOTJUMC9uc1prSWFQbUZ3bS96b0FTOU12a0I5R0hvXG5hbU1aajR0eGR1MVRjRkU0dGk4MXBBWnE4N0crUkVER0djVGxTL2ZsS21wcFBFaWJBS0tFL0NNellRS0JnQXZDXG5WTklqUEU1K0Y3V0VLZXd5MGRoVHh1VDBOWVZXYmxBcDc3a0tiOFc3TnpjcCtmSEd0VTVrNTRWTHlpeXY1b1VnXG5jMlN0elJTWk0vWU5zck5xaGlkVHl3cndJQi9RaWMweW5WcklqNFYzNVQ5UkdpNUNrUWFwRkdEVm9wOG5UbUkzXG40Z3paRG1SYW14MmRRdmlkWjYva3hSbWZ3Nm1iZ2FmTnNwL3VsNjhQQW9HQUZLTVJUZFFYZUoremxmVDVqa05DXG5KbmQyRi9qZzl5MDcxRVlZeHZETWVHODRBY0kxYUJCdEg3TXl3OStsem1tZXkvZzRKSHd6eFZRdkN3Mnh0cCtzXG5lcEhueXZiS3ZGc2FjZkIxV1ExSVNLN25RNGVnUXRHd0hZWHlncmx5RVR0TWtPUlJXbkNDNUVlVEhCdURTYlhyXG5FMkRlbjNNUko1WjJXUk5HM3NDQTdVaz1cbi0tLS0tRU5EIFBSSVZBVEUgS0VZLS0tLS1cbiIsImNsaWVudF9lbWFpbCI6ImZpcmViYXNlLWFkbWluc2RrLWZic3ZjQHN1cG9ydGV0ZWNuaWNvLWFwaS05Mzg2Yi5pYW0uZ3NlcnZpY2VhY2NvdW50LmNvbSIsImNsaWVudF9pZCI6IjExNDMxNzA1ODc2NDE0NzczODQwOCIsImF1dGhfdXJpIjoiaHR0cHM6Ly9hY2NvdW50cy5nb29nbGUuY29tL28vb2F1dGgyL2F1dGgiLCJ0b2tlbl91cmkiOiJodHRwczovL29hdXRoMi5nb29nbGVhcGlzLmNvbS90b2tlbiIsImF1dGhfcHJvdmlkZXJfeDUwOV9jZXJ0X3VybCI6Imh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMuY29tL29hdXRoMi92MS9jZXJ0cyIsImNsaWVudF94NTA5X2NlcnRfdXJsIjoiaHR0cHM6Ly93d3cuZ29vZ2xlYXBpcy5jb20vcm9ib3QvdjEvbWV0YWRhdGEveDUwOS9maXJlYmFzZS1hZG1pbnNkay1mYnN2YyU0MHN1cG9ydGV0ZWNuaWNvLWFwaS05Mzg2Yi5pYW0uZ3NlcnZpY2VhY2NvdW50LmNvbSIsInVuaXZlcnNlX2RvbWFpbiI6Imdvb2dsZWFwaXMuY29tIn0=
+```
+
+### Passo 2: Ir ao Cloudflare Dashboard
+1. Acesse: https://dash.cloudflare.com/
+2. Vá em: **Workers & Pages** → **suportetecnico-api**
+3. Clique em: **Settings** → **Environment variables**
+
+### Passo 3: Adicionar Variáveis (Production)
+Adicione **DUAS** variáveis. Modo de entrada: **Plaintext**
+
+#### Variável 1:
+- **Variable name:** `FIREBASE_SERVICE_ACCOUNT_BASE64`
+- **Value:** [Cole a Base64 acima]
+
+#### Variável 2:
+- **Variable name:** `FIREBASE_SERVICE_ACCOUNT`
+- **Value:** [Cole a mesma Base64]
+
+### Passo 4: Salvar
+Clique em **Save** (botão azul)
+
+---
+
+## 🔍 Verificação
+Depois de salvar, teste:
+1. `https://suportetecnico-api.mateus-heenriiquee.workers.dev/admin/health`
+2. `https://suportetecnico-api.mateus-heenriiquee.workers.dev/admin/create-user` (POST)
+
+---
+
+## 📌 Importante
+- ⚠️ **NÃO** copie incompleto - são 3156 caracteres
+- ⚠️ Use **Plaintext**, não Binary
+- ⚠️ Depois de adicionar, espere 1-2 minutos para deploy
+- ⚠️ O worker será redeploy automaticamente

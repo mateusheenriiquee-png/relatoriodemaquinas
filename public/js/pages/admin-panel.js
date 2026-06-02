@@ -43,8 +43,8 @@ async function carregarUsuarios() {
       <td>${user.email}</td>
       <td>${user.displayName || "-"}</td>
       <td>
-        <span class="cargo-badge ${user.cargo || "operador"}">
-          ${(user.cargo || "operador").toUpperCase()}
+        <span class="cargo-badge ${(user.cargo || "Operador").toLowerCase()}">
+          ${(user.cargo || "Operador")}
         </span>
       </td>
       <td>${formatDate(user.createdAt)}</td>
@@ -80,8 +80,8 @@ async function abrirModalAlterarCargo(userId) {
   const usuario = (await authManager.getUsers()).find((u) => u.id === userId);
   if (!usuario) return;
 
-  const cargoAtual = usuario.cargo || "operador";
-  const novoCargo = cargoAtual === "admin" ? "operador" : "admin";
+  const cargoAtual = usuario.cargo || "Operador";
+  const novoCargo = cargoAtual.toLowerCase() === "administrador" || cargoAtual.toLowerCase() === "admin" ? "Operador" : "Administrador";
 
   if (
     confirm(

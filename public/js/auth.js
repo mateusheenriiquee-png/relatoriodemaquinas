@@ -23,6 +23,28 @@ import { auth, db } from "./config/firebase.js";
 const USUARIOS_COLLECTION = "usuarios";
 const ADMIN_EMAIL_KEY = "admin_email";
 
+// Mapa de valores legados → valores atuais
+const CARGO_LEGACY_MAP = {
+  "operador": "Operador",
+  "atendente": "Atendente",
+  "agente": "Atendente",
+  "supervisor": "Supervisor",
+  "admin": "Administrador",
+  "administrador": "Administrador"
+};
+
+// Cargos válidos
+const CARGOS_VALIDOS = ["Operador", "Atendente", "Supervisor", "Administrador"];
+
+/**
+ * Normalizar cargo para valor padrão
+ */
+function normalizarCargoFrontend(cargo = "") {
+  if (!cargo) return "Operador";
+  const lower = String(cargo).toLowerCase().trim();
+  return CARGO_LEGACY_MAP[lower] || CARGOS_VALIDOS[0];
+}
+
 export class AuthManager {
   constructor() {
     this.currentUser = null;
@@ -39,13 +61,17 @@ export class AuthManager {
             const userDocRef = doc(db, USUARIOS_COLLECTION, user.uid);
             const userDocSnap = await getDoc(userDocRef);
             if (userDocSnap.exists()) {
-              this.currentUserData = userDocSnap.data();
+              const userData = userDocSnap.data();
+              this.currentUserData = {
+                ...userData,
+                cargo: normalizarCargoFrontend(userData.cargo)
+              };
             } else {
               this.currentUserData = {
                 uid: user.uid,
                 email: user.email,
                 displayName: user.displayName || "",
-                cargo: "operador",
+                cargo: "Operador",
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
               };
@@ -55,7 +81,8 @@ export class AuthManager {
             this.currentUserData = {
               uid: user.uid,
               email: user.email,
-              displayName: user.displayName || ""
+              displayName: user.displayName || "",
+              cargo: "Operador"
             };
           }
         }
@@ -94,7 +121,8 @@ export class AuthManager {
   }
 
   isAdmin() {
-    return this.currentUserData?.cargo === "admin";
+    const cargo = this.currentUserData?.cargo || "";
+    return normalizarCargoFrontend(cargo) === "Administrador";
   }
 
   getCurrentUser() {
@@ -109,7 +137,23 @@ export class AuthManager {
     return this.currentUserData?.displayName || this.currentUser?.email || "";
   }
 
-  async createUser(email, password, displayName, cargo = "operador") {
+  async getIdToken() {
+    if (!this.currentUser) {
+      console.error("[Auth] ❌ Erro: currentUser não está definido");
+      throw new Error("Usuário não autenticado");
+    }
+    try {
+      const token = await this.currentUser.getIdToken();
+      console.log(`[Auth] ✅ Firebase ID Token obtido com sucesso`);
+      console.log(`[Auth] Token preview: ${token.substring(0, 50)}...`);
+      return token;
+    } catch (error) {
+      console.error("[Auth] ❌ Erro ao obter token:", error.message);
+      throw error;
+    }
+  }
+
+  async createUser(email, password, displayName, cargo = "Operador") {
     try {
       // Detectar automaticamente a URL da API
       // Se está em ambiente de produção (não localhost), usar a mesma origin (Cloudflare Pages)
@@ -127,18 +171,35 @@ export class AuthManager {
         }
       }
 
-      console.log(`[Auth] Criando usuário via API: ${apiBase}/admin/create-user`);
+      console.log(`[Auth] === Iniciando Criação de Usuário ===`);
+      console.log(`[Auth] API Base: ${apiBase}`);
+      console.log(`[Auth] Hostname: ${window.location.hostname}`);
+      
+      // Obter o token do Firebase para autenticação
+      console.log(`[Auth] Obtendo Firebase ID Token...`);
+      const token = await this.getIdToken();
+      
+      console.log(`[Auth] ✅ Token obtido`);
+      console.log(`[Auth] Enviando requisição para: ${apiBase}/admin/create-user`);
+      console.log(`[Auth] Email: ${email}`);
+      console.log(`[Auth] Cargo: ${cargo}`);
 
       const response = await fetch(`${apiBase}/admin/create-user`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
         body: JSON.stringify({ email, password, displayName, cargo })
       });
 
       const data = await response.json();
 
+      console.log(`[Auth] Status da resposta: ${response.status}`);
+      console.log(`[Auth] Dados da resposta:`, data);
+
       if (!response.ok || !data.ok) {
-        console.error("[Auth] Erro ao criar usuário:", data.error);
+        console.error("[Auth] ❌ Erro ao criar usuário:", data.error);
         return {
           success: false,
           error: data.error || "Erro ao criar usuário."
@@ -148,7 +209,7 @@ export class AuthManager {
       console.log("[Auth] ✅ Usuário criado com sucesso:", data.uid);
       return { success: true, uid: data.uid };
     } catch (error) {
-      console.error("[Auth] Erro na requisição:", error);
+      console.error("[Auth] ❌ Erro na requisição:", error);
       return {
         success: false,
         error: `Erro ao conectar à API: ${error.message}`
@@ -161,7 +222,8 @@ export class AuthManager {
       const querySnapshot = await getDocs(collection(db, USUARIOS_COLLECTION));
       return querySnapshot.docs.map((doc) => ({
         id: doc.id,
-        ...doc.data()
+        ...doc.data(),
+        cargo: normalizarCargoFrontend(doc.data().cargo)
       }));
     } catch (error) {
       console.error("Erro ao buscar usuários:", error);
@@ -171,12 +233,13 @@ export class AuthManager {
 
   async updateUserCargo(userId, cargo) {
     try {
+      const cargoNormalizado = normalizarCargoFrontend(cargo);
       await updateDoc(doc(db, USUARIOS_COLLECTION, userId), {
-        cargo: cargo,
+        cargo: cargoNormalizado,
         updatedAt: new Date().toISOString()
       });
       if (this.currentUser?.uid === userId) {
-        this.currentUserData.cargo = cargo;
+        this.currentUserData.cargo = cargoNormalizado;
         this.currentUserData.updatedAt = new Date().toISOString();
       }
       return { success: true };
