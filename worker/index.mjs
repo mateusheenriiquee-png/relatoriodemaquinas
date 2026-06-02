@@ -1,5 +1,6 @@
 import { processWebhookPost } from "./webhook.mjs";
 import { upsertSheetRow, deleteSheetRow } from "./sheets-sync.mjs";
+import { createUserInFirebase } from "./auth-admin.mjs";
 
 function jsonResponse(statusCode, body) {
   return new Response(JSON.stringify(body), {
@@ -96,6 +97,40 @@ export default {
         return jsonResponse(500, {
           ok: false,
           error: "Erro interno ao processar webhook.",
+          details: String(error?.message || error)
+        });
+      }
+    }
+
+    // Endpoint para criar novo usuário via Cloudflare Worker
+    if (url.pathname === "/admin/create-user") {
+      if (request.method !== "POST") {
+        return jsonResponse(405, { ok: false, error: "Metodo nao permitido." });
+      }
+
+      try {
+        const body = await request.json();
+        const { email, password, displayName, cargo } = body;
+
+        if (!email || !password) {
+          return jsonResponse(400, {
+            ok: false,
+            error: "Email e senha são obrigatórios."
+          });
+        }
+
+        const result = await createUserInFirebase(email, password, displayName, cargo);
+
+        if (result.ok) {
+          return jsonResponse(201, result);
+        } else {
+          return jsonResponse(400, result);
+        }
+      } catch (error) {
+        console.error("[Cloudflare] Erro:", error);
+        return jsonResponse(500, {
+          ok: false,
+          error: "Erro ao processar requisição.",
           details: String(error?.message || error)
         });
       }

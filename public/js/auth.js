@@ -111,9 +111,24 @@ export class AuthManager {
 
   async createUser(email, password, displayName, cargo = "operador") {
     try {
-      // Usa endpoint do servidor para criar usuário com Admin SDK
-      // Isso evita trocar a sessão do admin logado
-      const apiBase = window.__API_BASE_URL || "http://localhost:3000";
+      // Detectar automaticamente a URL da API
+      // Se está em ambiente de produção (não localhost), usar a mesma origin (Cloudflare Pages)
+      // Se está em localhost, usar http://localhost:3000 para desenvolvimento local
+      
+      let apiBase = window.__API_BASE_URL;
+      
+      if (!apiBase) {
+        if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+          // Desenvolvimento local
+          apiBase = "http://localhost:3000";
+        } else {
+          // Produção (Cloudflare Pages) - usar mesma origem
+          apiBase = window.location.origin;
+        }
+      }
+
+      console.log(`[Auth] Criando usuário via API: ${apiBase}/admin/create-user`);
+
       const response = await fetch(`${apiBase}/admin/create-user`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -123,20 +138,20 @@ export class AuthManager {
       const data = await response.json();
 
       if (!response.ok || !data.ok) {
-        console.error("Erro ao criar usuário:", data.error);
+        console.error("[Auth] Erro ao criar usuário:", data.error);
         return {
           success: false,
-          error: data.error || "Erro ao criar usuário no servidor."
+          error: data.error || "Erro ao criar usuário."
         };
       }
 
-      console.log("✅ Usuário criado com sucesso:", data.uid);
+      console.log("[Auth] ✅ Usuário criado com sucesso:", data.uid);
       return { success: true, uid: data.uid };
     } catch (error) {
-      console.error("Erro na requisição:", error);
+      console.error("[Auth] Erro na requisição:", error);
       return {
         success: false,
-        error: "Erro ao conectar ao servidor. Verifique se a API está rodando em " + (window.__API_BASE_URL || "http://localhost:3000")
+        error: `Erro ao conectar à API: ${error.message}`
       };
     }
   }
