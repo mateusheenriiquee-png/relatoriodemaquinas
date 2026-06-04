@@ -105,11 +105,8 @@ function initializeFirebaseAdmin(env) {
   
   let serviceAccountRaw = firebaseBase64 || firebaseRaw;
   let isBase64 = !!firebaseBase64;
-  
-  const projectId = env?.FIREBASE_PROJECT_ID || "suportetecnico-api";
 
   console.log("[Firebase] Inicializando Admin SDK...");
-  console.log("[Firebase] Project ID:", projectId);
   console.log("[Firebase] Using Base64:", isBase64);
   console.log("[Firebase] Service Account disponível:", !!serviceAccountRaw);
 
@@ -120,6 +117,7 @@ function initializeFirebaseAdmin(env) {
   }
 
   const serviceAccount = parseServiceAccount(serviceAccountRaw, isBase64);
+  const projectId = env?.FIREBASE_PROJECT_ID || serviceAccount?.project_id || "suportetecnico-api2";
 
   if (!serviceAccount) {
     const errorMsg = "❌ Erro ao parsear FIREBASE_SERVICE_ACCOUNT. Verifique o formato JSON ou Base64 no Cloudflare Dashboard.";
@@ -131,7 +129,7 @@ function initializeFirebaseAdmin(env) {
     if (!admin.apps.length) {
       adminApp = admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
-        projectId: projectId
+        projectId
       });
     } else {
       adminApp = admin.app();

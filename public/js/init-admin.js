@@ -15,9 +15,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/fireba
 
 const firebaseConfig = {
   apiKey: "AIzaSyBMpPJPrhEcDUOgQEg5vVpHMEKThGu31y4",
-  authDomain: "suportetecnico-api.firebaseapp.com",
-  projectId: "suportetecnico-api",
-  storageBucket: "suportetecnico-api.firebasestorage.app",
+  authDomain: "suportetecnico-api2.firebaseapp.com",
+  projectId: "suportetecnico-api2",
+  storageBucket: "suportetecnico-api2.firebasestorage.app",
   messagingSenderId: "192795919231",
   appId: "1:192795919231:web:7385d3a7e6ba418a2e504a"
 };

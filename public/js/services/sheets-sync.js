@@ -1,4 +1,4 @@
-/*import { APP_CONFIG } from "../config/app-config.js";
+import { APP_CONFIG } from "../config/app-config.js";
 
 function norm(value) {
   return String(value || "").trim();
@@ -34,11 +34,9 @@ export function buildSheetDoc(id, data = {}) {
 }
 
 async function postSheet(path, body) {
-  if (!APP_CONFIG.sheetsSyncEnabled) return null;
-
   const headers = { "Content-Type": "application/json" };
-  if (APP_CONFIG.sheetsSyncToken) {
-    headers["x-sync-token"] = APP_CONFIG.sheetsSyncToken;
+  if (APP_CONFIG.SHEETS_SYNC_TOKEN) {
+    headers["x-sync-token"] = APP_CONFIG.SHEETS_SYNC_TOKEN;
   }
 
   const response = await fetch(path, {
@@ -62,4 +60,4 @@ export async function syncDocToSheet(id, data) {
 export async function deleteDocFromSheet(docId) {
   if (!docId) return;
   return postSheet("/sheets/delete", { docId });
-}*/
+}

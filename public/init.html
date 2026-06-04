@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inicialização - Suporte Técnico</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    
+    .container {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      max-width: 600px;
+      width: 100%;
+      padding: 40px;
+    }
+    
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+      text-align: center;
+    }
+    
+    .subtitle {
+      color: #666;
+      text-align: center;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+    
+    .section {
+      margin-bottom: 30px;
+    }
+    
+    .section-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #667eea;
+    }
+    
+    .form-group {
+      margin-bottom: 15px;
+    }
+    
+    label {
+      display: block;
+      margin-bottom: 5px;
+      color: #555;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    
+    input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 14px;
+      transition: border-color 0.3s;
+    }
+    
+    input:focus {
+      outline: none;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+    
+    .button-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    
+    button {
+      padding: 12px 20px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+    }
+    
+    .btn-secondary {
+      background: #f0f0f0;
+      color: #333;
+    }
+    
+    .btn-secondary:hover {
+      background: #e0e0e0;
+    }
+    
+    .status {
+      padding: 12px;
+      border-radius: 6px;
+      margin-top: 15px;
+      font-size: 14px;
+    }
+    
+    .status.success {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+    
+    .status.error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+    
+    .status.info {
+      background: #d1ecf1;
+      color: #0c5460;
+      border: 1px solid #bee5eb;
+    }
+    
+    .hidden {
+      display: none;
+    }
+    
+    .loading {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #667eea;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🚀 Inicialização</h1>
+    <p class="subtitle">Suporte Técnico API</p>
+    
+    <!-- Criar Admin -->
+    <div class="section">
+      <div class="section-title">1️⃣ Criar Usuário Admin</div>
+      <div class="form-group">
+        <label for="adminEmail">Email</label>
+        <input type="email" id="adminEmail" placeholder="admin@suportetecnico.com.br" value="admin@suportetecnico.com.br">
+      </div>
+      <div class="form-group">
+        <label for="adminPassword">Senha</label>
+        <input type="password" id="adminPassword" placeholder="Senha segura" value="senha123456">
+      </div>
+      <div class="form-group">
+        <label for="adminName">Nome</label>
+        <input type="text" id="adminName" placeholder="Seu Nome Completo" value="Administrador">
+      </div>
+      <div class="button-group">
+        <button class="btn-primary" onclick="createAdmin()">Criar Admin</button>
+        <button class="btn-secondary" onclick="goToLogin()">Ir para Login</button>
+      </div>
+      <div id="adminStatus" class="status hidden"></div>
+    </div>
+    
+    <!-- Adicionar Dados de Teste -->
+    <div class="section">
+      <div class="section-title">2️⃣ Dados de Teste</div>
+      <p style="color: #666; font-size: 14px; margin-bottom: 15px;">
+        Adicionar 5 registros de exemplo para testar o sistema
+      </p>
+      <button class="btn-primary" style="width: 100%;" onclick="addTestData()">Adicionar Dados de Teste</button>
+      <div id="testDataStatus" class="status hidden"></div>
+    </div>
+    
+    <!-- Status Geral -->
+    <div class="section">
+      <div class="section-title">📊 Status da Inicialização</div>
+      <div id="generalStatus" class="status info">
+        ℹ️ Firebase conectado e pronto para uso
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { createAdminUser } from './js/init-admin.js';
+    import { authManager } from './js/auth.js';
+    import { addDoc, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+    import { db } from './config/firebase.js';
+
+    window.createAdmin = async function() {
+      const email = document.getElementById('adminEmail').value;
+      const password = document.getElementById('adminPassword').value;
+      const name = document.getElementById('adminName').value;
+      const statusEl = document.getElementById('adminStatus');
+      
+      if (!email || !password || !name) {
+        showStatus(statusEl, 'Preencha todos os campos', 'error');
+        return;
+      }
+      
+      try {
+        showStatus(statusEl, '<span class="loading"></span>Criando usuário...', 'info');
+        await createAdminUser(email, password, name);
+        showStatus(statusEl, '✅ Admin criado com sucesso! Você pode fazer login agora.', 'success');
+      } catch (error) {
+        showStatus(statusEl, '❌ Erro: ' + error.message, 'error');
+      }
+    };
+
+    window.addTestData = async function() {
+      const statusEl = document.getElementById('testDataStatus');
+      
+      try {
+        showStatus(statusEl, '<span class="loading"></span>Adicionando dados...', 'info');
+        
+        const testRecords = [
+          {
+            protocolo: 'TEST-001',
+            cpfCnpj: '12345678901',
+            responsavelAbertura: 'João Silva',
+            dataAbertura: new Date('2024-01-15').toISOString(),
+            tipo: 'Instalação',
+            ac: 'AC-001',
+            contato: 'joao@example.com',
+            descricao: 'Solicitação de instalação de novo equipamento',
+            tecnico: 'MATHEUS',
+            status: 'FINALIZADO',
+            statusAbertura: 'DEVIDO'
+          },
+          {
+            protocolo: 'TEST-002',
+            cpfCnpj: '98765432100',
+            responsavelAbertura: 'Maria Santos',
+            dataAbertura: new Date('2024-01-18').toISOString(),
+            tipo: 'Reparo',
+            ac: 'AC-002',
+            contato: 'maria@example.com',
+            descricao: 'Reparo de equipamento com problemas',
+            tecnico: 'HENRIQUE',
+            status: 'EM ANDAMENTO',
+            statusAbertura: 'DEVIDO'
+          },
+          {
+            protocolo: 'TEST-003',
+            cpfCnpj: '55544433322',
+            responsavelAbertura: 'Pedro Costa',
+            dataAbertura: new Date('2024-01-20').toISOString(),
+            tipo: 'Manutenção',
+            ac: 'AC-001',
+            contato: 'pedro@example.com',
+            descricao: 'Manutenção preventiva de sistema',
+            tecnico: 'VICTOR',
+            status: 'EM ABERTO',
+            statusAbertura: 'DEVIDO'
+          },
+          {
+            protocolo: 'TEST-004',
+            cpfCnpj: '11222333444',
+            responsavelAbertura: 'Ana Paula',
+            dataAbertura: new Date('2024-01-22').toISOString(),
+            tipo: 'Suporte',
+            ac: 'AC-003',
+            contato: 'ana@example.com',
+            descricao: 'Suporte técnico remoto',
+            tecnico: 'ISABELE',
+            status: 'FINALIZADO',
+            statusAbertura: 'DEVIDO'
+          },
+          {
+            protocolo: 'TEST-005',
+            cpfCnpj: '99888777666',
+            responsavelAbertura: 'Carlos Mendes',
+            dataAbertura: new Date('2024-01-25').toISOString(),
+            tipo: 'Instalação',
+            ac: 'AC-002',
+            contato: 'carlos@example.com',
+            descricao: 'Instalação de nova infraestrutura',
+            tecnico: 'MATHEUS',
+            status: 'REAGENDADO',
+            statusAbertura: 'DEVIDO'
+          }
+        ];
+        
+        for (const record of testRecords) {
+          await addDoc(collection(db, 'suportes_tecnicos'), {
+            ...record,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+          });
+        }
+        
+        showStatus(statusEl, '✅ ' + testRecords.length + ' registros de teste adicionados com sucesso!', 'success');
+      } catch (error) {
+        showStatus(statusEl, '❌ Erro: ' + error.message, 'error');
+      }
+    };
+
+    window.goToLogin = function() {
+      window.location.href = './login.html';
+    };
+
+    function showStatus(element, message, type) {
+      element.textContent = message;
+      element.className = 'status ' + type;
+      element.classList.remove('hidden');
+    }
+
+    // Verificar se já está autenticado
+    document.addEventListener('DOMContentLoaded', async () => {
+      try {
+        await authManager.initialize();
+        if (authManager.isAuthenticated()) {
+          window.location.href = './index.html';
+        }
+      } catch (error) {
+        console.log('Not authenticated, showing init screen');
+      }
+    });
+  </script>
+</body>
+</html>

@@ -34,34 +34,56 @@ function parseServiceAccount(raw) {
   if (!raw) {
     throw new Error("FIREBASE_SERVICE_ACCOUNT nao configurada.");
   }
-  
+
   try {
     let jsonString = raw;
     
-    // Verificar se é Base64
-    try {
-      const decoded = atob(raw);
-      // Se conseguir decodificar e for um JSON válido, usar o decodificado
-      JSON.parse(decoded);
-      jsonString = decoded;
-    } catch (e) {
-      // Não é Base64, usar direto
+    const tryParseJson = (value) => {
+      if (typeof value !== "string") return null;
+      try {
+        return JSON.parse(value);
+      } catch (_err) {
+        return null;
+      }
+    };
+
+    // Se for base64, decodificar antes de tentar parsear
+    if (typeof raw === "string") {
+      const normalizedBase64 = raw.replace(/\s+/g, "");
+      const decoded = (() => {
+        try {
+          return atob(normalizedBase64);
+        } catch (_err) {
+          return null;
+        }
+      })();
+      if (decoded) {
+        const parsed = tryParseJson(decoded);
+        if (parsed) {
+          jsonString = decoded;
+        }
+      }
     }
-    
-    // Remover caracteres de controle problemáticos
+
     const cleaned = typeof jsonString === "string"
       ? jsonString
-          .replace(/[\f\r\t\v\b]/g, "")  // Remove caracteres de controle
-          .replace(/\\n/g, "\n")
-          .replace(/\\t/g, "\t")
-          .replace(/\\"/g, '"')
+          .replace(/[\f\r\t\v\b]/g, "")
+          .replace(/\\n/g, "\\n")
+          .replace(/\u0000/g, "")
       : jsonString;
-    
-    const parsed = JSON.parse(cleaned);
-    
-    // Normalizar quebras de linha na private_key
+
+    let parsed = tryParseJson(cleaned);
+    if (!parsed && typeof cleaned === "string") {
+      const safe = cleaned.replace(/\r\n|\r|\n/g, "\\n");
+      parsed = tryParseJson(safe);
+    }
+
+    if (!parsed) {
+      throw new Error("JSON inválido ou serviço de conta mal formatado.");
+    }
+
     if (parsed.private_key) {
-      parsed.private_key = parsed.private_key.replace(/\\n/g, "\n");
+      parsed.private_key = String(parsed.private_key).replace(/\\n/g, "\n");
     }
     return parsed;
   } catch (error) {

@@ -1,4 +1,4 @@
-import { collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import { collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 import { db } from "./config/firebase.js";
 import { authManager } from "./auth.js";
 
@@ -20,6 +20,7 @@ const filtroAcEl = document.getElementById("filtroAcDashboard");
 const filtroTecnicoEl = document.getElementById("filtroTecnicoDashboard");
 
 const norm = (v) => String(v || "").trim().replace(/\s+/g, " ");
+const normKey = (v) => norm(v).toLowerCase();
 function normStatus(v) {
   const s = norm(v).toUpperCase();
   if (STATUS_OPTIONS.includes(s)) return s;
@@ -128,6 +129,12 @@ function getRegistrosFiltrados() {
     const limite = Date.now() - dias * 24 * 60 * 60 * 1000;
     dados = dados.filter((r) => r.dataAbertura && r.dataAbertura.getTime() >= limite);
   }
+
+  if (!authManager.isAdmin()) {
+    const userTecnico = normKey(authManager.getUserDisplayName());
+    dados = dados.filter((r) => normKey(r.tecnico) === userTecnico);
+  }
+
   if (state.filtroAc !== "todos") {
     dados = dados.filter((r) => r.ac === state.filtroAc);
   }
@@ -141,9 +148,14 @@ function atualizarFiltrosDinamicos() {
   const acs = [...new Set(state.registros.map((r) => r.ac).filter(Boolean))].sort((a, b) =>
     a.localeCompare(b, "pt-BR", { sensitivity: "base" })
   );
-  const tecnicos = [...new Set(state.registros.map((r) => r.tecnico).filter(Boolean))].sort((a, b) =>
+  let tecnicos = [...new Set(state.registros.map((r) => r.tecnico).filter(Boolean))].sort((a, b) =>
     a.localeCompare(b, "pt-BR", { sensitivity: "base" })
   );
+
+  if (!authManager.isAdmin()) {
+    const userTecnico = normKey(authManager.getUserDisplayName());
+    tecnicos = tecnicos.filter((nome) => normKey(nome) === userTecnico);
+  }
 
   const acAtual = state.filtroAc;
   filtroAcEl.innerHTML = '<option value="todos">Todas</option>';
@@ -591,23 +603,35 @@ async function protegerPaginaDashboard() {
     return;
   }
 
-  // Apenas admins podem acessar o dashboard
-  if (!authManager.isAdmin()) {
-    alert("Você não tem permissão para acessar o dashboard. Apenas administradores podem visualizar este relatório.");
-    window.location.href = "./index.html";
-    return;
-  }
-
+  const isAdmin = authManager.isAdmin();
   const userDisplayName = authManager.getUserDisplayName();
   const header = document.querySelector("header");
+
   if (header) {
+    const titleWrap = header.querySelector(".dashboard-title-wrap h1");
+    if (titleWrap && !isAdmin) {
+      const span = titleWrap.querySelector("strong");
+      if (span) {
+        span.textContent = userDisplayName || "Operador";
+      }
+      const dashPipe = titleWrap.querySelector(".dash-pipe");
+      if (dashPipe) {
+        dashPipe.textContent = " • ";
+      }
+      const firstText = titleWrap.childNodes[0];
+      if (firstText) {
+        firstText.textContent = "minhas métricas ";
+      }
+    }
+
     const actionsDiv = header.querySelector(".dashboard-actions");
     if (actionsDiv) {
       const userInfo = document.createElement("span");
       userInfo.className = "user-info";
+      const roleLabel = isAdmin ? "👤 Admin" : "👤 Operador";
       userInfo.innerHTML = `
-        <span style="margin-right: 12px;">👤 ${userDisplayName}</span>
-        <button id="btnLogoutDash" class="btn btn-ghost btn-small" style="margin: 0;">Logout</button>
+        <span style="margin-right: 12px;">${roleLabel} ${userDisplayName}</span>
+        <button id="btnLogoutDash" class="btn btn-ghost btn-small" type="button" style="margin: 0;">Logout</button>
       `;
       actionsDiv.appendChild(userInfo);
 
@@ -615,6 +639,13 @@ async function protegerPaginaDashboard() {
         await authManager.logout();
         window.location.href = "./login.html";
       });
+    }
+  }
+
+  if (!isAdmin) {
+    const filtroTecnicoContainer = document.querySelector('label[for="filtroTecnicoDashboard"]')?.parentElement;
+    if (filtroTecnicoContainer) {
+      filtroTecnicoContainer.style.display = "none";
     }
   }
 }

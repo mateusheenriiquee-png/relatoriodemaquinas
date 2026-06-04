@@ -1,31 +1,5 @@
-const { normalizeText } = require("./normalize");
 const { upsertRecords } = require("./firestore-rest");
-const { prepareWebhookRecords } = require("./webhook-shared");
-
-function getEnv(env) {
-  return {
-    collection: env.FIRESTORE_COLLECTION || "suportes_tecnicos",
-    webhookToken: normalizeText(env.WEBHOOK_TOKEN || ""),
-    serviceAccountRaw: env.FIREBASE_SERVICE_ACCOUNT
-  };
-}
-
-function isAuthorized({ headers = {}, queryStringParameters = {}, body = {} }, webhookToken) {
-  if (!webhookToken) return true;
-  const token =
-    normalizeText(headers["x-webhook-token"]) ||
-    normalizeText(headers["X-Webhook-Token"]) ||
-    normalizeText(queryStringParameters?.token) ||
-    normalizeText(body?.token);
-  return token === webhookToken;
-}
-
-function jsonResponse(statusCode, payload) {
-  return {
-    statusCode,
-    body: JSON.stringify(payload)
-  };
-}
+const { parseBody, getEnvConfig, authorizeWebhook, validatePayload, jsonResponse } = require("./services/webhook-common");
 
 async function processWebhookPost(
   { httpMethod = "POST", body = "", headers = {}, queryStringParameters = {} },
@@ -42,31 +16,28 @@ async function processWebhookPost(
     });
   }
 
+  let parsedBody;
   try {
-    const config = getEnv(env);
-    const parsedBody = body ? JSON.parse(body) : {};
+    parsedBody = parseBody(body);
+  } catch (error) {
+    return jsonResponse(400, { ok: false, error: String(error.message) });
+  }
 
-    if (!isAuthorized({ headers, queryStringParameters, body: parsedBody }, config.webhookToken)) {
-      return jsonResponse(401, { ok: false, error: "Nao autorizado." });
-    }
+  const config = getEnvConfig(env);
+  if (!authorizeWebhook({ headers, query: queryStringParameters, body: parsedBody }, config.webhookToken)) {
+    return jsonResponse(401, { ok: false, error: "Nao autorizado." });
+  }
 
-    const inputs = Array.isArray(parsedBody) ? parsedBody : [parsedBody];
-    if (!inputs.length) {
-      return jsonResponse(400, { ok: false, error: "Payload vazio." });
-    }
+  const validation = validatePayload(parsedBody, origemIntegracao);
+  if (!validation.valid) {
+    return validation.response;
+  }
 
-    const records = prepareWebhookRecords(inputs, origemIntegracao);
-    if (!records.length) {
-      return jsonResponse(400, {
-        ok: false,
-        error: "Nenhum dado reconhecido no payload. Envie ao menos um campo com valor."
-      });
-    }
-
+  try {
     const upserted = await upsertRecords({
       serviceAccountRaw: config.serviceAccountRaw,
       collection: config.collection,
-      records
+      records: validation.records
     });
 
     return jsonResponse(201, { ok: true, upserted, inserted: upserted });

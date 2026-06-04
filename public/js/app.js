@@ -3,13 +3,17 @@
   collection,
   deleteDoc,
   doc,
+  getCountFromServer,
   getDoc,
   getDocs,
   limit,
   onSnapshot,
+  orderBy,
   query,
   serverTimestamp,
+  startAfter,
   updateDoc,
+  where,
   writeBatch
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 import { db } from "./config/firebase.js";
@@ -25,16 +29,24 @@ const state = {
   filtroStatus: "todos",
   filtroAc: "todos",
   filtroTecnico: "todos",
+  filtroDataInicio: "",
+  filtroDataFim: "",
   filtroCpfCnpj: "",
   filtroProtocolo: "",
   paginaAtual: 1,
-  modalModo: "adicionar"
+  modalModo: "adicionar",
+  pageCursors: [null],
+  hasNextPage: false,
+  statusCounts: null
 };
+let unsubscribePageListener = null;
 
 const tbody = document.getElementById("tbody");
 const filtroStatusEl = document.getElementById("filtroStatus");
 const filtroAcEl = document.getElementById("filtroAc");
 const filtroTecnicoEl = document.getElementById("filtroTecnico");
+const filtroDataInicioEl = document.getElementById("filtroDataInicio");
+const filtroDataFimEl = document.getElementById("filtroDataFim");
 const filtroCpfCnpjEl = document.getElementById("filtroCpfCnpj");
 const filtroProtocoloEl = document.getElementById("filtroProtocolo");
 const paginationInfo = document.getElementById("paginationInfo");
@@ -203,28 +215,90 @@ function mapDocToRegistro(docSnap) {
   };
 }
 
-function aplicarSnapshot(snap) {
-  state.registros = snap.docs.map(mapDocToRegistro);
-  atualizarFiltroAc();
-  render();
+function buildQueryConstraints() {
+  const constraints = [orderBy("dataAbertura", "desc")];
+  if (state.filtroStatus !== "todos") {
+    constraints.push(where("status", "==", state.filtroStatus));
+  }
+  if (state.filtroAc !== "todos") {
+    constraints.push(where("ac", "==", state.filtroAc));
+  }
+  if (state.filtroTecnico !== "todos") {
+    constraints.push(where("tecnico", "==", state.filtroTecnico));
+  }
+  if (state.filtroDataInicio) {
+    const startIso = new Date(`${state.filtroDataInicio}T00:00:00Z`).toISOString();
+    constraints.push(where("dataAbertura", ">=", startIso));
+  }
+  if (state.filtroDataFim) {
+    const endIso = new Date(`${state.filtroDataFim}T23:59:59Z`).toISOString();
+    constraints.push(where("dataAbertura", "<=", endIso));
+  }
+  return constraints;
 }
 
-let unsubscribeTempoReal = null;
+function buildPageQuery() {
+  const collectionRef = collection(db, COLLECTION);
+  const constraints = buildQueryConstraints();
+  const currentPage = Math.max(1, state.paginaAtual);
+  const pageConstraints = [...constraints];
 
-function iniciarAtualizacaoTempoReal() {
-  if (unsubscribeTempoReal) return;
-  unsubscribeTempoReal = onSnapshot(
-    collection(db, COLLECTION),
-    aplicarSnapshot,
-    (err) => {
-      showNotification(`Erro ao sincronizar com o Firebase: ${String(err?.message || err || "")}`, "error", 4000);
+  if (currentPage > 1) {
+    const cursor = state.pageCursors[currentPage - 1];
+    if (cursor) {
+      pageConstraints.push(startAfter(cursor));
+    } else {
+      state.paginaAtual = 1;
+    }
+  }
+
+  pageConstraints.push(limit(PAGE_SIZE + 1));
+  return query(collectionRef, ...pageConstraints);
+}
+
+function startPageListener() {
+  if (!db) return;
+  if (unsubscribePageListener) {
+    unsubscribePageListener();
+    unsubscribePageListener = null;
+  }
+
+  const pageQuery = buildPageQuery();
+  unsubscribePageListener = onSnapshot(
+    pageQuery,
+    (snap) => {
+      state.hasNextPage = snap.docs.length > PAGE_SIZE;
+      const docs = snap.docs.slice(0, PAGE_SIZE);
+      state.registros = docs.map(mapDocToRegistro);
+      const currentPage = Math.max(1, state.paginaAtual);
+      if (docs.length > 0) {
+        state.pageCursors[currentPage] = docs[docs.length - 1];
+      }
+      atualizarFiltroAc();
+      render();
+    },
+    (error) => {
+      console.error("[App] Erro no listener da página:", error);
+      showNotification(`Erro ao sincronizar página: ${error.message || String(error)}`, "error", 4000);
     }
   );
 }
 
-function carregar() {
-  iniciarAtualizacaoTempoReal();
-  render();
+async function carregar() {
+  try {
+    if (!db) {
+      console.error("[App] Erro crítico: Firestore não inicializado");
+      showNotification("Erro: Firestore não está configurado. Verifique firebase.js", "error", 5000);
+      return;
+    }
+
+    startPageListener();
+    await atualizarEstatisticasDb();
+    atualizarEstatisticas();
+  } catch (error) {
+    console.error("[App] Erro ao carregar página:", error);
+    showNotification(`Erro ao carregar registros: ${error.message || String(error)}`, "error", 4000);
+  }
 }
 
 function atualizarFiltroAc() {
@@ -249,48 +323,69 @@ function getRegistrosFiltrados() {
   if (state.filtroStatus !== "todos") dados = dados.filter((item) => item.status === state.filtroStatus);
   if (state.filtroAc !== "todos") dados = dados.filter((item) => item.ac === state.filtroAc);
   if (state.filtroTecnico !== "todos") dados = dados.filter((item) => item.tecnico === state.filtroTecnico);
+  if (state.filtroDataInicio) {
+    const inicio = new Date(`${state.filtroDataInicio}T00:00:00`).getTime();
+    dados = dados.filter((item) => toComparableDate(item.dataAbertura) >= inicio);
+  }
+  if (state.filtroDataFim) {
+    const fim = new Date(`${state.filtroDataFim}T23:59:59.999`).getTime();
+    dados = dados.filter((item) => toComparableDate(item.dataAbertura) <= fim);
+  }
   dados.sort((a, b) => toComparableDate(b.dataAbertura) - toComparableDate(a.dataAbertura));
   return dados;
 }
 
-function calcularPaginacao(totalItens) {
-  const totalPaginas = Math.max(1, Math.ceil(totalItens / PAGE_SIZE));
-  state.paginaAtual = Math.min(Math.max(state.paginaAtual, 1), totalPaginas);
-  const inicio = (state.paginaAtual - 1) * PAGE_SIZE;
-  return { totalPaginas, inicio, fim: inicio + PAGE_SIZE };
-}
-
 function atualizarEstatisticas() {
-  const total = state.registros.length;
-  const abertos = state.registros.filter((r) => r.status === "EM ABERTO").length;
-  const andamento = state.registros.filter((r) => r.status === "EM ANDAMENTO").length;
-  const finalizados = state.registros.filter((r) => r.status === "FINALIZADO").length;
+  const total = state.statusCounts?.total ?? state.registros.length;
+  const abertos = state.statusCounts?.abertos ?? state.registros.filter((r) => r.status === "EM ABERTO").length;
+  const andamento = state.statusCounts?.andamento ?? state.registros.filter((r) => r.status === "EM ANDAMENTO").length;
+  const finalizados = state.statusCounts?.finalizados ?? state.registros.filter((r) => r.status === "FINALIZADO").length;
   document.getElementById("statTotal").textContent = String(total);
   document.getElementById("statAbertos").textContent = String(abertos);
   document.getElementById("statAndamento").textContent = String(andamento);
   document.getElementById("statFinalizados").textContent = String(finalizados);
 }
 
-function atualizarRodapePaginacao(inicio, fim, totalPaginas, totalItens = 0) {
-  paginationInfo.textContent = `Mostrando ${inicio} - ${fim} de ${totalItens}`;
+async function atualizarEstatisticasDb() {
+  if (!db) return;
+  try {
+    const collectionRef = collection(db, COLLECTION);
+    const totalSnap = await getCountFromServer(query(collectionRef));
+    const abertosSnap = await getCountFromServer(query(collectionRef, where("status", "==", "EM ABERTO")));
+    const andamentoSnap = await getCountFromServer(query(collectionRef, where("status", "==", "EM ANDAMENTO")));
+    const finalizadosSnap = await getCountFromServer(query(collectionRef, where("status", "==", "FINALIZADO")));
+
+    state.statusCounts = {
+      total: Number(totalSnap.data().count || 0),
+      abertos: Number(abertosSnap.data().count || 0),
+      andamento: Number(andamentoSnap.data().count || 0),
+      finalizados: Number(finalizadosSnap.data().count || 0)
+    };
+  } catch (error) {
+    console.warn("[App] Falha ao buscar totais do Firestore:", error);
+    state.statusCounts = null;
+  }
+}
+
+function atualizarRodapePaginacao(totalItens = 0) {
+  const pageText = `Página ${state.paginaAtual}${state.hasNextPage ? "" : " (última)"}`;
+  paginationInfo.textContent = `Mostrando ${totalItens} registro(s) · ${pageText}`;
   document.getElementById("btnPrevPage").disabled = state.paginaAtual <= 1;
-  document.getElementById("btnNextPage").disabled = state.paginaAtual >= totalPaginas;
+  document.getElementById("btnNextPage").disabled = !state.hasNextPage;
 }
 
 function render() {
   tbody.innerHTML = "";
   const dados = getRegistrosFiltrados();
-  const { totalPaginas, inicio, fim } = calcularPaginacao(dados.length);
-  const paginados = dados.slice(inicio, fim);
-  if (!paginados.length) {
+  if (!dados.length) {
     const tr = document.createElement("tr");
     tr.innerHTML = '<td colspan="12" class="empty">Nenhum suporte encontrado para os filtros selecionados.</td>';
     tbody.appendChild(tr);
     atualizarEstatisticas();
-    atualizarRodapePaginacao(0, 0, totalPaginas);
+    atualizarRodapePaginacao(0);
     return;
   }
-  paginados.forEach((item) => {
+  dados.forEach((item) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${formatDate(item.dataAbertura)}</td>
@@ -314,7 +409,7 @@ function render() {
     tbody.appendChild(tr);
   });
   atualizarEstatisticas();
-  atualizarRodapePaginacao(inicio + 1, Math.min(fim, dados.length), totalPaginas, dados.length);
+  atualizarRodapePaginacao(dados.length);
 }
 
 function abrirModalAdicionar() {
@@ -415,8 +510,10 @@ async function confirmarExclusao() {
     } else {
       const docId = excluirIdPendente;
       await deleteDoc(doc(db, COLLECTION, docId));
-      await deleteDocFromSheet(docId);
+      void deleteDocFromSheet(docId);
     }
+    await atualizarEstatisticasDb();
+    atualizarEstatisticas();
     fecharModalExcluir();
   } catch (err) {
     btnConfirmarExclusao.disabled = false;
@@ -478,13 +575,13 @@ formSuporte.addEventListener("submit", async (e) => {
         id: ref.id,
         createdAt: payload.dataAbertura || new Date().toISOString()
       };
-      await syncToSheet(ref.id, docData);
+      void syncToSheet(ref.id, docData);
       showNotification("Suporte adicionado com sucesso.", "success", 2200);
     } else {
       const docId = modalIdAtual.value;
       const atual = state.registros.find((r) => r.id === docId) || {};
       await updateDoc(doc(db, COLLECTION, docId), payload);
-      await syncToSheet(docId, {
+      void syncToSheet(docId, {
         ...atual,
         ...payload,
         id: docId,
@@ -492,6 +589,8 @@ formSuporte.addEventListener("submit", async (e) => {
       });
       showNotification("Suporte atualizado com sucesso.", "success", 2200);
     }
+    await atualizarEstatisticasDb();
+    atualizarEstatisticas();
     fecharModal();
   } catch (err) {
     showNotification(err.message || "Nao foi possivel salvar.", "error", 3500);
@@ -531,13 +630,48 @@ document.addEventListener("keydown", (e) => {
     fecharModalExcluir();
   }
 });
-document.getElementById("btnPrevPage").addEventListener("click", () => { state.paginaAtual -= 1; render(); });
-document.getElementById("btnNextPage").addEventListener("click", () => { state.paginaAtual += 1; render(); });
-filtroStatusEl.addEventListener("change", (e) => { state.filtroStatus = e.target.value; state.paginaAtual = 1; render(); });
-filtroAcEl.addEventListener("change", (e) => { state.filtroAc = e.target.value; state.paginaAtual = 1; render(); });
-filtroTecnicoEl.addEventListener("change", (e) => { state.filtroTecnico = e.target.value; state.paginaAtual = 1; render(); });
-filtroCpfCnpjEl.addEventListener("input", (e) => { state.filtroCpfCnpj = e.target.value.trim(); state.paginaAtual = 1; render(); });
-filtroProtocoloEl.addEventListener("input", (e) => { state.filtroProtocolo = e.target.value.trim(); state.paginaAtual = 1; render(); });
+document.getElementById("btnPrevPage").addEventListener("click", async () => {
+  if (state.paginaAtual <= 1) return;
+  state.paginaAtual -= 1;
+  await carregar();
+});
+document.getElementById("btnNextPage").addEventListener("click", async () => {
+  if (!state.hasNextPage) return;
+  state.paginaAtual += 1;
+  await carregar();
+});
+const resetPageData = () => {
+  state.paginaAtual = 1;
+  state.pageCursors = [null];
+  state.hasNextPage = false;
+};
+filtroStatusEl.addEventListener("change", async (e) => {
+  state.filtroStatus = e.target.value;
+  resetPageData();
+  await carregar();
+});
+filtroAcEl.addEventListener("change", async (e) => {
+  state.filtroAc = e.target.value;
+  resetPageData();
+  await carregar();
+});
+filtroTecnicoEl.addEventListener("change", async (e) => {
+  state.filtroTecnico = e.target.value;
+  resetPageData();
+  await carregar();
+});
+filtroDataInicioEl.addEventListener("change", async (e) => {
+  state.filtroDataInicio = e.target.value;
+  resetPageData();
+  await carregar();
+});
+filtroDataFimEl.addEventListener("change", async (e) => {
+  state.filtroDataFim = e.target.value;
+  resetPageData();
+  await carregar();
+});
+filtroCpfCnpjEl.addEventListener("input", (e) => { state.filtroCpfCnpj = e.target.value.trim(); resetPageData(); render(); });
+filtroProtocoloEl.addEventListener("input", (e) => { state.filtroProtocolo = e.target.value.trim(); resetPageData(); render(); });
 
 async function protegerPagina() {
   await authManager.initialize();
@@ -553,11 +687,10 @@ async function protegerPagina() {
   const btnAdmin = document.getElementById("btnAdmin");
   const btnDashboard = document.getElementById("btnDashboard");
   
-  // Mostrar botões apenas para admins
   if (btnAdmin && isAdmin) {
     btnAdmin.style.display = "inline-block";
   }
-  if (btnDashboard && isAdmin) {
+  if (btnDashboard) {
     btnDashboard.style.display = "inline-block";
   }
 
@@ -618,5 +751,22 @@ abrirModalAdicionar = async function() {
   await preencherResponsavelAbertura();
 };
 
-iniciarAtualizacaoTempoReal();
-protegerPagina();
+// Inicializar em sequência correta para evitar race conditions
+(async () => {
+  try {
+    // 1. Aguardar inicialização do Auth
+    await authManager.initialize();
+    console.log("[App] ✅ Auth inicializado");
+    
+    // 2. Proteger página (redireciona se não autenticado)
+    await protegerPagina();
+    console.log("[App] ✅ Página protegida");
+    
+    // 3. Carregar a primeira página com filtros atuais
+    await carregar();
+    console.log("[App] ✅ Registros carregados");
+  } catch (error) {
+    console.error("[App] ❌ Erro na inicialização:", error);
+    showNotification(`Erro ao inicializar: ${error.message}`, "error", 5000);
+  }
+})();

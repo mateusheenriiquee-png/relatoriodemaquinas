@@ -92,8 +92,6 @@ function initializeSecondaryApp(env) {
   const serviceAccountRaw = env?.FIREBASE_SERVICE_ACCOUNT;
   const isBase64 = !!serviceAccountBase64;
   const credentialToUse = serviceAccountBase64 || serviceAccountRaw;
-  
-  const projectId = env?.FIREBASE_PROJECT_ID || "suportetecnico-api";
 
   console.log("[FirebaseSecondary] Inicializando Admin SDK Secundário...");
   console.log("[FirebaseSecondary] Using Base64:", isBase64);
@@ -105,6 +103,7 @@ function initializeSecondaryApp(env) {
   }
 
   const serviceAccount = parseServiceAccount(credentialToUse, isBase64);
+  const projectId = env?.FIREBASE_PROJECT_ID || serviceAccount?.project_id || "suportetecnico-api2";
 
   if (!serviceAccount) {
     const errorMsg = "Erro ao parsear FIREBASE_SERVICE_ACCOUNT";
@@ -117,7 +116,7 @@ function initializeSecondaryApp(env) {
       // Primeira inicialização - usar como app padrão
       secondaryApp = admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
-        projectId: projectId
+        projectId
       });
     } else {
       // Apps já existem - inicializar com nome único

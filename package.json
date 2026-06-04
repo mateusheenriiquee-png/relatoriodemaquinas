@@ -8,9 +8,14 @@
     "dev": "node api/src/server.js",
     "pages:dev": "wrangler pages dev public",
     "cf:deploy": "node scripts/cf-pages-deploy.js",
+    "lint": "eslint .",
+    "format": "prettier --write .",
     "test": "echo \"No tests configured\""
   },
   "devDependencies": {
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.0.0",
+    "prettier": "^3.0.0",
     "wrangler": "^4.95.0"
   },
   "engines": {

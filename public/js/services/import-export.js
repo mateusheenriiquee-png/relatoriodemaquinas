@@ -3,7 +3,9 @@ import {
   deleteDoc,
   doc,
   getDocs,
+  query,
   serverTimestamp,
+  where,
   writeBatch
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 import { db } from "../config/firebase.js";
@@ -333,7 +335,19 @@ function filtrarPorPeriodo(docs, dataInicio, dataFim) {
 }
 
 async function exportCSV(dataInicio = "", dataFim = "") {
-  const snap = await getDocs(collection(db, COLLECTION));
+  let snap;
+  const constraints = [];
+  if (dataInicio) {
+    constraints.push(where("dataAbertura", ">=", new Date(`${dataInicio}T00:00:00Z`).toISOString()));
+  }
+  if (dataFim) {
+    constraints.push(where("dataAbertura", "<=", new Date(`${dataFim}T23:59:59Z`).toISOString()));
+  }
+  if (constraints.length) {
+    snap = await getDocs(query(collection(db, COLLECTION), ...constraints));
+  } else {
+    snap = await getDocs(collection(db, COLLECTION));
+  }
   const filtrados = filtrarPorPeriodo(snap.docs, dataInicio, dataFim);
   if (!filtrados.length) {
     alert("Nenhum registro encontrado para o período selecionado.");
