@@ -70,4 +70,5 @@ build/Release/
 # Dataconnect
 .dataconnect/
 
-.tutoriais
+tutoriais/
+My workflow.json
