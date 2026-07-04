@@ -1,4 +1,5 @@
-import admin from "firebase-admin";
+import admin from "./firebase-admin-shim.mjs";
+import { verifyFirebaseIdToken } from "./verify-id-token.mjs";
 import { normalizarCargo } from "./funcoes.mjs";
 
 let adminApp = null;
@@ -223,54 +224,54 @@ export async function createUserInFirebase(email, password, displayName, cargo =
  * @returns {Promise<{valid: boolean, uid?: string, email?: string, error?: string}>}
  */
 export async function verifyFirebaseToken(token, env = {}) {
+  if (!token) {
+    console.error(`[Firebase] ❌ Token não fornecido`);
+    return {
+      valid: false,
+      error: "Token não fornecido"
+    };
+  }
+
+  console.log(`[Firebase] Iniciando validação de token...`);
+  console.log(`[Firebase] Token preview: ${token.substring(0, 50)}...`);
+
+  // Tentativa 1: Firebase Admin SDK (não roda de verdade em Cloudflare Workers,
+  // mas tentamos por compatibilidade — qualquer erro aqui (inclusive na
+  // inicialização/parse do service account) NÃO deve impedir o fallback JWKS abaixo).
   try {
-    if (!token) {
-      console.error(`[Firebase] ❌ Token não fornecido`);
-      return {
-        valid: false,
-        error: "Token não fornecido"
-      };
-    }
-
-    console.log(`[Firebase] Iniciando validação de token...`);
-    console.log(`[Firebase] Token preview: ${token.substring(0, 50)}...`);
-
-    // Inicializar Firebase (se não estiver já)
     const app = initializeFirebaseAdmin(env);
     console.log(`[Firebase] Admin SDK inicializado`);
-
-    // Verificar token com Firebase Admin SDK
-    console.log(`[Firebase] Chamando verifyIdToken...`);
+    console.log(`[Firebase] Chamando admin.auth().verifyIdToken...`);
     const decodedToken = await admin.auth().verifyIdToken(token);
-
-    console.log(`[Firebase] ✅ Token validado com sucesso`);
+    console.log(`[Firebase] ✅ Token validado com sucesso (Admin SDK)`);
     console.log(`[Firebase] UID: ${decodedToken.uid}`);
     console.log(`[Firebase] Email: ${decodedToken.email}`);
-    console.log(`[Firebase] Exp: ${new Date(decodedToken.exp * 1000).toISOString()}`);
-
     return {
       valid: true,
       uid: decodedToken.uid,
       email: decodedToken.email
     };
-  } catch (error) {
-    console.error(`[Firebase] ❌ Erro ao validar token:`, error.message);
-    console.error(`[Firebase] Código de erro:`, error.code);
-    console.error(`[Firebase] Stack:`, error.stack);
+  } catch (adminErr) {
+    console.warn(`[Firebase] Admin verify indisponível (esperado em Workers), usando fallback JWKS: ${adminErr.message}`);
+  }
 
-    let errorMessage = "Token inválido.";
-    if (error.code === "auth/id-token-expired") {
-      errorMessage = "Token expirado.";
-    } else if (error.code === "auth/id-token-revoked") {
-      errorMessage = "Token revogado.";
-    } else if (error.code === "auth/invalid-id-token") {
-      errorMessage = "Token inválido.";
+  // Tentativa 2: verificação via JWKS (funciona nativamente no runtime do Workers,
+  // não depende de service account, só de FIREBASE_PROJECT_ID opcionalmente).
+  try {
+    const fallback = await verifyFirebaseIdToken(token, env);
+    if (fallback.valid) {
+      console.log(`[Firebase] ✅ Token validado com sucesso (JWKS)`);
+      return { valid: true, uid: fallback.uid, email: fallback.email };
     }
-
+    console.error(`[Firebase] ❌ Fallback JWKS falhou: ${fallback.error}`);
+    return { valid: false, error: fallback.error || "Token inválido." };
+  } catch (fallbackErr) {
+    console.error(`[Firebase] ❌ Erro ao validar token via JWKS:`, fallbackErr.message);
+    console.error(`[Firebase] Stack:`, fallbackErr.stack);
     return {
       valid: false,
-      error: errorMessage,
-      details: error.message
+      error: "Token inválido.",
+      details: fallbackErr.message
     };
   }
 }

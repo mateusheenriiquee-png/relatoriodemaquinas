@@ -122,8 +122,48 @@ function agruparContagem(lista, chaveFn) {
   return [...map.entries()].sort((a, b) => b[1] - a[1]);
 }
 
+function listarTecnicosUnicos(registros) {
+  const map = new Map();
+  registros.forEach((record) => {
+    if (!record.tecnico) return;
+    const key = normKey(record.tecnico);
+    const prev = map.get(key);
+    if (!prev || record.tecnico === record.tecnico.toUpperCase()) {
+      map.set(key, record.tecnico === record.tecnico.toUpperCase() ? record.tecnico : prev || record.tecnico);
+    }
+  });
+  return [...map.values()].sort((a, b) => a.localeCompare(b, "pt-BR", { sensitivity: "base" }));
+}
+
+function agruparContagemTecnico(lista) {
+  const map = new Map();
+  lista.forEach((item) => {
+    const key = normKey(item.tecnico);
+    const prev = map.get(key);
+    const count = (prev?.count || 0) + 1;
+    const label =
+      !prev || item.tecnico === item.tecnico.toUpperCase()
+        ? item.tecnico === item.tecnico.toUpperCase()
+          ? item.tecnico
+          : prev?.label || item.tecnico
+        : prev.label;
+    map.set(key, { label, count });
+  });
+  return [...map.values()]
+    .map(({ label, count }) => [label, count])
+    .sort((a, b) => b[1] - a[1]);
+}
+
+function involvesSoluti(...values) {
+  return values.some((value) => norm(value).toLowerCase().includes("soluti"));
+}
+
+function isRegistroSoluti(record) {
+  return involvesSoluti(record.ac, record.tipo, record.responsavelAbertura, record.protocolo, record.tecnico);
+}
+
 function getRegistrosFiltrados() {
-  let dados = [...state.registros];
+  let dados = state.registros.filter((record) => !isRegistroSoluti(record));
   const dias = Number(state.filtroPeriodo);
   if (dias && !Number.isNaN(dias)) {
     const limite = Date.now() - dias * 24 * 60 * 60 * 1000;
@@ -139,7 +179,8 @@ function getRegistrosFiltrados() {
     dados = dados.filter((r) => r.ac === state.filtroAc);
   }
   if (state.filtroTecnico !== "todos") {
-    dados = dados.filter((r) => r.tecnico === state.filtroTecnico);
+    const filtroKey = normKey(state.filtroTecnico);
+    dados = dados.filter((r) => normKey(r.tecnico) === filtroKey);
   }
   return dados;
 }
@@ -148,9 +189,7 @@ function atualizarFiltrosDinamicos() {
   const acs = [...new Set(state.registros.map((r) => r.ac).filter(Boolean))].sort((a, b) =>
     a.localeCompare(b, "pt-BR", { sensitivity: "base" })
   );
-  let tecnicos = [...new Set(state.registros.map((r) => r.tecnico).filter(Boolean))].sort((a, b) =>
-    a.localeCompare(b, "pt-BR", { sensitivity: "base" })
-  );
+  let tecnicos = listarTecnicosUnicos(state.registros);
 
   if (!authManager.isAdmin()) {
     const userTecnico = normKey(authManager.getUserDisplayName());
@@ -169,6 +208,8 @@ function atualizarFiltrosDinamicos() {
   filtroAcEl.value = state.filtroAc;
 
   const tecAtual = state.filtroTecnico;
+  const tecAtualKey = tecAtual === "todos" ? "todos" : normKey(tecAtual);
+  const tecMatch = tecnicos.find((nome) => normKey(nome) === tecAtualKey);
   filtroTecnicoEl.innerHTML = '<option value="todos">Todos</option>';
   tecnicos.forEach((nome) => {
     const opt = document.createElement("option");
@@ -176,7 +217,7 @@ function atualizarFiltrosDinamicos() {
     opt.textContent = nome;
     filtroTecnicoEl.appendChild(opt);
   });
-  state.filtroTecnico = tecAtual === "todos" || tecnicos.includes(tecAtual) ? tecAtual : "todos";
+  state.filtroTecnico = tecAtual === "todos" || tecMatch ? tecMatch || "todos" : "todos";
   filtroTecnicoEl.value = state.filtroTecnico;
 }
 
@@ -190,13 +231,13 @@ function destroyChart(id) {
 const CHART_COLORS_STORAGE_KEY = "suporte-dashboard-chart-colors";
 
 const DEFAULT_CHART_COLORS = {
-  bar1: "#E7B111",
-  bar2: "#f5c842",
-  bar3: "#c49a0e",
-  bar4: "#9a7b0a",
-  devido: "#E7B111",
-  indevido: "#c49a0e",
-  pendente: "#f5c842"
+  bar1: "#1e3a5f",
+  bar2: "#2d5080",
+  bar3: "#3d6a9a",
+  bar4: "#0f2744",
+  devido: "#1e3a5f",
+  indevido: "#64748b",
+  pendente: "#94a3b8"
 };
 
 let chartColorPrefs = { ...DEFAULT_CHART_COLORS };
@@ -219,7 +260,7 @@ function getChartTheme() {
     pendente: chartColorPrefs.pendente,
     finalizado: STATUS_CHART_COLORS.FINALIZADO,
     muted: cssVar("--muted", "#5c5c5c"),
-    grid: "rgba(231, 177, 17, 0.2)"
+    grid: "rgba(30, 58, 95, 0.12)"
   };
 }
 
@@ -363,7 +404,7 @@ function renderKpis(dados) {
 
 function renderCharts(dados) {
   const theme = getChartTheme();
-  const porTecnico = agruparContagem(dados, (r) => r.tecnico);
+  const porTecnico = agruparContagemTecnico(dados);
   renderChart("chartPorTecnico", {
     type: "bar",
     data: {
@@ -412,12 +453,12 @@ function renderCharts(dados) {
     options: { cutout: "62%", plugins: { legend: { display: true, position: "bottom" } } }
   });
 
-  const tempoPorTecnico = agruparContagem(
-    dados.filter((r) => r.status === STATUS_FINALIZADO),
-    (r) => r.tecnico
+  const tempoPorTecnico = agruparContagemTecnico(
+    dados.filter((r) => r.status === STATUS_FINALIZADO)
   ).map(([tecnico]) => {
+    const tecnicoKey = normKey(tecnico);
     const tempos = dados
-      .filter((r) => r.tecnico === tecnico && r.status === STATUS_FINALIZADO)
+      .filter((r) => normKey(r.tecnico) === tecnicoKey && r.status === STATUS_FINALIZADO)
       .map((r) => horasEntre(r.dataAbertura, r.dataAtualizacao))
       .filter((h) => h !== null);
     return [tecnico, media(tempos) || 0];
@@ -502,9 +543,10 @@ function renderTabelas(dados) {
   tbodyRanking.innerHTML = "";
   tbodyResponsavel.innerHTML = "";
 
-  const porTecnico = agruparContagem(dados, (r) => r.tecnico);
+  const porTecnico = agruparContagemTecnico(dados);
   porTecnico.forEach(([tecnico, total]) => {
-    const doTecnico = dados.filter((r) => r.tecnico === tecnico);
+    const tecnicoKey = normKey(tecnico);
+    const doTecnico = dados.filter((r) => normKey(r.tecnico) === tecnicoKey);
     const fin = doTecnico.filter((r) => r.status === STATUS_FINALIZADO).length;
     const andamento = doTecnico.filter((r) => r.status === "EM ANDAMENTO").length;
     const aberto = doTecnico.filter((r) => r.status === "EM ABERTO").length;
@@ -567,7 +609,9 @@ async function carregar() {
   loading.classList.remove("hidden");
   try {
     const snap = await getDocs(collection(db, COLLECTION));
-    state.registros = snap.docs.map((d) => mapDoc(d.id, d.data()));
+    state.registros = snap.docs
+      .map((d) => mapDoc(d.id, d.data()))
+      .filter((record) => !isRegistroSoluti(record));
     atualizarFiltrosDinamicos();
     render();
   } finally {
@@ -600,7 +644,7 @@ async function protegerPaginaDashboard() {
 
   if (!authManager.isAuthenticated()) {
     window.location.href = "./login.html";
-    return;
+    return false;
   }
 
   const isAdmin = authManager.isAdmin();
@@ -648,10 +692,19 @@ async function protegerPaginaDashboard() {
       filtroTecnicoContainer.style.display = "none";
     }
   }
+
+  return true;
 }
 
-protegerPaginaDashboard();
+async function initDashboard() {
+  const allowed = await protegerPaginaDashboard();
+  if (!allowed) return;
 
-carregar().catch((err) => {
-  alert(`Erro ao carregar dashboard: ${String(err?.message || err || "")}`);
-});
+  try {
+    await carregar();
+  } catch (err) {
+    alert(`Erro ao carregar dashboard: ${String(err?.message || err || "")}`);
+  }
+}
+
+initDashboard();

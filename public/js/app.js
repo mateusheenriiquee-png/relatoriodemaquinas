@@ -132,6 +132,14 @@ function showNotification(message, type = "info", timeout = 2500) {
 
 const norm = (v) => String(v || "").trim().replace(/\s+/g, " ");
 
+function involvesSoluti(...values) {
+  return values.some((value) => norm(value).toLowerCase().includes("soluti"));
+}
+
+function isRegistroSoluti(record) {
+  return involvesSoluti(record.ac, record.tipo, record.responsavelAbertura, record.protocolo, record.tecnico);
+}
+
 function normStatus(v) {
   const s = norm(v).toUpperCase();
   if (STATUS_OPTIONS.includes(s)) return s;
@@ -184,7 +192,7 @@ function resolverDataAbertura(data = {}) {
 
 function configurarCamposModoEdicao(estaEditando) {
   modalProtocolo.disabled = estaEditando;
-  modalResponsavelAbertura.disabled = true; // SEMPRE desabilitado (não deve ser editável)
+  modalResponsavelAbertura.disabled = true;
   modalCpfCnpj.disabled = estaEditando;
   modalTipo.disabled = estaEditando;
   modalAc.disabled = estaEditando;
@@ -195,6 +203,45 @@ function configurarCamposModoEdicao(estaEditando) {
   modalStatus.disabled = false;
   modalTecnico.disabled = false;
   modalStatusAbertura.disabled = false;
+}
+
+async function associarTecnicoResponsavel(itemId) {
+  const item = state.registros.find((registro) => registro.id === itemId);
+  if (!item) throw new Error("Registro não encontrado.");
+
+  let apiBase = window.__API_BASE_URL;
+  if (!apiBase) {
+    if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+      apiBase = "http://localhost:3000";
+    } else {
+      apiBase = window.location.origin;
+    }
+  }
+
+  const token = await authManager.getIdToken();
+  console.log("[App] associarTecnicoResponsavel apiBase:", apiBase);
+  console.log("[App] associarTecnicoResponsavel token preview:", token ? `${token.substring(0, 20)}...` : "[no token]");
+
+  const response = await fetch(`${apiBase}/admin/supports/${itemId}/associate`, {
+    method: "POST",
+    mode: "cors",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+  const data = await response.json();
+  if (!response.ok || !data.ok) {
+    throw new Error(data.error || "Erro ao associar técnico.");
+  }
+
+  const tecnico = data.tecnico;
+  const status = "EM ANDAMENTO";
+  void syncToSheet(itemId, { ...item, tecnico, status, id: itemId });
+  await atualizarEstatisticasDb();
+  atualizarEstatisticas();
+  return tecnico;
 }
 
 function mapDocToRegistro(docSnap) {
@@ -269,7 +316,7 @@ function startPageListener() {
     (snap) => {
       state.hasNextPage = snap.docs.length > PAGE_SIZE;
       const docs = snap.docs.slice(0, PAGE_SIZE);
-      state.registros = docs.map(mapDocToRegistro);
+      state.registros = docs.map(mapDocToRegistro).filter((item) => !isRegistroSoluti(item));
       const currentPage = Math.max(1, state.paginaAtual);
       if (docs.length > 0) {
         state.pageCursors[currentPage] = docs[docs.length - 1];
@@ -317,7 +364,7 @@ function atualizarFiltroAc() {
 }
 
 function getRegistrosFiltrados() {
-  let dados = [...state.registros];
+  let dados = state.registros.filter((item) => !isRegistroSoluti(item));
   if (state.filtroCpfCnpj) dados = dados.filter((item) => item.cpfCnpj.toLowerCase().includes(state.filtroCpfCnpj.toLowerCase()));
   if (state.filtroProtocolo) dados = dados.filter((item) => item.protocolo.toLowerCase().includes(state.filtroProtocolo.toLowerCase()));
   if (state.filtroStatus !== "todos") dados = dados.filter((item) => item.status === state.filtroStatus);
@@ -387,6 +434,9 @@ function render() {
   }
   dados.forEach((item) => {
     const tr = document.createElement("tr");
+    const btnExcluir = authManager.isAdmin()
+      ? `<button class="btn btn-small btn-ghost" data-action="excluir" data-id="${item.id}">Excluir</button>`
+      : "";
     tr.innerHTML = `
       <td>${formatDate(item.dataAbertura)}</td>
       <td>${item.responsavelAbertura || "-"}</td>
@@ -401,8 +451,8 @@ function render() {
       <td>${item.statusAbertura || "-"}</td>
       <td class="actions-cell">
         <div class="action-buttons">
-          <button class="btn btn-small btn-primary" data-action="editar" data-id="${item.id}">Editar</button>
-          <button class="btn btn-small btn-ghost" data-action="excluir" data-id="${item.id}">Excluir</button>
+          <button class="btn btn-small btn-primary" data-action="associar" data-id="${item.id}">Associar</button>
+          ${btnExcluir}
         </div>
       </td>
     `;
@@ -501,6 +551,10 @@ async function syncToSheet(id, data) {
 }
 
 async function confirmarExclusao() {
+  if (!authManager.isAdmin()) {
+    showNotification("Apenas administradores podem excluir suportes.", "error", 3500);
+    return;
+  }
   if (!excluirIdPendente && !excluirTudoPendente) return;
   btnConfirmarExclusao.disabled = true;
   btnConfirmarExclusao.textContent = excluirTudoPendente ? "Excluindo tudo..." : "Excluindo...";
@@ -602,12 +656,15 @@ tbody.addEventListener("click", async (e) => {
   if (!btn) return;
   const id = btn.dataset.id;
   try {
-    if (btn.dataset.action === "editar") {
-      const item = state.registros.find((r) => r.id === id);
-      if (!item) throw new Error("Registro nao encontrado.");
-      abrirModalEditar(item);
+    if (btn.dataset.action === "associar") {
+      const tecnico = await associarTecnicoResponsavel(id);
+      showNotification(`Técnico associado com sucesso: ${tecnico}`, "success", 2200);
+      await carregar();
     }
     if (btn.dataset.action === "excluir") {
+      if (!authManager.isAdmin()) {
+        throw new Error("Apenas administradores podem excluir suportes.");
+      }
       const item = state.registros.find((r) => r.id === id);
       if (!item) throw new Error("Registro nao encontrado.");
       abrirModalExcluir(item);

@@ -38,24 +38,46 @@ if (!admin.apps.length) {
     serviceAccount = require(serviceAccountPath);
     credential = admin.credential.cert(serviceAccount);
   }
-  // 4. Tentar arquivo na pasta api
-  else if (fs.existsSync(path.join(__dirname, "../firebase-service-account.json"))) {
-    const serviceAccountPath = path.join(__dirname, "../firebase-service-account.json");
-    console.log("✓ Usando credenciais de:", serviceAccountPath);
-    serviceAccount = require(serviceAccountPath);
-    credential = admin.credential.cert(serviceAccount);
-  }
-  // 5. Usar credencial padrão (pode falhar)
+  // 4. Tentar service account JSON padrão no root do projeto
   else {
-    console.warn("⚠ Nenhum arquivo de credenciais encontrado. Tentando credential padrão...");
-    try {
-      credential = admin.credential.applicationDefault();
-    } catch (err) {
-      console.error("✗ Erro ao carregar credenciais:", err.message);
-      throw new Error(
-        "Firebase Admin SDK não conseguiu inicializar. " +
-        "Configure GOOGLE_APPLICATION_CREDENTIALS, FIREBASE_SERVICE_ACCOUNT ou coloque firebase-service-account.json na raiz do projeto."
-      );
+    const rootPath = path.resolve(__dirname, "../../");
+    console.log("🔎 Procurando credenciais no root:", rootPath);
+    const candidates = fs.readdirSync(rootPath).filter((name) => name.endsWith(".json") && /firebase-adminsdk|service-account|service_account/i.test(name));
+    console.log("🔎 Arquivos JSON candidatos:", candidates);
+
+    for (const candidate of candidates) {
+      const candidatePath = path.join(rootPath, candidate);
+      try {
+        const parsed = require(candidatePath);
+        if (parsed && parsed.type === "service_account") {
+          console.log("✓ Usando credenciais de:", candidatePath);
+          serviceAccount = parsed;
+          credential = admin.credential.cert(serviceAccount);
+          break;
+        }
+      } catch (e) {
+        console.warn("⚠ Ignorando JSON inválido:", candidatePath, e.message);
+      }
+    }
+
+    if (!credential && fs.existsSync(path.join(__dirname, "../firebase-service-account.json"))) {
+      const serviceAccountPath = path.join(__dirname, "../firebase-service-account.json");
+      console.log("✓ Usando credenciais de:", serviceAccountPath);
+      serviceAccount = require(serviceAccountPath);
+      credential = admin.credential.cert(serviceAccount);
+    }
+
+    if (!credential) {
+      console.warn("⚠ Nenhum arquivo de credenciais encontrado. Tentando credential padrão...");
+      try {
+        credential = admin.credential.applicationDefault();
+      } catch (err) {
+        console.error("✗ Erro ao carregar credenciais:", err.message);
+        throw new Error(
+          "Firebase Admin SDK não conseguiu inicializar. " +
+          "Configure GOOGLE_APPLICATION_CREDENTIALS, FIREBASE_SERVICE_ACCOUNT ou coloque firebase-service-account.json na raiz do projeto."
+        );
+      }
     }
   }
 

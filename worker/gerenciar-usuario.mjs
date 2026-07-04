@@ -3,7 +3,7 @@
  * Usa instância secundária para não deslogar o admin
  */
 
-import admin from "firebase-admin";
+import admin from "./firebase-admin-shim.mjs";
 import { getSecondaryAuth, getSecondaryDb } from "./auth-secondary.mjs";
 
 /**

@@ -1,0 +1,12 @@
+name = "suportetecnico-api"
+main = "worker/index.mjs"
+compatibility_date = "2024-11-12"
+compatibility_flags = ["nodejs_compat"]
+keep_vars = true
+[env.production]
+# Variables are managed in the Cloudflare Dashboard. Leaving this table
+# empty prevents `wrangler deploy` from overwriting values that already
+# exist in the remote environment.
+[assets]
+directory = "./public"
+binding = "ASSETS"

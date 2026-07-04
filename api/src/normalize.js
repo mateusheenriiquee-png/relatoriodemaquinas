@@ -1,4 +1,5 @@
 const STATUS_OPTIONS = new Set(["EM ABERTO", "EM ANDAMENTO", "FINALIZADO", "SEM RETORNO", "REAGENDADO"]);
+const { normalizeTecnico } = require("./tecnico");
 
 const IGNORED_FIELDS = new Set([
   "observacao",
@@ -261,7 +262,10 @@ function normalizeStatusByRule(statusValue, stepValue) {
 }
 
 function assignField(target, key, value, partial) {
-  const text = normalizeText(value);
+  let text = normalizeText(value);
+  if (key === "tecnico" && text) {
+    text = normalizeTecnico(text);
+  }
   if (text) {
     target[key] = text;
     return;

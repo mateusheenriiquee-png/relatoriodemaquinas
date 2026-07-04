@@ -4,7 +4,7 @@
  * Impede que o admin seja deslogado durante essas operações
  */
 
-import admin from "firebase-admin";
+import admin from "./firebase-admin-shim.mjs";
 
 let secondaryApp = null;
 

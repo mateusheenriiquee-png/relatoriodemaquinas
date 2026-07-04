@@ -3,7 +3,7 @@
  * Usa instância secundária para isolar operações de usuário
  */
 
-import admin from "firebase-admin";
+import admin from "./firebase-admin-shim.mjs";
 import { getSecondaryAuth, getSecondaryDb } from "./auth-secondary.mjs";
 
 /**

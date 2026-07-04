@@ -206,6 +206,76 @@ async function patchDocument({ documentName, fields, accessToken, updateMaskPath
   return response;
 }
 
+function decodeFirestoreValue(value) {
+  if (value === null || value === undefined) return null;
+  if ("stringValue" in value) return value.stringValue;
+  if ("integerValue" in value) return Number(value.integerValue);
+  if ("doubleValue" in value) return value.doubleValue;
+  if ("booleanValue" in value) return value.booleanValue;
+  if ("nullValue" in value) return null;
+  if ("mapValue" in value) return decodeFirestoreFields(value.mapValue.fields || {});
+  if ("arrayValue" in value) return (value.arrayValue.values || []).map(decodeFirestoreValue);
+  if ("timestampValue" in value) return value.timestampValue;
+  return null;
+}
+
+function decodeFirestoreFields(fields = {}) {
+  const result = {};
+  for (const [key, val] of Object.entries(fields)) {
+    result[key] = decodeFirestoreValue(val);
+  }
+  return result;
+}
+
+export async function getDocument({ serviceAccountRaw, collection, docId }) {
+  const serviceAccount = parseServiceAccount(serviceAccountRaw);
+  const accessToken = await getAccessToken(serviceAccountRaw);
+  const projectId = serviceAccount.project_id;
+  const documentName = `projects/${projectId}/databases/(default)/documents/${collection}/${docId}`;
+
+  const response = await fetch(`https://firestore.googleapis.com/v1/${documentName}`, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error?.message || "Falha ao ler documento no Firestore.");
+  }
+
+  return decodeFirestoreFields(data.fields || {});
+}
+
+export async function updateDocument({ serviceAccountRaw, collection, docId, fields }) {
+  const serviceAccount = parseServiceAccount(serviceAccountRaw);
+  const accessToken = await getAccessToken(serviceAccountRaw);
+  const projectId = serviceAccount.project_id;
+  const documentName = `projects/${projectId}/databases/(default)/documents/${collection}/${docId}`;
+
+  const firestoreFields = toFirestoreFields(fields);
+  const fieldPaths = Object.keys(firestoreFields);
+  if (!fieldPaths.length) {
+    return { skipped: true };
+  }
+
+  const response = await patchDocument({
+    documentName,
+    fields: firestoreFields,
+    accessToken,
+    updateMaskPaths: fieldPaths
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error?.message || "Falha ao atualizar documento no Firestore.");
+  }
+
+  return data;
+}
+
 export async function upsertRecords({ serviceAccountRaw, collection, records }) {
   if (!records.length) {
     return 0;

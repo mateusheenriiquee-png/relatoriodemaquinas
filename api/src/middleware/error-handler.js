@@ -8,6 +8,9 @@ function errorHandler(err, _req, res, _next) {
   const status = Number(err.status) || 500;
   if (status >= 500) {
     console.error("[ErrorHandler]", err.stack || err.message || err);
+    if (err.details) {
+      console.error("[ErrorHandler details]", err.details);
+    }
   }
   return jsonError(res, err.message || "Erro interno.", status, err.details);
 }

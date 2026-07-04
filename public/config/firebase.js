@@ -23,19 +23,18 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
-// Detectar ambiente de emulador (opcional - para desenvolvimento local)
-if (typeof window !== "undefined" && window.location.hostname === "localhost") {
+// Conectar ao emulador apenas quando for explicitamente ativado.
+// Para testes locais com emulador, defina `window.__USE_FIREBASE_EMULATORS = true` antes de importar este arquivo.
+const USE_FIREBASE_EMULATORS = typeof window !== "undefined" && window.__USE_FIREBASE_EMULATORS === true;
+
+if (USE_FIREBASE_EMULATORS) {
   try {
-    // Conectar ao emulador se disponível (porta 9099 para Auth, 8080 para Firestore)
-    if (!auth.emulatorConfig) {
-      connectAuthEmulator(auth, "http://localhost:9099", { disableWarnings: true });
-    }
-    if (!db._firebaseApp._config.emulatorConfig?.firestoreDatabase) {
-      connectFirestoreEmulator(db, "localhost", 8080);
-    }
+    // Conectar aos emuladores localmente (porta 9099 para Auth, 8080 para Firestore)
+    connectAuthEmulator(auth, "http://localhost:9099", { disableWarnings: true });
+    connectFirestoreEmulator(db, "localhost", 8080);
+    console.log("✓ Firebase emulator conectado");
   } catch (error) {
-    // Emulador não disponível, usar Firebase remoto
-    console.log("Emulador não disponível, usando Firebase remoto");
+    console.warn("⚠️ Falha ao conectar aos emuladores Firebase:", error.message || error);
   }
 }
 

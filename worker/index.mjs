@@ -1,5 +1,6 @@
 import { processWebhookPost } from "./webhook.mjs";
 import { upsertSheetRow, deleteSheetRow } from "./sheets-sync.mjs";
+import { getDocument, updateDocument } from "./firestore-rest.mjs";
 import { createUserInFirebase, verifyFirebaseToken } from "./auth-admin.mjs";
 import { criarUsuarioFirebase } from "./criar-usuario.mjs";
 import {
@@ -24,15 +25,15 @@ function isSheetsAuthorized(request, env) {
   return token && token === expected;
 }
 
-async function isAdminAuthorized(request, env) {
+async function getAdminAuthInfo(request, env) {
   // Obter token do header Authorization
   const authHeader = request.headers.get("authorization") || "";
   const headerToken = authHeader.replace("Bearer ", "");
-  
+
   console.log(`[Middleware] Verificando autorização:`);
   console.log(`  - Authorization header: ${authHeader ? "✓" : "✗"}`);
   console.log(`  - Token extraído: ${headerToken ? headerToken.substring(0, 50) + "..." : "✗"}`);
-  
+
   // Se há token, validar com Firebase
   if (headerToken) {
     console.log(`[Middleware] Modo: Firebase Token`);
@@ -41,20 +42,79 @@ async function isAdminAuthorized(request, env) {
       const result = await verifyFirebaseToken(headerToken, env);
       if (result.valid) {
         console.log(`[Middleware] ✅ Firebase Token válido - UID: ${result.uid}`);
-        return true;
-      } else {
-        console.log(`[Middleware] ❌ Firebase Token inválido: ${result.error}`);
-        return false;
+        return { authorized: true, uid: result.uid, email: result.email };
       }
+      console.log(`[Middleware] ❌ Firebase Token inválido: ${result.error}`);
+      return { authorized: false, error: result.error };
     } catch (error) {
       console.error(`[Middleware] ❌ Erro ao validar Firebase token:`, error.message);
-      return false;
+      return { authorized: false, error: error.message };
     }
   }
-  
+
   // Sem token - modo desenvolvimento, permitir
   console.log(`[Middleware] Nenhum token fornecido - modo desenvolvimento (permitindo)`);
-  return true;
+  return { authorized: true, uid: null, email: null };
+}
+
+async function handleAssociateTecnico(supportId, authInfo, env) {
+  if (!authInfo?.uid) {
+    return jsonResponse(401, {
+      ok: false,
+      error: "Nao autorizado. Nao foi possivel identificar o usuario a partir do token."
+    });
+  }
+
+  try {
+    const usuariosCollection = env.USUARIOS_COLLECTION || "usuarios";
+    const supportsCollection = env.FIRESTORE_COLLECTION || "suportes_tecnicos";
+    const serviceAccountRaw = env.FIREBASE_SERVICE_ACCOUNT_BASE64 || env.FIREBASE_SERVICE_ACCOUNT;
+
+    const userData = await getDocument({
+      serviceAccountRaw,
+      collection: usuariosCollection,
+      docId: authInfo.uid
+    });
+
+    const tecnico = String(userData?.displayName || authInfo.email || "").trim();
+    if (!tecnico) {
+      return jsonResponse(400, {
+        ok: false,
+        error: "Nao foi possivel determinar o nome do tecnico a partir do usuario autenticado."
+      });
+    }
+
+    const supportDoc = await getDocument({
+      serviceAccountRaw,
+      collection: supportsCollection,
+      docId: supportId
+    });
+    if (!supportDoc) {
+      return jsonResponse(404, { ok: false, error: "Registro não encontrado." });
+    }
+
+    await updateDocument({
+      serviceAccountRaw,
+      collection: supportsCollection,
+      docId: supportId,
+      fields: {
+        tecnico,
+        status: "EM ANDAMENTO",
+        updatedAt: new Date().toISOString()
+      }
+    });
+
+    console.log(`[AssociateRoute] Suporte ${supportId} atualizado. Tecnico: ${tecnico}`);
+
+    return jsonResponse(200, { ok: true, tecnico, message: `Técnico associado com sucesso: ${tecnico}` });
+  } catch (error) {
+    console.error("[AssociateRoute] Erro interno ao associar técnico:", error.stack || error.message || error);
+    return jsonResponse(500, {
+      ok: false,
+      error: "Erro ao associar técnico.",
+      details: String(error?.message || error)
+    });
+  }
 }
 
 function getSheetsConfig(env) {
@@ -124,6 +184,83 @@ async function handleSheetsRoute(request, env, action) {
   }
 }
 
+// ============================================
+// � SINCRONIZAÇÃO COM GOOGLE SHEETS
+// ============================================
+async function syncDocsToSheets(docs, env) {
+  const { spreadsheetId, sheetName, serviceAccountRaw } = getSheetsConfig(env);
+  
+  if (!spreadsheetId || !serviceAccountRaw) {
+    console.warn("[Sheets Sync] Configuração incompleta, pulando sincronização");
+    return;
+  }
+
+  console.log(`[Sheets Sync] Iniciando sincronização de ${docs.length} documento(s)...`);
+  
+  for (const doc of docs) {
+    try {
+      if (!doc.id) {
+        console.warn("[Sheets Sync] Documento sem ID, pulando");
+        continue;
+      }
+      
+      console.log(`[Sheets Sync] Sincronizando documento: ${doc.id}`);
+      const result = await upsertSheetRow({
+        serviceAccountRaw,
+        spreadsheetId,
+        sheetName,
+        doc
+      });
+      
+      console.log(`[Sheets Sync] ✓ ${result.updated ? "Atualizado" : "Adicionado"}: ${doc.id}`);
+    } catch (error) {
+      console.error(`[Sheets Sync] ❌ Erro ao sincronizar ${doc.id}:`, error.message);
+      // Continuar mesmo em caso de erro para não bloquear outros documentos
+    }
+  }
+  
+  console.log(`[Sheets Sync] ✓ Sincronização concluída`);
+}
+
+// ============================================
+// �🔌 INTEGRAÇÃO COM GOOGLE APPS SCRIPT (OPÇÃO 1)
+// ============================================
+async function atualizarStatusNaPlanilha(protocolo, novoStatus, env) {
+  const url = env.APPS_SCRIPT_URL;
+  const token = env.APPS_SCRIPT_TOKEN;
+
+  if (!url || !token) {
+    console.error("[Sheets AppScript] Faltam as variáveis APPS_SCRIPT_URL ou APPS_SCRIPT_TOKEN.");
+    return false;
+  }
+
+  const payload = {
+    token: token,
+    protocolo: protocolo,
+    status: novoStatus
+  };
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    
+    const resultado = await response.json();
+    if (resultado.sucesso) {
+      console.log("[Sheets AppScript] Sucesso:", resultado.mensagem);
+      return true;
+    } else {
+      console.error("[Sheets AppScript] Erro retornado:", resultado.erro);
+      return false;
+    }
+  } catch (erro) {
+    console.error("[Sheets AppScript] Falha na requisição:", erro);
+    return false;
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -131,13 +268,23 @@ export default {
     // ============================================
     // 🔐 Proteção de Rotas Admin
     // ============================================
+    let adminAuthInfo = null;
     if (url.pathname.startsWith("/admin/") && !url.pathname.startsWith("/admin/debug-")) {
-      if (!(await isAdminAuthorized(request, env))) {
+      adminAuthInfo = await getAdminAuthInfo(request, env);
+      if (!adminAuthInfo.authorized) {
         return jsonResponse(401, {
           ok: false,
           error: "Não autorizado. Forneça um Firebase ID Token válido via header Authorization: Bearer"
         });
       }
+    }
+
+    // ============================================
+    // 🔧 ASSOCIAR TÉCNICO RESPONSÁVEL
+    // ============================================
+    const associateMatch = url.pathname.match(/^\/admin\/supports\/([^/]+)\/associate$/);
+    if (associateMatch && request.method === "POST") {
+      return handleAssociateTecnico(associateMatch[1], adminAuthInfo, env);
     }
 
     if (url.pathname === "/sheets/upsert") {
@@ -162,7 +309,17 @@ export default {
           },
           { origemIntegracao: "webhook-cloudflare-worker", env }
         );
-        return jsonResponse(result.statusCode, JSON.parse(result.body));
+        
+        // 🔄 SINCRONIZAÇÃO AUTOMÁTICA COM SHEETS (após webhook processado)
+        const parsedBody = JSON.parse(result.body);
+        if (parsedBody.ok && parsedBody.docs && Array.isArray(parsedBody.docs)) {
+          // Sincronizar cada documento com a planilha (background, não bloqueia resposta)
+          syncDocsToSheets(parsedBody.docs, env).catch((err) => {
+            console.error("[Webhook Sheets Sync] Erro ao sincronizar:", err.message);
+          });
+        }
+        
+        return jsonResponse(result.statusCode, parsedBody);
       } catch (error) {
         return jsonResponse(500, {
           ok: false,
@@ -171,7 +328,42 @@ export default {
         });
       }
     }
+        // ============================================
+    // 📝 ROTA PARA ATUALIZAR STATUS DO SUPORTE
+    // ============================================
+    if (url.pathname === "/api/suportes/atualizar" && request.method === "PUT") {
+      try {
+        const body = await request.json();
+        const { protocolo, status } = body;
 
+        if (!protocolo || !status) {
+          return jsonResponse(400, { 
+            ok: false, 
+            error: "É necessário enviar 'protocolo' e 'status'." 
+          });
+        }
+
+        // 1. ATUALIZAR NO FIRESTORE
+        // Se o seu frontend (site) já atualiza o Firestore diretamente via Firebase SDK,
+        // você pode pular esta etapa aqui no Worker. 
+        // Caso contrário, você deve chamar sua função do firestore-rest.mjs aqui.
+        
+        // 2. AVISAR A PLANILHA DO GOOGLE (APPS SCRIPT)
+        const planilhaAtualizada = await atualizarStatusNaPlanilha(protocolo, status, env);
+
+        return jsonResponse(200, {
+          ok: true,
+          mensagem: "Status processado com sucesso.",
+          planilha_atualizada: planilhaAtualizada
+        });
+      } catch (error) {
+        return jsonResponse(500, {
+          ok: false,
+          error: "Erro ao processar atualização.",
+          details: error.message
+        });
+      }
+    }
     // Endpoint de DEBUG - lista TODAS as variáveis do env
     if (url.pathname === "/admin/debug-env") {
       try {
