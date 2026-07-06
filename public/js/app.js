@@ -263,7 +263,21 @@ function mapDocToRegistro(docSnap) {
 }
 
 function buildQueryConstraints() {
-  const constraints = [orderBy("dataAbertura", "desc")];
+  const buscandoProtocolo = !!state.filtroProtocolo;
+  const constraints = [];
+
+  // O Firestore exige que, quando há um filtro de intervalo (>=, <=) em um campo,
+  // o primeiro orderBy() seja nesse MESMO campo. Por isso, ao buscar por protocolo,
+  // trocamos a ordenação de "dataAbertura" para "protocolo".
+  if (buscandoProtocolo) {
+    const valor = state.filtroProtocolo.trim();
+    constraints.push(where("protocolo", ">=", valor));
+    constraints.push(where("protocolo", "<=", valor + "\uf8ff"));
+    constraints.push(orderBy("protocolo"));
+  } else {
+    constraints.push(orderBy("dataAbertura", "desc"));
+  }
+
   if (state.filtroStatus !== "todos") {
     constraints.push(where("status", "==", state.filtroStatus));
   }
@@ -273,13 +287,18 @@ function buildQueryConstraints() {
   if (state.filtroTecnico !== "todos") {
     constraints.push(where("tecnico", "==", state.filtroTecnico));
   }
-  if (state.filtroDataInicio) {
-    const startIso = new Date(`${state.filtroDataInicio}T00:00:00Z`).toISOString();
-    constraints.push(where("dataAbertura", ">=", startIso));
-  }
-  if (state.filtroDataFim) {
-    const endIso = new Date(`${state.filtroDataFim}T23:59:59Z`).toISOString();
-    constraints.push(where("dataAbertura", "<=", endIso));
+  // Firestore só permite filtro de intervalo (>=, <=) em UM campo por consulta.
+  // Como o protocolo já está usando esse tipo de filtro, o intervalo de datas
+  // não pode ser combinado ao mesmo tempo — por isso é ignorado durante a busca por protocolo.
+  if (!buscandoProtocolo) {
+    if (state.filtroDataInicio) {
+      const startIso = new Date(`${state.filtroDataInicio}T00:00:00Z`).toISOString();
+      constraints.push(where("dataAbertura", ">=", startIso));
+    }
+    if (state.filtroDataFim) {
+      const endIso = new Date(`${state.filtroDataFim}T23:59:59Z`).toISOString();
+      constraints.push(where("dataAbertura", "<=", endIso));
+    }
   }
   return constraints;
 }
@@ -728,7 +747,16 @@ filtroDataFimEl.addEventListener("change", async (e) => {
   await carregar();
 });
 filtroCpfCnpjEl.addEventListener("input", (e) => { state.filtroCpfCnpj = e.target.value.trim(); resetPageData(); render(); });
-filtroProtocoloEl.addEventListener("input", (e) => { state.filtroProtocolo = e.target.value.trim(); resetPageData(); render(); });
+
+let debounceProtocolo;
+filtroProtocoloEl.addEventListener("input", (e) => {
+  state.filtroProtocolo = e.target.value.trim();
+  resetPageData();
+  clearTimeout(debounceProtocolo);
+  debounceProtocolo = setTimeout(async () => {
+    await carregar();
+  }, 400);
+});
 
 async function protegerPagina() {
   await authManager.initialize();
