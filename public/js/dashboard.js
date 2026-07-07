@@ -164,11 +164,6 @@ function isRegistroSoluti(record) {
 
 function getRegistrosFiltrados() {
   let dados = state.registros.filter((record) => !isRegistroSoluti(record));
-  const dias = Number(state.filtroPeriodo);
-  if (dias && !Number.isNaN(dias)) {
-    const limite = Date.now() - dias * 24 * 60 * 60 * 1000;
-    dados = dados.filter((r) => r.dataAbertura && r.dataAbertura.getTime() >= limite);
-  }
 
   if (!authManager.isAdmin()) {
     const userTecnico = normKey(authManager.getUserDisplayName());
@@ -608,7 +603,24 @@ async function carregar() {
   const loading = document.getElementById("dashboardLoading");
   loading.classList.remove("hidden");
   try {
-    const snap = await getDocs(collection(db, COLLECTION));
+    const collectionRef = collection(db, COLLECTION);
+    let registrosQuery = collectionRef;
+
+    // Otimização de leituras: quando um período está selecionado, filtramos
+    // no servidor (Firestore) em vez de baixar a coleção inteira toda vez.
+    // ATENÇÃO: documentos sem o campo "dataAbertura" nunca aparecerão aqui
+    // (limitação do Firestore com orderBy/where em campo ausente). Rode a
+    // migração de backfill (ver README/CHANGELOG) se notar registros antigos
+    // sumindo dos períodos 7/30/90 dias.
+    if (state.filtroPeriodo !== "todos") {
+      const dias = Number(state.filtroPeriodo);
+      if (dias && !Number.isNaN(dias)) {
+        const limite = new Date(Date.now() - dias * 24 * 60 * 60 * 1000).toISOString();
+        registrosQuery = query(collectionRef, where("dataAbertura", ">=", limite));
+      }
+    }
+
+    const snap = await getDocs(registrosQuery);
     state.registros = snap.docs
       .map((d) => mapDoc(d.id, d.data()))
       .filter((record) => !isRegistroSoluti(record));
@@ -619,9 +631,9 @@ async function carregar() {
   }
 }
 
-filtroPeriodoEl.addEventListener("change", (e) => {
+filtroPeriodoEl.addEventListener("change", async (e) => {
   state.filtroPeriodo = e.target.value;
-  render();
+  await carregar();
 });
 filtroAcEl.addEventListener("change", (e) => {
   state.filtroAc = e.target.value;

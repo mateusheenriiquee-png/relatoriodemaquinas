@@ -373,6 +373,7 @@ export default {
         const knownVars = [
           "FIREBASE_SERVICE_ACCOUNT",
           "FIREBASE_SERVICE_ACCOUNT_BASE64",
+          "FIREBASE_WEB_API_KEY",
           "FIREBASE_PROJECT_ID",
           "USUARIOS_COLLECTION",
           "SHEETS_SERVICE_ACCOUNT",
@@ -415,12 +416,14 @@ export default {
       try {
         const hasFBServiceAccount = !!env.FIREBASE_SERVICE_ACCOUNT || !!env.FIREBASE_SERVICE_ACCOUNT_BASE64;
         const hasFBProjectId = !!env.FIREBASE_PROJECT_ID;
+        const hasWebApiKey = !!env.FIREBASE_WEB_API_KEY;
         const hasUsuariosCollection = !!env.USUARIOS_COLLECTION;
 
         return jsonResponse(200, {
           ok: true,
           environment: {
             FIREBASE_SERVICE_ACCOUNT: hasFBServiceAccount ? "✓ Configurada" : "✗ Faltando",
+            FIREBASE_WEB_API_KEY: hasWebApiKey ? "✓ Configurada" : "✗ Faltando (necessária para criar usuários)",
             FIREBASE_PROJECT_ID: hasFBProjectId ? "✓ Configurada" : "✗ Faltando",
             USUARIOS_COLLECTION: hasUsuariosCollection ? "✓ Configurada" : "✗ Faltando"
           },

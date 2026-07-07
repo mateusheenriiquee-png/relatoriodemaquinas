@@ -249,6 +249,32 @@ export async function getDocument({ serviceAccountRaw, collection, docId }) {
   return decodeFirestoreFields(data.fields || {});
 }
 
+export async function createDocument({ serviceAccountRaw, collection, docId, fields }) {
+  const serviceAccount = parseServiceAccount(serviceAccountRaw);
+  const accessToken = await getAccessToken(serviceAccountRaw);
+  const projectId = serviceAccount.project_id;
+  const parent = `projects/${projectId}/databases/(default)/documents/${collection}`;
+  const createFields = toFirestoreFields(fields);
+
+  const response = await fetch(
+    `https://firestore.googleapis.com/v1/${parent}?documentId=${encodeURIComponent(docId)}`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ fields: createFields })
+    }
+  );
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error?.message || "Falha ao criar documento no Firestore.");
+  }
+  return data;
+}
+
 export async function updateDocument({ serviceAccountRaw, collection, docId, fields }) {
   const serviceAccount = parseServiceAccount(serviceAccountRaw);
   const accessToken = await getAccessToken(serviceAccountRaw);
@@ -309,6 +335,11 @@ export async function upsertRecords({ serviceAccountRaw, collection, records }) 
 
     if (response.status === 404) {
       const createFields = toFirestoreFields({
+        // Se o payload de origem (webhook, CSV, etc.) não trouxe uma data de
+        // abertura explícita, usamos o momento da criação como fallback.
+        // Sem isso, o documento nunca aparece em consultas que filtram ou
+        // ordenam por "dataAbertura" (ex: filtros de período do dashboard).
+        dataAbertura: isoTimestamp(),
         ...patchPayload,
         createdAt: isoTimestamp()
       });
@@ -338,4 +369,27 @@ export async function upsertRecords({ serviceAccountRaw, collection, records }) 
 
 export async function commitRecords(options) {
   return upsertRecords(options);
+}
+
+export async function deleteDocument({ serviceAccountRaw, collection, docId }) {
+  const serviceAccount = parseServiceAccount(serviceAccountRaw);
+  const accessToken = await getAccessToken(serviceAccountRaw);
+  const projectId = serviceAccount.project_id;
+  const documentName = `projects/${projectId}/databases/(default)/documents/${collection}/${docId}`;
+
+  const response = await fetch(`https://firestore.googleapis.com/v1/${documentName}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+
+  if (response.status === 404) {
+    return { notFound: true };
+  }
+
+  if (!response.ok) {
+    const data = await response.json();
+    throw new Error(data.error?.message || "Falha ao excluir documento no Firestore.");
+  }
+
+  return { ok: true };
 }

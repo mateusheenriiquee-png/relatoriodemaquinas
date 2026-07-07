@@ -454,7 +454,15 @@ function render() {
   dados.forEach((item) => {
     const tr = document.createElement("tr");
     const btnExcluir = authManager.isAdmin()
-      ? `<button class="btn btn-small btn-ghost" data-action="excluir" data-id="${item.id}">Excluir</button>`
+      ? `<button class="btn btn-icon btn-icon-danger" data-action="excluir" data-id="${item.id}" title="Excluir" aria-label="Excluir suporte">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 6h18"/>
+            <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+            <path d="M10 11v6"/>
+            <path d="M14 11v6"/>
+          </svg>
+        </button>`
       : "";
     tr.innerHTML = `
       <td>${formatDate(item.dataAbertura)}</td>
@@ -470,7 +478,13 @@ function render() {
       <td>${item.statusAbertura || "-"}</td>
       <td class="actions-cell">
         <div class="action-buttons">
-          <button class="btn btn-small btn-primary" data-action="associar" data-id="${item.id}">Associar</button>
+          <button class="btn btn-icon btn-icon-primary" data-action="associar" data-id="${item.id}" title="Associar técnico" aria-label="Associar técnico responsável">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+              <circle cx="9" cy="7" r="4"/>
+              <polyline points="16 11 18 13 22 9"/>
+            </svg>
+          </button>
           ${btnExcluir}
         </div>
       </td>

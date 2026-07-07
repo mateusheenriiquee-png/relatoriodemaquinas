@@ -26,3 +26,8 @@ My workflow.json
 node_modules/
 .env
 .env.local
+
+*-firebase-adminsdk-*.json
+.env
+.env.local
+firebase-key.json
