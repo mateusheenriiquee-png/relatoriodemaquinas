@@ -185,6 +185,11 @@ h1 {
 .toolbar { margin-bottom: 18px; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field label { font-size: 0.83rem; color: var(--muted); }
+/* estado visual para campos que precisam de atenção (erro de validação) */
+.field.required-error label { color: #b91c1c; }
+.field.required-error input { border-color: #fca5a5; box-shadow: 0 0 0 3px rgba(220,36,36,0.06); }
+.field .error-note { display: none; font-size: 0.82rem; color: #b91c1c; margin-top: 6px; }
+.field.required-error .error-note { display: block; }
 input, select {
   width: 100%;
   border: 1px solid var(--border-subtle);

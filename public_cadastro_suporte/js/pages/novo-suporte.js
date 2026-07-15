@@ -24,11 +24,24 @@ const fields = {
   tipo: document.getElementById("modalTipo"),
   ac: document.getElementById("modalAc"),
   contato: document.getElementById("modalContato"),
-  tecnico: document.getElementById("modalTecnico"),
-  status: document.getElementById("modalStatus"),
-  statusAbertura: document.getElementById("modalStatusAbertura"),
   dataAbertura: document.getElementById("modalDataAbertura")
 };
+
+// helper to add/remove visual error state
+function setRequiredError(show) {
+  const pField = fields.protocolo.closest('.field');
+  const cField = fields.cpfCnpj.closest('.field');
+  if (pField) pField.classList.toggle('required-error', show);
+  if (cField) cField.classList.toggle('required-error', show);
+}
+
+// remove error when user types
+if (fields.protocolo) {
+  fields.protocolo.addEventListener('input', () => setRequiredError(false));
+}
+if (fields.cpfCnpj) {
+  fields.cpfCnpj.addEventListener('input', () => setRequiredError(false));
+}
 
 const norm = (v) => String(v || "").trim().replace(/\s+/g, " ");
 
@@ -109,18 +122,18 @@ function buildPayload() {
 
   const payload = {
     dataAbertura: new Date().toISOString(),
-    updatedAt: serverTimestamp()
+    updatedAt: serverTimestamp(),
+    status: "EM ABERTO"
   };
 
-  put(payload, "protocolo", fields.protocolo.value);
+  put(payload, "protocolo", formatProtocolo(fields.protocolo.value));
   put(payload, "responsavelAbertura", fields.responsavelAbertura.value);
-  put(payload, "cpfCnpj", fields.cpfCnpj.value);
+  put(payload, "cpfCnpj", formatCpfCnpj(fields.cpfCnpj.value));
   put(payload, "tipo", fields.tipo.value);
   put(payload, "ac", fields.ac.value);
-  put(payload, "contato", fields.contato.value);
-  put(payload, "tecnico", fields.tecnico.value);
-  put(payload, "status", normStatus(fields.status.value));
-  put(payload, "statusAbertura", fields.statusAbertura.value);
+  put(payload, "contato", formatContato(fields.contato.value));
+  // tecnico intentionally omitted from quick-create payload
+  // statusAbertura intentionally not included by default
 
   if (!Object.keys(payload).some((k) => !["dataAbertura", "updatedAt"].includes(k))) {
     return null;
@@ -134,11 +147,47 @@ function resetForm() {
   fields.tipo.value = "Suporte tecnico";
   fields.ac.value = "CONSULTI";
   fields.contato.value = "";
-  fields.tecnico.value = "MATHEUS";
-  fields.status.value = "EM ABERTO";
-  fields.statusAbertura.value = "DEVIDO";
   fields.dataAbertura.value = toDatetimeLocal(new Date().toISOString());
   preencherResponsavelAberturaSync();
+}
+
+function formatProtocolo(value) {
+  const v = String(value || "").trim();
+  if (!v) return v;
+  if (/^\d{3}-\d{3}-\d{3}$/.test(v)) return v;
+  const digits = v.replace(/\D/g, "");
+  if (digits.length === 9) {
+    return digits.replace(/(\d{3})(\d{3})(\d{3})/, "$1-$2-$3");
+  }
+  return v;
+}
+
+function formatCpfCnpj(value) {
+  const v = String(value || "").trim();
+  if (!v) return v;
+  if (/^\d{3}\.\d{3}\.\d{3}-\d{2}$/.test(v) || /^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(v)) return v;
+  const digits = v.replace(/\D/g, "");
+  if (digits.length === 11) {
+    return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+  }
+  if (digits.length === 14) {
+    return digits.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
+  }
+  return v;
+}
+
+function formatContato(value) {
+  const v = String(value || "").trim();
+  if (!v) return v;
+  const digits = v.replace(/\D/g, "");
+  if (digits.length >= 10) {
+    const ddd = digits.slice(0, 2);
+    const rest = digits.slice(2);
+    const last = rest.slice(-4);
+    const prefix = rest.slice(0, rest.length - 4);
+    return `(${ddd}) ${prefix}-${last}`;
+  }
+  return v;
 }
 
 function preencherResponsavelAberturaSync() {
@@ -197,6 +246,16 @@ async function protegerPagina() {
 
 formSuporte.addEventListener("submit", async (e) => {
   e.preventDefault();
+  // Exigir que pelo menos Protocolo OU CPF/CNPJ esteja preenchido
+  const protocoloVal = norm(fields.protocolo.value);
+  const cpfVal = norm(fields.cpfCnpj.value);
+  if (!protocoloVal && !cpfVal) {
+    showNotification("Informe o Protocolo ou o CPF/CNPJ antes de salvar.", "error", 3000);
+    // marca visualmente ambos os campos
+    setRequiredError(true);
+    fields.protocolo.focus();
+    return;
+  }
 
   const payload = buildPayload();
   if (!payload) {
@@ -210,6 +269,7 @@ formSuporte.addEventListener("submit", async (e) => {
   try {
     const ref = await addDoc(collection(db, COLLECTION), {
       ...payload,
+      status: payload.status || "EM ABERTO",
       createdAt: serverTimestamp()
     });
 

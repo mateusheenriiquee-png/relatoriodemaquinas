@@ -261,6 +261,48 @@ function normalizeStatusByRule(statusValue, stepValue) {
   return normalizeStatus(statusValue);
 }
 
+function formatPhoneText(text) {
+  const v = normalizeText(text || "");
+  const digits = v.replace(/\D/g, "");
+  if (!digits) return v;
+  if (digits.length >= 10) {
+    const ddd = digits.slice(0, 2);
+    const rest = digits.slice(2);
+    return `(${ddd}) ${rest}`;
+  }
+  return v;
+}
+
+function formatProtocoloText(text) {
+  const v = normalizeText(text || "");
+  if (!v) return v;
+  // already formatted like 111-111-111
+  if (/^\d{3}-\d{3}-\d{3}$/.test(v)) return v;
+  const digits = v.replace(/\D/g, "");
+  if (digits.length === 9) {
+    return digits.replace(/(\d{3})(\d{3})(\d{3})/, "$1-$2-$3");
+  }
+  // do not format if not exactly 9 digits
+  return v;
+}
+
+function formatCpfCnpjText(text) {
+  const v = normalizeText(text || "");
+  if (!v) return v;
+  // If already formatted as CPF xxx.xxx.xxx-xx or CNPJ xx.xxx.xxx/xxxx-xx, keep
+  if (/^\d{3}\.\d{3}\.\d{3}-\d{2}$/.test(v) || /^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(v)) return v;
+  const digits = v.replace(/\D/g, "");
+  if (digits.length === 11) {
+    // CPF: 000.000.000-00
+    return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+  }
+  if (digits.length === 14) {
+    // CNPJ: 00.000.000/0000-00
+    return digits.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
+  }
+  return v;
+}
+
 function assignField(target, key, value, partial) {
   let text = normalizeText(value);
   if (key === "tecnico" && text) {
@@ -286,6 +328,9 @@ function normalizeSupport(input, options = {}) {
     getValueByAliases(["protocolo", "ticket", "id suporte", "id"], ...sources),
     partial
   );
+  if (result.protocolo) {
+    result.protocolo = formatProtocoloText(result.protocolo);
+  }
   assignField(
     result,
     "responsavelAbertura",
@@ -301,12 +346,18 @@ function normalizeSupport(input, options = {}) {
     getValueByAliases(["cpf/cnpj", "cpf cnpj", "cpfcnpj", "cpf", "cnpj", "documento"], ...sources),
     partial
   );
+  if (result.cpfCnpj) {
+    result.cpfCnpj = formatCpfCnpjText(result.cpfCnpj);
+  }
   assignField(
     result,
     "contato",
     getValueByAliases(["contato", "contato ou grupo", "telefone", "celular", "whatsapp", "email"], ...sources),
     partial
   );
+  if (result.contato) {
+    result.contato = formatPhoneText(result.contato);
+  }
   assignField(
     result,
     "descricao",
@@ -333,16 +384,11 @@ function normalizeSupport(input, options = {}) {
     ["step title", "steptitle", "etapa", "fase", "status card", "status do card", "step"],
     ...sources
   );
-  if (statusRaw || stepTitle || !partial) {
+  if (statusRaw || stepTitle) {
     result.status = normalizeStatusByRule(statusRaw, stepTitle);
   }
 
-  assignField(
-    result,
-    "statusAbertura",
-    getValueByAliases(["status da abertura", "status abertura"], ...sources),
-    partial
-  );
+  // intentionally do not assign `statusAbertura` by default; frontend no longer sends this field
   assignField(
     result,
     "dataAbertura",

@@ -33,6 +33,7 @@ const state = {
   filtroDataInicio: "",
   filtroDataFim: "",
   filtroProtocolo: "",
+  filtroStatusAbertura: "todos",
   paginaAtual: 1,
   modalModo: "adicionar",
   pageCursors: [null],
@@ -49,6 +50,7 @@ const filtroTecnicoEl = document.getElementById("filtroTecnico");
 const filtroDataInicioEl = document.getElementById("filtroDataInicio");
 const filtroDataFimEl = document.getElementById("filtroDataFim");
 const filtroProtocoloEl = document.getElementById("filtroProtocolo");
+const filtroStatusAberturaEl = document.getElementById("filtroStatusAbertura");
 const paginationInfo = document.getElementById("paginationInfo");
 const modal = document.getElementById("modalSuporte");
 const modalTitulo = document.getElementById("modalTitulo");
@@ -77,6 +79,17 @@ const btnCancelarSemRetorno = document.getElementById("btnCancelarSemRetorno");
 let excluirIdPendente = null;
 let excluirTudoPendente = false;
 let semRetornoIdPendente = null;
+let indevidoIdPendente = null;
+const indevidoPendingMap = new Map();
+// Notificações sonoras
+let notifyEnabled = true;
+const NOTIFY_STORAGE_KEY = "suporte_notify_enabled";
+try {
+  const stored = localStorage.getItem(NOTIFY_STORAGE_KEY);
+  if (stored !== null) notifyEnabled = stored === "1" || stored === "true";
+} catch (e) {
+  /* ignore */
+}
 
 function showNotification(message, type = "info", timeout = 2500) {
   try {
@@ -289,25 +302,16 @@ function mapDocToRegistro(docSnap) {
     status: normStatus(data.status || data.situacao || data.situacaoAtendimento || "EM ABERTO"),
     statusAbertura: norm(data.statusAbertura || ""),
     motivo: norm(data.motivo || data.motivoSemRetorno || ""),
+    motivoIndevido: norm(data.motivoIndevido || ""),
     dataAbertura: resolverDataAbertura(data)
   };
 }
 
 function buildQueryConstraints() {
-  const buscandoProtocolo = !!state.filtroProtocolo;
   const constraints = [];
 
-  // O Firestore exige que, quando há um filtro de intervalo (>=, <=) em um campo,
-  // o primeiro orderBy() seja nesse MESMO campo. Por isso, ao buscar por protocolo,
-  // trocamos a ordenação de "dataAbertura" para "protocolo".
-  if (buscandoProtocolo) {
-    const valor = state.filtroProtocolo.trim();
-    constraints.push(where("protocolo", ">=", valor));
-    constraints.push(where("protocolo", "<=", valor + "\uf8ff"));
-    constraints.push(orderBy("protocolo"));
-  } else {
-    constraints.push(orderBy("dataAbertura", "desc"));
-  }
+  // Always order by dataAbertura desc; protocolo/CPF search is done client-side.
+  constraints.push(orderBy("dataAbertura", "desc"));
 
   if (state.filtroStatus !== "todos") {
     constraints.push(where("status", "==", state.filtroStatus));
@@ -318,18 +322,13 @@ function buildQueryConstraints() {
   if (state.filtroTecnico !== "todos") {
     constraints.push(where("tecnico", "==", state.filtroTecnico));
   }
-  // Firestore só permite filtro de intervalo (>=, <=) em UM campo por consulta.
-  // Como o protocolo já está usando esse tipo de filtro, o intervalo de datas
-  // não pode ser combinado ao mesmo tempo — por isso é ignorado durante a busca por protocolo.
-  if (!buscandoProtocolo) {
-    if (state.filtroDataInicio) {
-      const startIso = new Date(`${state.filtroDataInicio}T00:00:00Z`).toISOString();
-      constraints.push(where("dataAbertura", ">=", startIso));
-    }
-    if (state.filtroDataFim) {
-      const endIso = new Date(`${state.filtroDataFim}T23:59:59Z`).toISOString();
-      constraints.push(where("dataAbertura", "<=", endIso));
-    }
+  if (state.filtroDataInicio) {
+    const startIso = new Date(`${state.filtroDataInicio}T00:00:00Z`).toISOString();
+    constraints.push(where("dataAbertura", ">=", startIso));
+  }
+  if (state.filtroDataFim) {
+    const endIso = new Date(`${state.filtroDataFim}T23:59:59Z`).toISOString();
+    constraints.push(where("dataAbertura", "<=", endIso));
   }
   return constraints;
 }
@@ -399,14 +398,85 @@ function startStatsListener() {
   unsubscribeStatsListener = onSnapshot(
     collectionRef,
     async () => {
-      await atualizarEstatisticasDb();
-      atualizarEstatisticas();
+      try {
+        const prevTotal = state.statusCounts?.total ?? null;
+        await atualizarEstatisticasDb();
+        atualizarEstatisticas();
+        const newTotal = state.statusCounts?.total ?? 0;
+        if (prevTotal !== null && newTotal > prevTotal) {
+          // tocar som de notificação para novos suportes
+          try { playNotificationSound(); } catch (e) { /* ignore */ }
+        }
+      } catch (err) {
+        console.warn('[App] Falha ao atualizar estatísticas no listener:', err);
+      }
     },
     (error) => {
       console.error("[App] Erro no listener de estatísticas:", error);
       showNotification(`Erro ao sincronizar estatísticas: ${error.message || String(error)}`, "error", 4000);
     }
   );
+}
+
+function playNotificationSound() {
+  if (!notifyEnabled) return;
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    // menos agudo (frequencia menor), timbre suave
+    o.type = 'triangle';
+    o.frequency.value = 320; // Hz (menos agudo)
+    const volume = 0.12; // mais alto
+    // curto envelope para evitar clique e controlar volume
+    const now = ctx.currentTime;
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(volume, now + 0.01);
+    o.connect(g);
+    g.connect(ctx.destination);
+    o.start(now);
+    const durationMs = 700; // som mais longo
+    // reduzir suavemente
+    g.gain.exponentialRampToValueAtTime(0.0001, now + durationMs / 1000);
+    setTimeout(() => {
+      try { o.stop(); } catch (e) {}
+      try { ctx.close(); } catch (e) {}
+    }, durationMs + 50);
+  } catch (err) {
+    // não bloquear se falhar
+    console.warn('[App] playNotificationSound falhou:', err);
+  }
+}
+
+function setNotifyEnabled(enabled) {
+  notifyEnabled = Boolean(enabled);
+  try { localStorage.setItem(NOTIFY_STORAGE_KEY, notifyEnabled ? "1" : "0"); } catch (e) {}
+  const btn = document.getElementById("btnToggleNotify");
+  if (btn) {
+    btn.classList.toggle("btn-tonal", notifyEnabled);
+    btn.classList.toggle("btn-ghost", !notifyEnabled);
+    btn.textContent = notifyEnabled ? "🔔" : "🔕";
+    btn.title = notifyEnabled ? "Notificação: Ligada (clique para desligar)" : "Notificação: Desligada (clique para ligar)";
+  }
+}
+
+function ensureNotifyToggleInHeader() {
+  const header = document.querySelector("header");
+  if (!header) return;
+  const actions = header.querySelector(".actions");
+  if (!actions) return;
+  if (document.getElementById("btnToggleNotify")) return;
+  const btn = document.createElement("button");
+  btn.id = "btnToggleNotify";
+  btn.type = "button";
+  btn.className = notifyEnabled ? "btn btn-tonal" : "btn btn-ghost";
+  btn.style.marginLeft = "8px";
+  btn.textContent = notifyEnabled ? "🔔" : "🔕";
+  btn.title = notifyEnabled ? "Notificação: Ligada (clique para desligar)" : "Notificação: Desligada (clique para ligar)";
+  btn.addEventListener("click", () => setNotifyEnabled(!notifyEnabled));
+  actions.appendChild(btn);
 }
 
 async function carregar() {
@@ -455,6 +525,20 @@ function getRegistrosFiltrados() {
   if (state.filtroDataFim) {
     const fim = new Date(`${state.filtroDataFim}T23:59:59.999`).getTime();
     dados = dados.filter((item) => toComparableDate(item.dataAbertura) <= fim);
+  }
+  // Filtrar por protocolo OU CPF/CNPJ no cliente
+  if (state.filtroProtocolo) {
+    const q = state.filtroProtocolo.toLowerCase();
+    dados = dados.filter((item) => {
+      const p = (item.protocolo || "").toLowerCase();
+      const c = (item.cpfCnpj || "").toLowerCase();
+      return p.includes(q) || c.includes(q);
+    });
+  }
+  // Filtrar por status da abertura (DEVIDO / INDEVIDO)
+  if (state.filtroStatusAbertura && state.filtroStatusAbertura !== "todos") {
+    const q = state.filtroStatusAbertura.toUpperCase();
+    dados = dados.filter((item) => ((item.statusAbertura || "").toUpperCase() === q));
   }
   dados.sort((a, b) => toComparableDate(b.dataAbertura) - toComparableDate(a.dataAbertura));
   return dados;
@@ -507,9 +591,9 @@ function atualizarRodapePaginacao(totalItens = 0) {
 function render() {
   tbody.innerHTML = "";
   const dados = getRegistrosFiltrados();
-  if (!dados.length) {
+    if (!dados.length) {
     const tr = document.createElement("tr");
-    tr.innerHTML = '<td colspan="12" class="empty">Nenhum suporte encontrado para os filtros selecionados.</td>';
+    tr.innerHTML = '<td colspan="11" class="empty">Nenhum suporte encontrado para os filtros selecionados.</td>';
     tbody.appendChild(tr);
     atualizarEstatisticas();
     atualizarRodapePaginacao(0);
@@ -538,7 +622,15 @@ function render() {
         </button>`
       : "";
 
-    const btnConcluir = item.status !== "FINALIZADO"
+    const btnInfo = `<button class="btn btn-icon btn-icon-info" data-action="info" data-id="${item.id}" title="Info" aria-label="Info">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+          </button>`;
+
+    const btnConcluir = (item.status !== "FINALIZADO" && item.status !== "SEM RETORNO")
       ? `<button class="btn btn-icon btn-icon-success" data-action="concluir" data-id="${item.id}" title="Concluir suporte" aria-label="Marcar como finalizado">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M20 6L9 17l-5-5"/>
@@ -556,7 +648,6 @@ function render() {
       ${state.filtroStatus === "SEM RETORNO" && item.status === "SEM RETORNO" ? `<td class="col-motivo" title="${escapeHtml(item.motivo || "")}">${escapeHtml(item.motivo || "-")}</td>` : ""}
       <td><span class="status-pill ${statusClass(item.status)}">${item.status}</span></td>
       <td>${item.tecnico || "-"}</td>
-      <td>${item.statusAbertura || "-"}</td>
       <td class="actions-cell">
         <div class="action-buttons">
           <button class="btn btn-icon btn-icon-primary" data-action="associar" data-id="${item.id}" title="Associar técnico" aria-label="Associar técnico responsável">
@@ -566,6 +657,7 @@ function render() {
               <polyline points="16 11 18 13 22 9"/>
             </svg>
           </button>
+          ${btnInfo}
           ${btnConcluir}
           ${btnSemRetorno}
           ${btnExcluir}
@@ -664,6 +756,45 @@ function fecharModalExcluir() {
   modalExcluir.classList.add("hidden");
 }
 
+function formatProtocolo(value) {
+  const v = String(value || "").trim();
+  if (!v) return v;
+  if (/^\d{3}-\d{3}-\d{3}$/.test(v)) return v;
+  const digits = v.replace(/\D/g, "");
+  if (digits.length === 9) {
+    return digits.replace(/(\d{3})(\d{3})(\d{3})/, "$1-$2-$3");
+  }
+  return v;
+}
+
+function formatCpfCnpj(value) {
+  const v = String(value || "").trim();
+  if (!v) return v;
+  if (/^\d{3}\.\d{3}\.\d{3}-\d{2}$/.test(v) || /^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(v)) return v;
+  const digits = v.replace(/\D/g, "");
+  if (digits.length === 11) {
+    return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+  }
+  if (digits.length === 14) {
+    return digits.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
+  }
+  return v;
+}
+
+function formatContato(value) {
+  const v = String(value || "").trim();
+  if (!v) return v;
+  const digits = v.replace(/\D/g, "");
+  if (digits.length >= 10) {
+    const ddd = digits.slice(0, 2);
+    const rest = digits.slice(2);
+    const last = rest.slice(-4);
+    const prefix = rest.slice(0, rest.length - 4);
+    return `(${ddd}) ${prefix}-${last}`;
+  }
+  return v;
+}
+
 async function excluirTodosRegistros() {
   const limite = 500;
   while (true) {
@@ -723,6 +854,9 @@ function buildPayloadFromForm(modo) {
     put(payload, "tecnico", modalTecnico.value);
     put(payload, "status", normStatus(modalStatus.value));
     put(payload, "statusAbertura", modalStatusAbertura.value);
+    if (modalProtocolo.value) put(payload, "protocolo", formatProtocolo(modalProtocolo.value));
+    if (modalCpfCnpj.value) put(payload, "cpfCnpj", formatCpfCnpj(modalCpfCnpj.value));
+    if (modalContato.value) put(payload, "contato", formatContato(modalContato.value));
     return payload;
   }
 
@@ -730,12 +864,12 @@ function buildPayloadFromForm(modo) {
     dataAbertura: new Date().toISOString(),
     updatedAt: serverTimestamp()
   };
-  put(payload, "protocolo", modalProtocolo.value);
+  put(payload, "protocolo", formatProtocolo(modalProtocolo.value));
   put(payload, "responsavelAbertura", modalResponsavelAbertura.value);
-  put(payload, "cpfCnpj", modalCpfCnpj.value);
+  put(payload, "cpfCnpj", formatCpfCnpj(modalCpfCnpj.value));
   put(payload, "tipo", modalTipo.value);
   put(payload, "ac", modalAc.value);
-  put(payload, "contato", modalContato.value);
+  put(payload, "contato", formatContato(modalContato.value));
   put(payload, "tecnico", modalTecnico.value);
   put(payload, "status", normStatus(modalStatus.value));
   put(payload, "statusAbertura", modalStatusAbertura.value);
@@ -796,6 +930,25 @@ tbody.addEventListener("click", async (e) => {
       showNotification(`Técnico associado com sucesso: ${tecnico}`, "success", 2200);
       await carregar();
     }
+    if (btn.dataset.action === "info") {
+      const item = state.registros.find((r) => r.id === id);
+      if (!item) throw new Error("Registro não encontrado.");
+      // If already indevido show reason
+      if (item.statusAbertura === "INDEVIDO" && item.motivoIndevido) {
+        const viewModal = document.getElementById("modalIndevidoView");
+        const viewTextarea = document.getElementById("modalIndevidoViewTexto");
+        if (viewTextarea) viewTextarea.value = item.motivoIndevido;
+        if (viewModal) viewModal.classList.remove("hidden");
+        return;
+      }
+      // open modal to collect reason and store pending
+      indevidoIdPendente = id;
+      const indevidoModal = document.getElementById("modalIndevido");
+      const textarea = document.getElementById("modalIndevidoTexto");
+      if (textarea) textarea.value = indevidoPendingMap.get(id) || "";
+      if (indevidoModal) indevidoModal.classList.remove("hidden");
+      return;
+    }
     if (btn.dataset.action === "sem-retorno") {
       // Abrir modal para coletar motivo antes de marcar como SEM RETORNO
       semRetornoIdPendente = id;
@@ -820,11 +973,14 @@ tbody.addEventListener("click", async (e) => {
     if (btn.dataset.action === "concluir") {
       const item = state.registros.find((r) => r.id === id);
       if (!item) throw new Error("Registro não encontrado.");
-      await updateDoc(doc(db, COLLECTION, id), {
-        status: "FINALIZADO",
-        updatedAt: serverTimestamp()
-      });
-      void syncToSheet(id, { ...item, status: "FINALIZADO", id });
+      const payload = { status: "FINALIZADO", updatedAt: serverTimestamp() };
+      if (indevidoPendingMap.has(id)) {
+        payload.statusAbertura = "INDEVIDO";
+        payload.motivoIndevido = indevidoPendingMap.get(id);
+      }
+      await updateDoc(doc(db, COLLECTION, id), payload);
+      void syncToSheet(id, { ...item, ...payload, id });
+      if (indevidoPendingMap.has(id)) indevidoPendingMap.delete(id);
       await atualizarEstatisticasDb();
       atualizarEstatisticas();
       showNotification("Suporte marcado como finalizado.", "success", 2200);
@@ -853,6 +1009,38 @@ btnConfirmarExclusao.addEventListener("click", confirmarExclusao);
 modalExcluir.addEventListener("click", (e) => {
   if (e.target === modalExcluir) fecharModalExcluir();
 });
+// Indevido modal handlers
+const btnConfirmarIndevido = document.getElementById("btnConfirmarIndevido");
+const btnCancelarIndevido = document.getElementById("btnCancelarIndevido");
+const btnFecharIndevidoView = document.getElementById("btnFecharIndevidoView");
+if (btnConfirmarIndevido) {
+  btnConfirmarIndevido.addEventListener("click", () => {
+    if (!indevidoIdPendente) return;
+    const text = norm(document.getElementById("modalIndevidoTexto").value || "");
+    if (!text) {
+      showNotification("Informe um motivo válido.", "error", 2200);
+      return;
+    }
+    indevidoPendingMap.set(indevidoIdPendente, text);
+    // close modal
+    const m = document.getElementById("modalIndevido");
+    if (m) m.classList.add("hidden");
+    showNotification("Motivo salvo localmente. Ao concluir, será registrado.", "success", 2200);
+  });
+}
+if (btnCancelarIndevido) {
+  btnCancelarIndevido.addEventListener("click", () => {
+    indevidoIdPendente = null;
+    const m = document.getElementById("modalIndevido");
+    if (m) m.classList.add("hidden");
+  });
+}
+if (btnFecharIndevidoView) {
+  btnFecharIndevidoView.addEventListener("click", () => {
+    const m = document.getElementById("modalIndevidoView");
+    if (m) m.classList.add("hidden");
+  });
+}
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && !modalExcluir.classList.contains("hidden")) {
     fecharModalExcluir();
@@ -928,6 +1116,13 @@ filtroTecnicoEl.addEventListener("change", async (e) => {
   resetPageData();
   await carregar();
 });
+if (filtroStatusAberturaEl) {
+  filtroStatusAberturaEl.addEventListener("change", async (e) => {
+    state.filtroStatusAbertura = e.target.value;
+    resetPageData();
+    await carregar();
+  });
+}
 filtroDataInicioEl.addEventListener("change", async (e) => {
   state.filtroDataInicio = e.target.value;
   resetPageData();
@@ -981,6 +1176,9 @@ async function protegerPagina() {
     const actions = header.querySelector(".actions");
     if (actions) {
       actions.appendChild(userInfo);
+        // add notify toggle button
+        ensureNotifyToggleInHeader();
+        setNotifyEnabled(notifyEnabled);
     }
 
     document.getElementById("btnLogout").addEventListener("click", async () => {

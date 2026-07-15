@@ -338,6 +338,10 @@ tbody tr:last-child td { border-bottom: 0; }
 .modal-form { display: grid; gap: 12px; }
 .modal-actions { display: flex; justify-content: flex-end; }
 .modal-confirm { width: min(420px, 100%); text-align: center; padding: 24px 22px 20px; }
+.modal-confirm {
+  /* garantir espaço extra abaixo para botões e evitar sobreposição */
+  padding-bottom: 34px;
+}
 .modal-confirm-icon {
   width: 52px;
   height: 52px;
@@ -366,7 +370,10 @@ tbody tr:last-child td { border-bottom: 0; }
   font-weight: 600;
   box-shadow: var(--neon-inset), var(--neon-sm);
 }
-.modal-confirm-actions { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.modal-confirm-actions { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; position: relative; z-index: 2; }
+
+.modal-confirm .field { margin-bottom: 10px; text-align: left; }
+.modal-confirm textarea { width: 100%; min-height: 92px; padding: 10px; border-radius: 8px; border: 1px solid var(--border-subtle); resize: vertical; }
 .btn-danger { background: #dc2626; color: #fff; border: 1px solid #b91c1c; box-shadow: 0 0 12px rgba(220, 38, 38, 0.35); }
 .btn-danger:hover { background: #b91c1c; }
 .btn-danger:disabled { opacity: 0.65; cursor: not-allowed; }

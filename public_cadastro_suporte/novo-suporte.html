@@ -8,6 +8,9 @@
   <style>
     .novo-suporte-page.container {
       max-width: 720px;
+      margin: 36px auto;
+      padding: 20px;
+      box-sizing: border-box;
     }
     .novo-suporte-intro {
       margin: 0 0 20px;
@@ -68,7 +71,8 @@
       <form id="formSuporte" class="novo-suporte-form">
         <div class="field">
           <label for="modalProtocolo">Protocolo</label>
-          <input id="modalProtocolo" maxlength="80" placeholder="Opcional">
+          <input id="modalProtocolo" maxlength="80">
+          <div class="error-note">Preencha Protocolo ou CPF/CNPJ</div>
         </div>
         <div class="field">
           <label for="modalResponsavelAbertura">Responsavel da abertura</label>
@@ -78,10 +82,11 @@
           <div class="field">
             <label for="modalCpfCnpj">CPF/CNPJ</label>
             <input id="modalCpfCnpj" maxlength="32">
+            <div class="error-note">Preencha Protocolo ou CPF/CNPJ</div>
           </div>
           <div class="field">
             <label for="modalContato">Contato ou grupo</label>
-            <input id="modalContato" maxlength="120">
+            <input id="modalContato">
           </div>
         </div>
         <div class="form-grid-2">
@@ -101,41 +106,8 @@
             </select>
           </div>
         </div>
+        <!-- tecnico field removed for quick-create form -->
         <div class="form-grid-2">
-          <div class="field">
-            <label for="modalTecnico">Tecnico responsavel</label>
-            <select id="modalTecnico">
-              <option value="MATHEUS">MATHEUS</option>
-              <option value="HENRIQUE">HENRIQUE</option>
-              <option value="VICTOR">VICTOR</option>
-              <option value="ISABELE">ISABELE</option>
-              <option value="MALU">MALU</option>
-              <option value="AGNY">AGNY</option>
-              <option value="IANCA">IANCA</option>
-              <option value="EMYLE">EMYLE</option>
-              <option value="VINICIUS">VINICIUS</option>
-              <option value="JUNIOR">JUNIOR</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="modalStatus">Situacao do atendimento</label>
-            <select id="modalStatus">
-              <option value="EM ABERTO">EM ABERTO</option>
-              <option value="EM ANDAMENTO">EM ANDAMENTO</option>
-              <option value="FINALIZADO">FINALIZADO</option>
-              <option value="REAGENDADO">REAGENDADO</option>
-              <option value="SEM RETORNO">SEM RETORNO</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-grid-2">
-          <div class="field">
-            <label for="modalStatusAbertura">Status da abertura</label>
-            <select id="modalStatusAbertura">
-              <option value="DEVIDO">Devido</option>
-              <option value="INDEVIDO">Indevido</option>
-            </select>
-          </div>
           <div class="field">
             <label for="modalDataAbertura">Carimbo de data/hora</label>
             <input id="modalDataAbertura" type="datetime-local" disabled>

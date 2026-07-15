@@ -65,8 +65,16 @@
         <input id="filtroDataFim" type="date">
       </div>
       <div class="field">
-        <label for="filtroProtocolo">Protocolo</label>
-        <input id="filtroProtocolo" type="text" placeholder="Digite o protocolo">
+        <label for="filtroProtocolo">Protocolo / CPF</label>
+        <input id="filtroProtocolo" type="text" placeholder="Protocolo ou CPF/CNPJ">
+      </div>
+      <div class="field">
+        <label for="filtroStatusAbertura">Status da abertura</label>
+        <select id="filtroStatusAbertura">
+          <option value="todos">Todos</option>
+          <option value="DEVIDO">Devido</option>
+          <option value="INDEVIDO">Indevido</option>
+        </select>
       </div>
     </section>
 
@@ -101,7 +109,6 @@
             <th>Contato/Grupo</th>
             <th>Sit. Atendimento</th>
             <th>Tecnico</th>
-            <th>Status Abertura</th>
             <th>Ações</th>
           </tr>
         </thead>
@@ -198,6 +205,39 @@
       <div class="modal-confirm-actions">
         <button id="btnCancelarSemRetorno" class="btn btn-ghost" type="button">Cancelar</button>
         <button id="btnConfirmarSemRetorno" class="btn btn-primary" type="button">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal para coletar motivo Indevido -->
+  <div id="modalIndevido" class="modal hidden" role="dialog" aria-labelledby="modalIndevidoTitulo" aria-modal="true">
+    <div class="modal-content modal-confirm">
+      <div class="modal-confirm-icon" aria-hidden="true">i</div>
+      <h2 id="modalIndevidoTitulo">Motivo - Indevido</h2>
+      <p class="modal-confirm-text">Informe um breve motivo para marcar este suporte como <strong>Indevido</strong>. O suporte será sinalizado quando for concluído.</p>
+      <div class="field">
+        <label for="modalIndevidoTexto">Motivo</label>
+        <textarea id="modalIndevidoTexto" rows="4" maxlength="400" placeholder="Descreva o motivo..."></textarea>
+      </div>
+      <div class="modal-confirm-actions">
+        <button id="btnCancelarIndevido" class="btn btn-ghost" type="button">Cancelar</button>
+        <button id="btnConfirmarIndevido" class="btn btn-primary" type="button">Salvar motivo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal para exibir motivo Indevido existente -->
+  <div id="modalIndevidoView" class="modal hidden" role="dialog" aria-labelledby="modalIndevidoViewTitulo" aria-modal="true">
+    <div class="modal-content modal-confirm">
+      <div class="modal-confirm-icon" aria-hidden="true">i</div>
+      <h2 id="modalIndevidoViewTitulo">Suporte Indevido</h2>
+      <p class="modal-confirm-text">Este suporte foi marcado como <strong>Indevido</strong>. Motivo:</p>
+      <div class="field">
+        <label for="modalIndevidoViewTexto">Motivo</label>
+        <textarea id="modalIndevidoViewTexto" rows="4" readonly></textarea>
+      </div>
+      <div class="modal-confirm-actions">
+        <button id="btnFecharIndevidoView" class="btn btn-primary" type="button">Fechar</button>
       </div>
     </div>
   </div>
