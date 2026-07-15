@@ -33,13 +33,19 @@ export function buildSheetDoc(id, data = {}) {
   };
 }
 
+function resolveApiUrl(path) {
+  const base = String(window.__API_BASE_URL || "").replace(/\/$/, "");
+  if (!base) return path;
+  return `${base}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
 async function postSheet(path, body) {
   const headers = { "Content-Type": "application/json" };
   if (APP_CONFIG.SHEETS_SYNC_TOKEN) {
     headers["x-sync-token"] = APP_CONFIG.SHEETS_SYNC_TOKEN;
   }
 
-  const response = await fetch(path, {
+  const response = await fetch(resolveApiUrl(path), {
     method: "POST",
     headers,
     body: JSON.stringify(body)

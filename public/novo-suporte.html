@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Novo Suporte - Suporte Tecnico</title>
+  <link rel="stylesheet" href="./css/main.css">
+  <style>
+    .novo-suporte-page.container {
+      max-width: 720px;
+    }
+    .novo-suporte-intro {
+      margin: 0 0 20px;
+      color: var(--muted);
+      font-size: 0.95rem;
+      line-height: 1.5;
+    }
+    .novo-suporte-card {
+      background: var(--card-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 20px;
+    }
+    .novo-suporte-form {
+      display: grid;
+      gap: 12px;
+    }
+    .novo-suporte-form .form-grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    @media (max-width: 640px) {
+      .novo-suporte-form .form-grid-2 {
+        grid-template-columns: 1fr;
+      }
+    }
+    .novo-suporte-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+    .user-info {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+  </style>
+  <!--
+    Hospedagem alternativa: aponte a API principal para sync com Google Sheets.
+    <script>window.__API_BASE_URL = "https://seu-worker.workers.dev";</script>
+  -->
+</head>
+<body>
+  <div class="container novo-suporte-page">
+    <header class="header">
+      <div>
+        <h1>Novo Suporte</h1>
+        <p class="subtitle">Abertura rapida de chamado tecnico</p>
+      </div>
+      <div class="actions" id="headerActions"></div>
+    </header>
+
+    <p class="novo-suporte-intro">
+      Preencha os dados abaixo para registrar um novo suporte. O registro sera salvo no mesmo banco de dados do painel principal.
+    </p>
+
+    <section class="novo-suporte-card">
+      <form id="formSuporte" class="novo-suporte-form">
+        <div class="field">
+          <label for="modalProtocolo">Protocolo</label>
+          <input id="modalProtocolo" maxlength="80" placeholder="Opcional">
+        </div>
+        <div class="field">
+          <label for="modalResponsavelAbertura">Responsavel da abertura</label>
+          <input id="modalResponsavelAbertura" maxlength="120" disabled>
+        </div>
+        <div class="form-grid-2">
+          <div class="field">
+            <label for="modalCpfCnpj">CPF/CNPJ</label>
+            <input id="modalCpfCnpj" maxlength="32">
+          </div>
+          <div class="field">
+            <label for="modalContato">Contato ou grupo</label>
+            <input id="modalContato" maxlength="120">
+          </div>
+        </div>
+        <div class="form-grid-2">
+          <div class="field">
+            <label for="modalTipo">Tipo</label>
+            <select id="modalTipo">
+              <option value="Suporte tecnico">Suporte tecnico</option>
+              <option value="Instalção">Instalação</option>
+              <option value="Configuração de Maquina">Configuração de Maquina</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="modalAc">AC</label>
+            <select id="modalAc">
+              <option value="CONSULTI">CONSULTI</option>
+              <option value="VALID">VALID</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          
+        </div>
+        <div class="form-grid-2">
+          <div class="field">
+            <label for="modalTecnico">Tecnico responsavel</label>
+            <select id="modalTecnico">
+              <option value="MATHEUS">MATHEUS</option>
+              <option value="HENRIQUE">HENRIQUE</option>
+              <option value="VICTOR">VICTOR</option>
+              <option value="ISABELE">ISABELE</option>
+              <option value="MALU">MALU</option>
+              <option value="AGNY">AGNY</option>
+              <option value="IANCA">IANCA</option>
+              <option value="EMYLE">EMYLE</option>
+              <option value="VINICIUS">VINICIUS</option>
+              <option value="JUNIOR">JUNIOR</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="modalStatus">Situacao do atendimento</label>
+            <select id="modalStatus">
+              <option value="EM ABERTO">EM ABERTO</option>
+              <option value="EM ANDAMENTO">EM ANDAMENTO</option>
+              <option value="FINALIZADO">FINALIZADO</option>
+              <option value="REAGENDADO">REAGENDADO</option>
+              <option value="SEM RETORNO">SEM RETORNO</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-grid-2">
+          <div class="field">
+            <label for="modalStatusAbertura">Status da abertura</label>
+            <select id="modalStatusAbertura">
+              <option value="DEVIDO">Devido</option>
+              <option value="INDEVIDO">Indevido</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="modalDataAbertura">Carimbo de data/hora</label>
+            <input id="modalDataAbertura" type="datetime-local" disabled>
+          </div>
+        </div>
+        <div class="novo-suporte-actions">
+          <button id="btnSalvar" class="btn btn-primary" type="submit">Salvar suporte</button>
+          <button id="btnLimpar" class="btn btn-ghost" type="button">Limpar formulario</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <script type="module" src="./js/pages/novo-suporte.js"></script>
+</body>
+</html>

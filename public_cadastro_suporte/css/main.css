@@ -77,19 +77,6 @@ h1 {
   font-weight: 700;
   letter-spacing: -0.02em;
 }
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.brand-logo {
-  width: 48px;
-  height: 48px;
-  object-fit: contain;
-  border-radius: 12px;
-}
 .subtitle { margin: 6px 0 0; color: var(--muted); }
 .actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .btn {
@@ -190,30 +177,6 @@ h1 {
   box-shadow: 0 0 12px rgba(220, 38, 38, 0.3);
   transform: translateY(-1px);
 }
-.btn-icon-success {
-  background: #f0fdf4;
-  color: #15803d;
-  border-color: #bbf7d0;
-}
-.btn-icon-success:hover {
-  background: #16a34a;
-  color: #ffffff;
-  border-color: #15803d;
-  box-shadow: 0 0 12px rgba(22, 163, 74, 0.3);
-  transform: translateY(-1px);
-}
-.btn-icon-secondary {
-  background: #f5f3ff;
-  color: #7c3aed;
-  border-color: #ddd6fe;
-}
-.btn-icon-secondary:hover {
-  background: #7c3aed;
-  color: #ffffff;
-  border-color: #7c3aed;
-  box-shadow: 0 0 12px rgba(124, 58, 237, 0.3);
-  transform: translateY(-1px);
-}
 
 .btn-export { background: transparent; color: var(--primary-dark); border: 1px solid var(--border); }
 .btn-export:hover { background: var(--primary-light); border-color: var(--primary); }
@@ -250,7 +213,7 @@ input:focus, select:focus {
 .stat-card strong {
   color: var(--primary-dark);
 }
-.stat-card span { display: block; color: var(--muted); font-size: 0.83rem; font-weight: 800; }
+.stat-card span { display: block; color: var(--muted); font-size: 0.83rem; }
 .stat-card strong { font-size: 1.25rem; }
 
 /* Quando o card é um <button> (filtro clicável de situação, tela principal) */
@@ -318,8 +281,7 @@ tbody tr:last-child td { border-bottom: 0; }
 .status-finalizado { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
 .status-reagendado { background: #fffbeb; color: #b45309; border: 1px solid #fde68a; }
 .status-sem-retorno { background: #f3f4f6; color: #4b5563; border: 1px solid #d1d5db; }
-.action-buttons { display: flex; gap: 8px; justify-content: center; align-items: center; }
-.col-motivo { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
+.action-buttons { display: flex; gap: 8px; justify-content: center; }
 .table-footer { margin-top: 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 0.9rem; }
 .pagination-actions { display: flex; gap: 8px; }
 .modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); backdrop-filter: blur(4px); display: flex; justify-content: center; align-items: center; padding: 20px; z-index: 1000; }

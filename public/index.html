@@ -9,7 +9,8 @@
 <body>
   <div class="container">
     <header class="header">
-      <div>
+      <div class="brand">
+        <img src="./logo.png" alt="Logo Suporte Técnico" class="brand-logo">
         <h1>Suporte Tecnico</h1>
       </div>
       <div class="actions">
@@ -21,10 +22,6 @@
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           Admin
         </a>
-        <button id="btnAdicionar" class="btn btn-primary">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-          Novo Suporte
-        </button>
         <button id="btnRecarregar" class="btn btn-tonal">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 4v5h-5"/></svg>
           Atualizar Lista
@@ -37,17 +34,6 @@
     </header>
 
     <section class="toolbar">
-      <div class="field">
-        <label for="filtroStatus">Status do suporte</label>
-        <select id="filtroStatus">
-          <option value="todos">Todos</option>
-          <option value="EM ABERTO">EM ABERTO</option>
-          <option value="EM ANDAMENTO">EM ANDAMENTO</option>
-          <option value="FINALIZADO">FINALIZADO</option>
-          <option value="REAGENDADO">REAGENDADO</option>
-          <option value="SEM RETORNO">SEM RETORNO</option>
-        </select>
-      </div>
       <div class="field">
         <label for="filtroAc">AC</label>
         <select id="filtroAc">
@@ -79,20 +65,27 @@
         <input id="filtroDataFim" type="date">
       </div>
       <div class="field">
-        <label for="filtroCpfCnpj">CPF/CNPJ</label>
-        <input id="filtroCpfCnpj" type="text" placeholder="Digite CPF ou CNPJ">
-      </div>
-      <div class="field">
         <label for="filtroProtocolo">Protocolo</label>
         <input id="filtroProtocolo" type="text" placeholder="Digite o protocolo">
       </div>
     </section>
 
-    <section class="stats">
-      <div class="stat-card"><span>Total</span><strong id="statTotal">0</strong></div>
-      <div class="stat-card"><span>Em aberto</span><strong id="statAbertos">0</strong></div>
-      <div class="stat-card"><span>Em andamento</span><strong id="statAndamento">0</strong></div>
-      <div class="stat-card"><span>Finalizados</span><strong id="statFinalizados">0</strong></div>
+    <section class="stats" role="group" aria-label="Filtrar por situação do atendimento">
+      <button type="button" class="stat-card active" data-status="EM ABERTO">
+        <span>Em aberto</span><strong id="statAbertos">0</strong>
+      </button>
+      <button type="button" class="stat-card" data-status="EM ANDAMENTO">
+        <span>Em andamento</span><strong id="statAndamento">0</strong>
+      </button>
+      <button type="button" class="stat-card" data-status="FINALIZADO">
+        <span>Finalizados</span><strong id="statFinalizados">0</strong>
+      </button>
+      <button type="button" class="stat-card" data-status="SEM RETORNO">
+        <span>Sem Retorno</span><strong id="statSemRetorno">0</strong>
+      </button>
+      <button type="button" class="stat-card" data-status="todos">
+        <span>Total</span><strong id="statTotal">0</strong>
+      </button>
     </section>
 
     <div class="table-wrapper">
@@ -106,7 +99,6 @@
             <th>Tipo</th>
             <th>AC</th>
             <th>Contato/Grupo</th>
-            <th>Descrição</th>
             <th>Sit. Atendimento</th>
             <th>Tecnico</th>
             <th>Status Abertura</th>
@@ -134,7 +126,7 @@
       </div>
       <div class="import-option-card">
         <div class="import-option-body">
-          <p>Arquivo com cabeçalho na primeira linha (CSV ou XLSX). Colunas reconhecidas: protocolo, responsável, CPF/CNPJ, contato, tipo, AC, técnico, situação, data, descrição.</p>
+          <p>Arquivo com cabeçalho na primeira linha (CSV ou XLSX). Colunas reconhecidas: protocolo, responsável, CPF/CNPJ, contato, tipo, AC, técnico, situação, data.</p>
           <label class="btn btn-import" for="inputImportFile">Escolher arquivo</label>
           <input id="inputImportFile" class="hidden-input" type="file" accept=".csv,.xlsx,.xls,text/csv">
         </div>
@@ -194,6 +186,22 @@
     </div>
   </div>
 
+  <div id="modalSemRetorno" class="modal hidden" role="dialog" aria-labelledby="modalSemRetornoTitulo" aria-modal="true">
+    <div class="modal-content modal-confirm">
+      <div class="modal-confirm-icon" aria-hidden="true">!</div>
+      <h2 id="modalSemRetornoTitulo">Motivo - Sem Retorno</h2>
+      <p class="modal-confirm-text">Por favor, informe um breve motivo para marcar este suporte como <strong>Sem Retorno</strong>.</p>
+      <div class="field">
+        <label for="modalSemRetornoTexto">Motivo</label>
+        <textarea id="modalSemRetornoTexto" rows="4" maxlength="400" placeholder="Descreva o motivo..."></textarea>
+      </div>
+      <div class="modal-confirm-actions">
+        <button id="btnCancelarSemRetorno" class="btn btn-ghost" type="button">Cancelar</button>
+        <button id="btnConfirmarSemRetorno" class="btn btn-primary" type="button">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
   <div id="modalSuporte" class="modal hidden">
     <div class="modal-content">
       <div class="modal-header">
@@ -208,7 +216,7 @@
           <label for="modalTipo">Tipo</label>
           <select id="modalTipo">
             <option value="Suporte tecnico">Suporte tecnico</option>
-            <option value="Instalação">Instalação</option>
+            <option value="Instalção">Instalação</option>
             <option value="Configuração de Maquina">Configuração de Maquina</option>
           </select>
         </div>
@@ -220,7 +228,7 @@
           </select>
         </div>
         <div class="field"><label for="modalContato">Contato ou grupo</label><input id="modalContato" maxlength="120"></div>
-        <div class="field"><label for="modalDescricao">Descrição</label><input id="modalDescricao" maxlength="240"></div>
+        
         <div class="field">
           <label for="modalTecnico">Tecnico responsavel</label>
           <select id="modalTecnico">

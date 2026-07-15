@@ -2,6 +2,7 @@
   addDoc,
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getCountFromServer,
   getDoc,
@@ -26,12 +27,11 @@ const COLLECTION = "suportes_tecnicos";
 
 const state = {
   registros: [],
-  filtroStatus: "todos",
+  filtroStatus: "EM ABERTO",
   filtroAc: "todos",
   filtroTecnico: "todos",
   filtroDataInicio: "",
   filtroDataFim: "",
-  filtroCpfCnpj: "",
   filtroProtocolo: "",
   paginaAtual: 1,
   modalModo: "adicionar",
@@ -40,14 +40,14 @@ const state = {
   statusCounts: null
 };
 let unsubscribePageListener = null;
+let unsubscribeStatsListener = null;
 
 const tbody = document.getElementById("tbody");
-const filtroStatusEl = document.getElementById("filtroStatus");
+const statCards = document.querySelectorAll(".stat-card");
 const filtroAcEl = document.getElementById("filtroAc");
 const filtroTecnicoEl = document.getElementById("filtroTecnico");
 const filtroDataInicioEl = document.getElementById("filtroDataInicio");
 const filtroDataFimEl = document.getElementById("filtroDataFim");
-const filtroCpfCnpjEl = document.getElementById("filtroCpfCnpj");
 const filtroProtocoloEl = document.getElementById("filtroProtocolo");
 const paginationInfo = document.getElementById("paginationInfo");
 const modal = document.getElementById("modalSuporte");
@@ -60,7 +60,6 @@ const modalCpfCnpj = document.getElementById("modalCpfCnpj");
 const modalTipo = document.getElementById("modalTipo");
 const modalAc = document.getElementById("modalAc");
 const modalContato = document.getElementById("modalContato");
-const modalDescricao = document.getElementById("modalDescricao");
 const modalTecnico = document.getElementById("modalTecnico");
 const modalStatus = document.getElementById("modalStatus");
 const modalStatusAbertura = document.getElementById("modalStatusAbertura");
@@ -70,9 +69,14 @@ const modalExcluir = document.getElementById("modalExcluir");
 const modalExcluirDetalhes = document.getElementById("modalExcluirDetalhes");
 const btnCancelarExclusao = document.getElementById("btnCancelarExclusao");
 const btnConfirmarExclusao = document.getElementById("btnConfirmarExclusao");
+const modalSemRetorno = document.getElementById("modalSemRetorno");
+const modalSemRetornoTexto = document.getElementById("modalSemRetornoTexto");
+const btnConfirmarSemRetorno = document.getElementById("btnConfirmarSemRetorno");
+const btnCancelarSemRetorno = document.getElementById("btnCancelarSemRetorno");
 
 let excluirIdPendente = null;
 let excluirTudoPendente = false;
+let semRetornoIdPendente = null;
 
 function showNotification(message, type = "info", timeout = 2500) {
   try {
@@ -131,6 +135,14 @@ function showNotification(message, type = "info", timeout = 2500) {
 }
 
 const norm = (v) => String(v || "").trim().replace(/\s+/g, " ");
+
+function escapeHtml(s) {
+  return String(s || "")
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
 
 function involvesSoluti(...values) {
   return values.some((value) => norm(value).toLowerCase().includes("soluti"));
@@ -197,7 +209,6 @@ function configurarCamposModoEdicao(estaEditando) {
   modalTipo.disabled = estaEditando;
   modalAc.disabled = estaEditando;
   modalContato.disabled = estaEditando;
-  modalDescricao.disabled = estaEditando;
   modalDataAbertura.disabled = true;
 
   modalStatus.disabled = false;
@@ -222,26 +233,46 @@ async function associarTecnicoResponsavel(itemId) {
   console.log("[App] associarTecnicoResponsavel apiBase:", apiBase);
   console.log("[App] associarTecnicoResponsavel token preview:", token ? `${token.substring(0, 20)}...` : "[no token]");
 
-  const response = await fetch(`${apiBase}/admin/supports/${itemId}/associate`, {
-    method: "POST",
-    mode: "cors",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`
+  try {
+    const response = await fetch(`${apiBase}/admin/supports/${itemId}/associate`, {
+      method: "POST",
+      mode: "cors",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      }
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      throw new Error(data.error || "Erro ao associar técnico.");
     }
-  });
 
-  const data = await response.json();
-  if (!response.ok || !data.ok) {
-    throw new Error(data.error || "Erro ao associar técnico.");
+    const tecnico = data.tecnico;
+    const status = "EM ANDAMENTO";
+    void syncToSheet(itemId, { ...item, tecnico, status, id: itemId });
+    await atualizarEstatisticasDb();
+    atualizarEstatisticas();
+    return tecnico;
+  } catch (err) {
+    console.warn("[App] associarTecnicoResponsavel fallback (api failed):", err.message || err);
+    // Fallback: atualizar diretamente no Firestore com o usuário atual
+    const tecnicoFallback = authManager.getUserDisplayName() || authManager.getCurrentUserData()?.displayName || (authManager.getCurrentUser()?.email ?? "Desconhecido");
+    try {
+      await updateDoc(doc(db, COLLECTION, itemId), {
+        tecnico: tecnicoFallback,
+        status: "EM ANDAMENTO",
+        updatedAt: serverTimestamp()
+      });
+      void syncToSheet(itemId, { ...item, tecnico: tecnicoFallback, status: "EM ANDAMENTO", id: itemId });
+      await atualizarEstatisticasDb();
+      atualizarEstatisticas();
+      return tecnicoFallback;
+    } catch (err2) {
+      console.error("[App] Fallback de associar técnico falhou:", err2);
+      throw err2;
+    }
   }
-
-  const tecnico = data.tecnico;
-  const status = "EM ANDAMENTO";
-  void syncToSheet(itemId, { ...item, tecnico, status, id: itemId });
-  await atualizarEstatisticasDb();
-  atualizarEstatisticas();
-  return tecnico;
 }
 
 function mapDocToRegistro(docSnap) {
@@ -252,12 +283,12 @@ function mapDocToRegistro(docSnap) {
     responsavelAbertura: norm(data.responsavelAbertura || data.responsavel || data.cliente || ""),
     cpfCnpj: norm(data.cpfCnpj || data.cpf_cnpj || ""),
     contato: norm(data.contato || data.telefone || ""),
-    descricao: norm(data.descricao || data.description || ""),
     tipo: norm(data.tipo || ""),
     ac: norm(data.ac || data.AC || ""),
     tecnico: norm(data.tecnico || data.tecnicoResponsavel || ""),
     status: normStatus(data.status || data.situacao || data.situacaoAtendimento || "EM ABERTO"),
     statusAbertura: norm(data.statusAbertura || ""),
+    motivo: norm(data.motivo || data.motivoSemRetorno || ""),
     dataAbertura: resolverDataAbertura(data)
   };
 }
@@ -340,12 +371,40 @@ function startPageListener() {
       if (docs.length > 0) {
         state.pageCursors[currentPage] = docs[docs.length - 1];
       }
+      docs.forEach((docSnap) => {
+        if (docSnap.data()?.descricao !== undefined) {
+          void updateDoc(doc(db, COLLECTION, docSnap.id), { descricao: deleteField() }).catch((err) => {
+            console.warn("[App] não foi possível remover descricao do documento", docSnap.id, err);
+          });
+        }
+      });
       atualizarFiltroAc();
       render();
     },
     (error) => {
       console.error("[App] Erro no listener da página:", error);
       showNotification(`Erro ao sincronizar página: ${error.message || String(error)}`, "error", 4000);
+    }
+  );
+}
+
+function startStatsListener() {
+  if (!db) return;
+  if (unsubscribeStatsListener) {
+    unsubscribeStatsListener();
+    unsubscribeStatsListener = null;
+  }
+
+  const collectionRef = collection(db, COLLECTION);
+  unsubscribeStatsListener = onSnapshot(
+    collectionRef,
+    async () => {
+      await atualizarEstatisticasDb();
+      atualizarEstatisticas();
+    },
+    (error) => {
+      console.error("[App] Erro no listener de estatísticas:", error);
+      showNotification(`Erro ao sincronizar estatísticas: ${error.message || String(error)}`, "error", 4000);
     }
   );
 }
@@ -359,6 +418,7 @@ async function carregar() {
     }
 
     startPageListener();
+    startStatsListener();
     await atualizarEstatisticasDb();
     atualizarEstatisticas();
   } catch (error) {
@@ -384,7 +444,6 @@ function atualizarFiltroAc() {
 
 function getRegistrosFiltrados() {
   let dados = state.registros.filter((item) => !isRegistroSoluti(item));
-  if (state.filtroCpfCnpj) dados = dados.filter((item) => item.cpfCnpj.toLowerCase().includes(state.filtroCpfCnpj.toLowerCase()));
   if (state.filtroProtocolo) dados = dados.filter((item) => item.protocolo.toLowerCase().includes(state.filtroProtocolo.toLowerCase()));
   if (state.filtroStatus !== "todos") dados = dados.filter((item) => item.status === state.filtroStatus);
   if (state.filtroAc !== "todos") dados = dados.filter((item) => item.ac === state.filtroAc);
@@ -406,10 +465,13 @@ function atualizarEstatisticas() {
   const abertos = state.statusCounts?.abertos ?? state.registros.filter((r) => r.status === "EM ABERTO").length;
   const andamento = state.statusCounts?.andamento ?? state.registros.filter((r) => r.status === "EM ANDAMENTO").length;
   const finalizados = state.statusCounts?.finalizados ?? state.registros.filter((r) => r.status === "FINALIZADO").length;
+  const semRetorno = state.statusCounts?.semRetorno ?? state.registros.filter((r) => r.status === "SEM RETORNO").length;
   document.getElementById("statTotal").textContent = String(total);
   document.getElementById("statAbertos").textContent = String(abertos);
   document.getElementById("statAndamento").textContent = String(andamento);
   document.getElementById("statFinalizados").textContent = String(finalizados);
+  const elSem = document.getElementById("statSemRetorno");
+  if (elSem) elSem.textContent = String(semRetorno);
 }
 
 async function atualizarEstatisticasDb() {
@@ -420,12 +482,14 @@ async function atualizarEstatisticasDb() {
     const abertosSnap = await getCountFromServer(query(collectionRef, where("status", "==", "EM ABERTO")));
     const andamentoSnap = await getCountFromServer(query(collectionRef, where("status", "==", "EM ANDAMENTO")));
     const finalizadosSnap = await getCountFromServer(query(collectionRef, where("status", "==", "FINALIZADO")));
+    const semRetornoSnap = await getCountFromServer(query(collectionRef, where("status", "==", "SEM RETORNO")));
 
     state.statusCounts = {
       total: Number(totalSnap.data().count || 0),
       abertos: Number(abertosSnap.data().count || 0),
       andamento: Number(andamentoSnap.data().count || 0),
-      finalizados: Number(finalizadosSnap.data().count || 0)
+      finalizados: Number(finalizadosSnap.data().count || 0),
+      semRetorno: Number(semRetornoSnap.data().count || 0)
     };
   } catch (error) {
     console.warn("[App] Falha ao buscar totais do Firestore:", error);
@@ -464,6 +528,23 @@ function render() {
           </svg>
         </button>`
       : "";
+
+    const btnSemRetorno = item.status === "EM ANDAMENTO"
+      ? `<button class="btn btn-icon btn-icon-secondary" data-action="sem-retorno" data-id="${item.id}" title="Marcar como sem retorno" aria-label="Marcar como sem retorno">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 6L6 18"/>
+            <path d="M6 6l12 12"/>
+          </svg>
+        </button>`
+      : "";
+
+    const btnConcluir = item.status !== "FINALIZADO"
+      ? `<button class="btn btn-icon btn-icon-success" data-action="concluir" data-id="${item.id}" title="Concluir suporte" aria-label="Marcar como finalizado">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 6L9 17l-5-5"/>
+          </svg>
+        </button>`
+      : "";
     tr.innerHTML = `
       <td>${formatDate(item.dataAbertura)}</td>
       <td>${item.responsavelAbertura || "-"}</td>
@@ -472,7 +553,7 @@ function render() {
       <td>${item.tipo || "-"}</td>
       <td>${item.ac || "-"}</td>
       <td>${item.contato || "-"}</td>
-      <td>${item.descricao || "-"}</td>
+      ${state.filtroStatus === "SEM RETORNO" && item.status === "SEM RETORNO" ? `<td class="col-motivo" title="${escapeHtml(item.motivo || "")}">${escapeHtml(item.motivo || "-")}</td>` : ""}
       <td><span class="status-pill ${statusClass(item.status)}">${item.status}</span></td>
       <td>${item.tecnico || "-"}</td>
       <td>${item.statusAbertura || "-"}</td>
@@ -485,12 +566,36 @@ function render() {
               <polyline points="16 11 18 13 22 9"/>
             </svg>
           </button>
+          ${btnConcluir}
+          ${btnSemRetorno}
           ${btnExcluir}
         </div>
       </td>
     `;
     tbody.appendChild(tr);
   });
+
+  const headerRow = document.querySelector("table thead tr");
+  const hasHeaderMotivo = Boolean(document.getElementById("thMotivo"));
+  if (state.filtroStatus === "SEM RETORNO") {
+    if (!hasHeaderMotivo && headerRow) {
+      const th = document.createElement("th");
+      th.id = "thMotivo";
+      th.textContent = "Motivo";
+      const refNode = headerRow.querySelector("th:nth-child(7)");
+      if (refNode && refNode.nextSibling) {
+        headerRow.insertBefore(th, refNode.nextSibling);
+      } else if (headerRow) {
+        headerRow.appendChild(th);
+      }
+    }
+  } else {
+    if (hasHeaderMotivo) {
+      document.getElementById("thMotivo").remove();
+    }
+    document.querySelectorAll("td.col-motivo").forEach((cell) => cell.remove());
+  }
+
   atualizarEstatisticas();
   atualizarRodapePaginacao(dados.length);
 }
@@ -504,7 +609,6 @@ function abrirModalAdicionar() {
   modalTipo.value = "SUPORTE TECNICO";
   modalAc.value = "CONSULTI";
   modalContato.value = "";
-  modalDescricao.value = "";
   modalTecnico.value = "MATHEUS";
   modalStatus.value = "EM ABERTO";
   modalStatusAbertura.value = "DEVIDO";
@@ -531,7 +635,6 @@ function abrirModalEditar(item) {
   modalTipo.value = item.tipo || "SUPORTE TECNICO";
   modalAc.value = item.ac || "CONSULTI";
   modalContato.value = item.contato;
-  modalDescricao.value = item.descricao || "";
   modalTecnico.value = item.tecnico || "MATHEUS";
   modalStatus.value = item.status;
   modalStatusAbertura.value = item.statusAbertura || "DEVIDO";
@@ -633,7 +736,6 @@ function buildPayloadFromForm(modo) {
   put(payload, "tipo", modalTipo.value);
   put(payload, "ac", modalAc.value);
   put(payload, "contato", modalContato.value);
-  put(payload, "descricao", modalDescricao.value);
   put(payload, "tecnico", modalTecnico.value);
   put(payload, "status", normStatus(modalStatus.value));
   put(payload, "statusAbertura", modalStatusAbertura.value);
@@ -694,6 +796,39 @@ tbody.addEventListener("click", async (e) => {
       showNotification(`Técnico associado com sucesso: ${tecnico}`, "success", 2200);
       await carregar();
     }
+    if (btn.dataset.action === "sem-retorno") {
+      // Abrir modal para coletar motivo antes de marcar como SEM RETORNO
+      semRetornoIdPendente = id;
+      if (modalSemRetorno) {
+        modalSemRetornoTexto.value = "";
+        modalSemRetorno.classList.remove("hidden");
+        setTimeout(() => modalSemRetornoTexto.focus(), 50);
+      } else {
+        // fallback imediato se modal não existir
+        const item = state.registros.find((r) => r.id === id);
+        if (!item) throw new Error("Registro não encontrado.");
+        await updateDoc(doc(db, COLLECTION, id), {
+          status: "SEM RETORNO",
+          updatedAt: serverTimestamp()
+        });
+        void syncToSheet(id, { ...item, status: "SEM RETORNO", id });
+        await atualizarEstatisticasDb();
+        atualizarEstatisticas();
+        showNotification("Suporte marcado como sem retorno.", "success", 2200);
+      }
+    }
+    if (btn.dataset.action === "concluir") {
+      const item = state.registros.find((r) => r.id === id);
+      if (!item) throw new Error("Registro não encontrado.");
+      await updateDoc(doc(db, COLLECTION, id), {
+        status: "FINALIZADO",
+        updatedAt: serverTimestamp()
+      });
+      void syncToSheet(id, { ...item, status: "FINALIZADO", id });
+      await atualizarEstatisticasDb();
+      atualizarEstatisticas();
+      showNotification("Suporte marcado como finalizado.", "success", 2200);
+    }
     if (btn.dataset.action === "excluir") {
       if (!authManager.isAdmin()) {
         throw new Error("Apenas administradores podem excluir suportes.");
@@ -707,7 +842,10 @@ tbody.addEventListener("click", async (e) => {
   }
 });
 
-document.getElementById("btnAdicionar").addEventListener("click", abrirModalAdicionar);
+const btnAdicionar = document.getElementById("btnAdicionar");
+if (btnAdicionar) {
+  btnAdicionar.addEventListener("click", abrirModalAdicionar);
+}
 document.getElementById("btnRecarregar").addEventListener("click", carregar);
 document.getElementById("btnFecharModal").addEventListener("click", fecharModal);
 btnCancelarExclusao.addEventListener("click", fecharModalExcluir);
@@ -735,11 +873,51 @@ const resetPageData = () => {
   state.pageCursors = [null];
   state.hasNextPage = false;
 };
-filtroStatusEl.addEventListener("change", async (e) => {
-  state.filtroStatus = e.target.value;
-  resetPageData();
-  await carregar();
+statCards.forEach((card) => {
+  card.addEventListener("click", async () => {
+    const status = card.dataset.status;
+    if (status === state.filtroStatus) return;
+    state.filtroStatus = status;
+    statCards.forEach((c) => c.classList.toggle("active", c === card));
+    resetPageData();
+    await carregar();
+  });
 });
+
+// Handlers for modal Sem Retorno
+if (btnConfirmarSemRetorno) {
+  btnConfirmarSemRetorno.addEventListener("click", async () => {
+    const id = semRetornoIdPendente;
+    const motivo = norm(modalSemRetornoTexto.value || "");
+    if (!id) return;
+    if (!motivo) {
+      showNotification("Informe o motivo para marcar como Sem Retorno.", "error", 2500);
+      return;
+    }
+    try {
+      const item = state.registros.find((r) => r.id === id) || {};
+      await updateDoc(doc(db, COLLECTION, id), {
+        status: "SEM RETORNO",
+        motivo,
+        updatedAt: serverTimestamp()
+      });
+      void syncToSheet(id, { ...item, status: "SEM RETORNO", motivo, id });
+      semRetornoIdPendente = null;
+      if (modalSemRetorno) modalSemRetorno.classList.add("hidden");
+      await atualizarEstatisticasDb();
+      atualizarEstatisticas();
+      showNotification("Suporte marcado como sem retorno.", "success", 2200);
+    } catch (err) {
+      showNotification(err.message || "Nao foi possivel marcar como sem retorno.", "error", 3500);
+    }
+  });
+}
+if (btnCancelarSemRetorno) {
+  btnCancelarSemRetorno.addEventListener("click", () => {
+    semRetornoIdPendente = null;
+    if (modalSemRetorno) modalSemRetorno.classList.add("hidden");
+  });
+}
 filtroAcEl.addEventListener("change", async (e) => {
   state.filtroAc = e.target.value;
   resetPageData();
@@ -760,7 +938,6 @@ filtroDataFimEl.addEventListener("change", async (e) => {
   resetPageData();
   await carregar();
 });
-filtroCpfCnpjEl.addEventListener("input", (e) => { state.filtroCpfCnpj = e.target.value.trim(); resetPageData(); render(); });
 
 let debounceProtocolo;
 filtroProtocoloEl.addEventListener("input", (e) => {

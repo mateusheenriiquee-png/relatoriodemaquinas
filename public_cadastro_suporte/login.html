@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Suporte Técnico</title>
+  <link rel="stylesheet" href="./css/main.css">
+  <style>
+    :root {
+      --bg-main: #ffffff;
+      --surface: #ffffff;
+      --border: #cbd5e1;
+      --text: #0f172a;
+      --muted: #64748b;
+      --accent: #1e3a5f;
+      --accent-2: #0f2744;
+      --danger: #ef4444;
+      --card-shadow: 0 20px 40px rgba(15, 39, 68, 0.1);
+    }
+
+    body.login-page {
+      background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      font-family: "Segoe UI", Inter, system-ui, sans-serif;
+      color: var(--text);
+      padding: 24px;
+    }
+
+    .login-container {
+      background: var(--surface);
+      border-radius: 24px;
+      border: 1px solid var(--border);
+      box-shadow: var(--card-shadow);
+      width: 100%;
+      max-width: 420px;
+      padding: 40px 32px;
+      box-sizing: border-box;
+    }
+
+    .login-header {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+
+    .login-header h1 {
+      margin: 0 0 10px;
+      font-size: 1.8rem;
+      color: var(--text);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .login-header p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .login-form {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-group label {
+      font-size: 0.86rem;
+      font-weight: 600;
+      color: #475569;
+    }
+
+    .form-group input {
+      padding: 12px 14px;
+      border: 1px solid #cbd5e1;
+      border-radius: 12px;
+      font-size: 0.95rem;
+      font-family: inherit;
+      background: #f8fafc;
+      transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: var(--accent);
+      background: #ffffff;
+      box-shadow: 0 0 0 4px rgba(30, 58, 95, 0.1);
+    }
+
+    .login-button {
+      padding: 13px 16px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 0.96rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      margin-top: 8px;
+      box-shadow: 0 8px 18px rgba(15, 39, 68, 0.18);
+    }
+
+    .login-button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 22px rgba(15, 39, 68, 0.22);
+    }
+
+    .login-button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      box-shadow: none;
+      transform: none;
+    }
+
+    .login-error {
+      background-color: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 10px;
+      padding: 12px 14px;
+      color: var(--danger);
+      font-size: 0.9rem;
+      display: none;
+      text-align: center;
+      margin-bottom: 14px;
+    }
+
+    .login-error.show {
+      display: block;
+    }
+
+    .login-footer {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    .loading {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid #f3f3f3;
+      border-top: 2px solid var(--accent);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body class="login-page">
+  <div class="login-container">
+    <div class="login-header">
+      <h1>Suporte Técnico</h1>
+      <p>Acesso ao Painel</p>
+    </div>
+
+    <div id="loginError" class="login-error"></div>
+
+    <form id="loginForm" class="login-form">
+      <div class="form-group">
+        <label for="loginEmail">Email</label>
+        <input
+          id="loginEmail"
+          type="email"
+          placeholder="seu.email@example.com"
+          required
+          autocomplete="email"
+        >
+      </div>
+
+      <div class="form-group">
+        <label for="loginPassword">Senha</label>
+        <input
+          id="loginPassword"
+          type="password"
+          placeholder="••••••••"
+          required
+          autocomplete="current-password"
+        >
+      </div>
+
+      <button id="loginButton" type="submit" class="login-button">
+        Entrar
+      </button>
+    </form>
+
+    <div class="login-footer">
+      Versão 1.0 | © Suporte Técnico
+    </div>
+  </div>
+
+  <script type="module" src="./js/pages/login.js"></script>
+</body>
+</html>
