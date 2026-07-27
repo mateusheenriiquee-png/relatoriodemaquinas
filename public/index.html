@@ -65,8 +65,8 @@
         <input id="filtroDataFim" type="date">
       </div>
       <div class="field">
-        <label for="filtroProtocolo">Protocolo / CPF</label>
-        <input id="filtroProtocolo" type="text" placeholder="Protocolo ou CPF/CNPJ">
+        <label for="filtroProtocolo">Protocolo / CPF / Contato</label>
+        <input id="filtroProtocolo" type="text" placeholder="Protocolo, CPF/CNPJ ou Contato">
       </div>
       <div class="field">
         <label for="filtroStatusAbertura">Status da abertura</label>
@@ -91,46 +91,36 @@
       <button type="button" class="stat-card" data-status="SEM RETORNO">
         <span>Sem Retorno</span><strong id="statSemRetorno">0</strong>
       </button>
+      <button type="button" class="stat-card" data-status="REAGENDADO">
+        <span>Reagendado</span><strong id="statReagendado">0</strong>
+      </button>
       <button type="button" class="stat-card" data-status="todos">
         <span>Total</span><strong id="statTotal">0</strong>
       </button>
     </section>
 
-    <div class="table-wrapper">
-      <table>
-        <thead>
-          <tr>
-            <th>Data/Hora</th>
-            <th>Resp. Abertura</th>
-            <th>Protocolo</th>
-            <th>CPF/CNPJ</th>
-            <th>Tipo</th>
-            <th>AC</th>
-            <th>Contato/Grupo</th>
-            <th>Sit. Atendimento</th>
-            <th>Tecnico</th>
-            <th>Ações</th>
-          </tr>
-        </thead>
-        <tbody id="tbody"></tbody>
-      </table>
+    <div class="cards-wrapper">
+      <div id="cardsGrid" class="cards-grid" aria-live="polite"></div>
+      <div id="cardsSentinel" class="cards-sentinel" aria-hidden="true"></div>
+      <div id="infiniteLoader" class="infinite-loader hidden">Carregando...</div>
     </div>
 
-    <footer class="table-footer">
-      <span id="paginationInfo">Mostrando 0 de 0</span>
-      <div class="pagination-actions">
-        <button id="btnPrevPage" class="btn btn-ghost btn-small">Anterior</button>
-        <button id="btnNextPage" class="btn btn-ghost btn-small">Proxima</button>
+    <!-- Drawer lateral para detalhes do suporte -->
+    <div id="supportDrawerBackdrop" class="drawer-backdrop hidden"></div>
+    <aside id="supportDrawer" class="support-drawer hidden" aria-hidden="true">
+      <div class="drawer-header">
+        <h3 id="drawerTitulo">Detalhes do suporte</h3>
+        <button id="drawerCloseBtn" class="btn btn-ghost btn-small">Fechar</button>
       </div>
-    </footer>
-  </div>
+      <div class="drawer-body" id="drawerContent">
+        <!-- Conteúdo será populado dinamicamente -->
+      </div>
+      <div class="drawer-actions" id="drawerActions">
+        <!-- Botões de ação serão inseridos aqui -->
+      </div>
+    </aside>
 
-  <div id="modalImportar" class="modal hidden" role="dialog" aria-labelledby="modalImportarTitulo" aria-modal="true">
-    <div class="modal-content modal-import-content">
-      <div class="modal-header">
-        <h2 id="modalImportarTitulo">Importar CSV / Excel</h2>
-        <button id="btnFecharImportar" class="btn btn-ghost btn-small" type="button">Fechar</button>
-      </div>
+    <footer class="table-footer">
       <div class="import-option-card">
         <div class="import-option-body">
           <p>Arquivo com cabeçalho na primeira linha (CSV ou XLSX). Colunas reconhecidas: protocolo, responsável, CPF/CNPJ, contato, tipo, AC, técnico, situação, data.</p>
@@ -237,7 +227,29 @@
         <textarea id="modalIndevidoViewTexto" rows="4" readonly></textarea>
       </div>
       <div class="modal-confirm-actions">
+        <button id="btnMudarParaDevido" class="btn btn-warning" type="button">Mudar para Devido</button>
         <button id="btnFecharIndevidoView" class="btn btn-primary" type="button">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal para Reagendamento -->
+  <div id="modalReagendar" class="modal hidden" role="dialog" aria-labelledby="modalReagendar Titulo" aria-modal="true">
+    <div class="modal-content modal-confirm">
+      <div class="modal-confirm-icon" aria-hidden="true">📅</div>
+      <h2 id="modalReagendarTitulo">Reagendar Suporte</h2>
+      <p class="modal-confirm-text">Informe a data e hora para reagendar este suporte.</p>
+      <div class="field">
+        <label for="modalReagendarData">Data</label>
+        <input id="modalReagendarData" type="date" required>
+      </div>
+      <div class="field">
+        <label for="modalReagendarHora">Hora</label>
+        <input id="modalReagendarHora" type="time" required>
+      </div>
+      <div class="modal-confirm-actions">
+        <button id="btnCancelarReagendar" class="btn btn-ghost" type="button">Cancelar</button>
+        <button id="btnConfirmarReagendar" class="btn btn-primary" type="button">Reagendar</button>
       </div>
     </div>
   </div>
@@ -250,14 +262,15 @@
       </div>
       <form id="formSuporte" class="modal-form">
         <div class="field"><label for="modalProtocolo">Protocolo</label><input id="modalProtocolo" maxlength="80" placeholder="Opcional"></div>
-        <div class="field"><label for="modalResponsavelAbertura">Responsavel da abertura</label><input id="modalResponsavelAbertura" maxlength="120"></div>
+        <div id="fieldResponsavelAbertura" class="field"><label for="modalResponsavelAbertura">Responsavel da abertura</label><input id="modalResponsavelAbertura" maxlength="120"></div>
         <div class="field"><label for="modalCpfCnpj">CPF/CNPJ</label><input id="modalCpfCnpj" maxlength="32"></div>
         <div class="field">
           <label for="modalTipo">Tipo</label>
           <select id="modalTipo">
             <option value="Suporte tecnico">Suporte tecnico</option>
-            <option value="Instalção">Instalação</option>
+            <option value="Instalação">Instalação</option>
             <option value="Configuração de Maquina">Configuração de Maquina</option>
+            <option value="Treinamento">Treinamento</option>
           </select>
         </div>
         <div class="field">
@@ -269,7 +282,7 @@
         </div>
         <div class="field"><label for="modalContato">Contato ou grupo</label><input id="modalContato" maxlength="120"></div>
         
-        <div class="field">
+        <div class="field" id="fieldTecnicoResponsavel">
           <label for="modalTecnico">Tecnico responsavel</label>
           <select id="modalTecnico">
             <option value="MATHEUS">MATHEUS</option>
@@ -284,7 +297,7 @@
             <option value="JUNIOR">JUNIOR</option>
           </select>
         </div>
-        <div class="field">
+        <div class="field" id="fieldStatusAtendimento">
           <label for="modalStatus">Situacao do atendimento</label>
           <select id="modalStatus">
             <option value="EM ABERTO">EM ABERTO</option>
@@ -294,14 +307,14 @@
             <option value="SEM RETORNO">SEM RETORNO</option>
           </select>
         </div>
-        <div class="field">
+        <div class="field" id="fieldStatusAbertura">
           <label for="modalStatusAbertura">Status da abertura</label>
           <select id="modalStatusAbertura">
             <option value="DEVIDO">Devido</option>
             <option value="INDEVIDO">Indevido</option>
           </select>
         </div>
-        <div class="field"><label for="modalDataAbertura">Carimbo de data/hora</label><input id="modalDataAbertura" type="datetime-local"></div>
+        <div class="field" id="fieldDataAbertura"><label for="modalDataAbertura">Carimbo de data/hora</label><input id="modalDataAbertura" type="datetime-local"></div>
         <input id="modalIdAtual" type="hidden">
         <div class="modal-actions">
           <button id="btnSalvarModal" class="btn btn-primary" type="submit">Salvar</button>
@@ -309,6 +322,37 @@
       </form>
     </div>
   </div>
+
+    <!-- Modal para alterar técnico (apenas admins) -->
+    <div id="modalChangeTecnico" class="modal hidden" role="dialog" aria-labelledby="modalChangeTecnicoTitulo" aria-modal="true">
+      <div class="modal-content modal-confirm">
+        <h2 id="modalChangeTecnicoTitulo">Alterar Técnico</h2>
+        <p class="modal-confirm-text">Selecione um técnico para associar ao suporte.</p>
+        <div id="modalChangeTecnicoList" class="change-tecnico-list" style="display:block; max-height:320px; overflow:auto; margin:8px 0;">
+          <!-- Lista será preenchida via JS -->
+        </div>
+        <div class="modal-confirm-actions">
+          <button id="btnFecharChangeTecnico" class="btn btn-ghost" type="button">Cancelar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal de anotacoes do suporte -->
+    <div id="modalNotas" class="modal hidden" role="dialog" aria-labelledby="modalNotasTitulo" aria-modal="true">
+      <div class="modal-content modal-confirm" style="max-width: 560px;">
+        <div class="modal-header">
+          <h2 id="modalNotasTitulo">Anotações do Suporte</h2>
+          <button id="btnFecharNotasModal" class="btn btn-ghost btn-small" type="button">Fechar</button>
+        </div>
+        <div class="field">
+          <label for="modalNotasTexto">Anotações</label>
+          <textarea id="modalNotasTexto" rows="8" placeholder="Digite suas anotações para este suporte..."></textarea>
+        </div>
+        <div class="modal-confirm-actions">
+          <button id="btnSalvarNotas" class="btn btn-primary" type="button">Salvar notas</button>
+        </div>
+      </div>
+    </div>
 
   <script type="module" src="./js/app.js"></script>
   <script type="module" src="./js/services/import-export.js"></script>

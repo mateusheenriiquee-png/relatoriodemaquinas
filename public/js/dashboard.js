@@ -85,6 +85,7 @@ function mapDoc(id, data) {
     status: normStatus(data.status || data.situacao || data.situacaoAtendimento || "EM ABERTO"),
     statusAbertura: normStatusAbertura(data.statusAbertura || ""),
     dataAbertura: resolverDataAbertura(data),
+    dataInicioAtendimento: toDate(data.dataInicioAtendimento),
     dataAtualizacao: toDate(data.updatedAt)
   };
 }
@@ -111,6 +112,10 @@ function media(arr) {
   const validos = arr.filter((n) => n !== null && n !== undefined && !Number.isNaN(n));
   if (!validos.length) return null;
   return validos.reduce((a, b) => a + b, 0) / validos.length;
+}
+
+function isSuporteEncerrado(status) {
+  return status === STATUS_FINALIZADO || status === "SEM RETORNO";
 }
 
 function agruparContagem(lista, chaveFn) {
@@ -384,16 +389,10 @@ function renderKpis(dados) {
   const naoFinalizados = total - finalizados;
   const semRetorno = dados.filter((r) => r.status === "SEM RETORNO").length;
 
-  const temposFinalizados = dados
-    .filter((r) => r.status === STATUS_FINALIZADO)
-    .map((r) => horasEntre(r.dataAbertura, r.dataAtualizacao))
-    .filter((h) => h !== null);
-
   document.getElementById("kpiTotal").textContent = String(total);
   document.getElementById("kpiFinalizados").textContent = String(finalizados);
   document.getElementById("kpiNaoFinalizados").textContent = String(naoFinalizados);
   document.getElementById("kpiTaxaFinalizacao").textContent = percent(finalizados, total);
-  document.getElementById("kpiTempoMedioGeral").textContent = formatHoras(media(temposFinalizados));
   document.getElementById("kpiSemRetorno").textContent = String(semRetorno);
 }
 
@@ -449,13 +448,12 @@ function renderCharts(dados) {
   });
 
   const tempoPorTecnico = agruparContagemTecnico(
-    dados.filter((r) => r.status === STATUS_FINALIZADO)
+    dados.filter((r) => isSuporteEncerrado(r.status) && r.dataInicioAtendimento)
   ).map(([tecnico]) => {
     const tecnicoKey = normKey(tecnico);
     const tempos = dados
-      .filter((r) => normKey(r.tecnico) === tecnicoKey && r.status === STATUS_FINALIZADO)
-      .map((r) => horasEntre(r.dataAbertura, r.dataAtualizacao))
-      .filter((h) => h !== null);
+      .filter((r) => normKey(r.tecnico) === tecnicoKey && isSuporteEncerrado(r.status) && r.dataInicioAtendimento)
+      .map((r) => horasEntre(r.dataInicioAtendimento, r.dataAtualizacao))
     return [tecnico, media(tempos) || 0];
   });
 
@@ -546,11 +544,6 @@ function renderTabelas(dados) {
     const andamento = doTecnico.filter((r) => r.status === "EM ANDAMENTO").length;
     const aberto = doTecnico.filter((r) => r.status === "EM ABERTO").length;
     const semRetorno = doTecnico.filter((r) => r.status === "SEM RETORNO").length;
-    const tempos = doTecnico
-      .filter((r) => r.status === STATUS_FINALIZADO)
-      .map((r) => horasEntre(r.dataAbertura, r.dataAtualizacao))
-      .filter((h) => h !== null);
-
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${tecnico}</td>
@@ -560,7 +553,6 @@ function renderTabelas(dados) {
       <td>${aberto}</td>
       <td>${semRetorno}</td>
       <td>${percent(fin, total)}</td>
-      <td>${formatHoras(media(tempos))}</td>
     `;
     tbodyRanking.appendChild(tr);
   });

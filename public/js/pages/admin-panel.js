@@ -81,11 +81,13 @@ async function abrirModalAlterarCargo(userId) {
   if (!usuario) return;
 
   const cargoAtual = usuario.cargo || "Operador";
-  const novoCargo = cargoAtual.toLowerCase() === "administrador" || cargoAtual.toLowerCase() === "admin" ? "Operador" : "Administrador";
+  const isAdmin = cargoAtual.toLowerCase() === "administrador" || cargoAtual.toLowerCase() === "admin";
+  const novoCargo = isAdmin ? "Operador" : "admin";
+  const novoCargoDisplay = isAdmin ? "Operador" : "Administrador";
 
   if (
     confirm(
-      `Alterar cargo de ${usuario.displayName || usuario.email} para ${novoCargo.toUpperCase()}?`
+      `Alterar cargo de ${usuario.displayName || usuario.email} para ${novoCargoDisplay.toUpperCase()}?`
     )
   ) {
     await authManager.updateUserCargo(userId, novoCargo);

@@ -132,8 +132,8 @@ function buildPayload() {
   put(payload, "tipo", fields.tipo.value);
   put(payload, "ac", fields.ac.value);
   put(payload, "contato", formatContato(fields.contato.value));
+  payload.statusAbertura = "DEVIDO";
   // tecnico intentionally omitted from quick-create payload
-  // statusAbertura intentionally not included by default
 
   if (!Object.keys(payload).some((k) => !["dataAbertura", "updatedAt"].includes(k))) {
     return null;

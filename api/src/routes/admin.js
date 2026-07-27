@@ -110,7 +110,8 @@ router.post("/supports/:id/associate", async (req, res, next) => {
     await supportRef.update({
       tecnico,
       status: "EM ANDAMENTO",
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      dataInicioAtendimento: supportSnap.data()?.dataInicioAtendimento || new Date().toISOString()
     });
 
     console.log("[AssociateRoute] support document updated", req.params.id, tecnico);
