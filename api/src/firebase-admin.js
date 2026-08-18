@@ -1,6 +1,7 @@
 const admin = require("firebase-admin");
 const path = require("path");
 const fs = require("fs");
+const {JWT} = require('google-auth-library');
 
 function parseServiceAccountRaw(raw) {
   if (!raw) return null;
@@ -45,7 +46,9 @@ if (!admin.apps.length) {
     const candidates = fs.readdirSync(rootPath).filter((name) => name.endsWith(".json") && /firebase-adminsdk|service-account|service_account/i.test(name));
     console.log("🔎 Arquivos JSON candidatos:", candidates);
 
-    for (const candidate of candidates) {
+    // Prefer the last candidate (newest) when multiple service account JSON files exist.
+    for (let i = candidates.length - 1; i >= 0; i--) {
+      const candidate = candidates[i];
       const candidatePath = path.join(rootPath, candidate);
       try {
         const parsed = require(candidatePath);

@@ -1,11 +1,3 @@
-import {
-  addDoc,
-  collection,
-  doc,
-  getDoc,
-  serverTimestamp
-} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-import { db } from "../config/firebase.js";
 import { authManager } from "../auth.js";
 
 const COLLECTION = "suportes_tecnicos";
@@ -114,6 +106,45 @@ function showNotification(message, type = "info", timeout = 2500) {
   }
 }
 
+function resolveApiBaseURL() {
+  if (typeof window !== "undefined") {
+    const configured = window.__API_BASE_URL__ || "";
+    if (configured) return configured.replace(/\/$/, "");
+    const { hostname } = window.location;
+    if (hostname === "127.0.0.1" || hostname === "localhost") {
+      return "http://localhost:3000";
+    }
+    return "";
+  }
+  return "http://localhost:3000";
+}
+
+async function createSupportViaApi(payload) {
+  const token = await authManager.getIdToken();
+  const response = await fetch(`${resolveApiBaseURL()}/api/suportes`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const text = await response.text();
+  let parsed = {};
+  try {
+    parsed = text ? JSON.parse(text) : {};
+  } catch {
+    parsed = {};
+  }
+
+  if (!response.ok) {
+    throw new Error(parsed.error || parsed.message || "Não foi possível salvar o suporte.");
+  }
+
+  return parsed.data;
+}
+
 function buildPayload() {
   const put = (target, key, value) => {
     const text = norm(value);
@@ -122,7 +153,7 @@ function buildPayload() {
 
   const payload = {
     dataAbertura: new Date().toISOString(),
-    updatedAt: serverTimestamp(),
+    updatedAt: new Date().toISOString(),
     status: "EM ABERTO"
   };
 
@@ -197,20 +228,14 @@ function preencherResponsavelAberturaSync() {
 }
 
 async function preencherResponsavelAbertura() {
-  try {
-    const uid = authManager.getCurrentUser()?.uid;
-    if (!uid) throw new Error("Sem UID");
-
-    const userSnap = await getDoc(doc(db, "usuarios", uid));
-    const displayName = userSnap.exists() ? (userSnap.data().displayName || "") : "";
-    if (displayName) {
-      fields.responsavelAbertura.value = displayName;
-      return;
-    }
-  } catch {
-    // fallback abaixo
+  const displayName = authManager.getUserDisplayName();
+  if (displayName) {
+    fields.responsavelAbertura.value = displayName;
+    return;
   }
-  preencherResponsavelAberturaSync();
+
+  const email = authManager.getCurrentUser()?.email || "";
+  fields.responsavelAbertura.value = email ? email.split("@")[0] : "Responsavel";
 }
 
 function renderHeader() {
@@ -230,11 +255,6 @@ async function protegerPagina() {
 
   if (!authManager.isAuthenticated()) {
     window.location.href = `./login.html?next=${LOGIN_NEXT}`;
-    return false;
-  }
-
-  if (!db) {
-    showNotification("Firestore nao configurado. Verifique js/config/firebase.js", "error", 5000);
     return false;
   }
 
@@ -267,11 +287,7 @@ formSuporte.addEventListener("submit", async (e) => {
   btnSalvar.textContent = "Salvando...";
 
   try {
-    const ref = await addDoc(collection(db, COLLECTION), {
-      ...payload,
-      status: payload.status || "EM ABERTO",
-      createdAt: serverTimestamp()
-    });
+    await createSupportViaApi(payload);
 
     showNotification("Suporte adicionado com sucesso.", "success", 2200);
     resetForm();

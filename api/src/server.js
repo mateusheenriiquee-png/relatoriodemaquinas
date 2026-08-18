@@ -1,8 +1,8 @@
 const express = require("express");
 const cors = require("cors");
 const webhookRoutes = require("./routes/webhook");
-const sheetsRoutes = require("./routes/sheets");
 const adminRoutes = require("./routes/admin");
+const suportesRoutes = require("./routes/suportes");
 const { notFoundHandler, errorHandler } = require("./middleware/error-handler");
 
 const app = express();
@@ -16,8 +16,8 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/webhook", webhookRoutes);
-app.use("/sheets", sheetsRoutes);
 app.use("/admin", adminRoutes);
+app.use("/api/suportes", suportesRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

@@ -1,4 +1,4 @@
-﻿import {
+import {
   addDoc,
   collection,
   deleteDoc,
@@ -19,7 +19,6 @@
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 import { db } from "./config/firebase.js";
 import { authManager } from "./auth.js";
-import { syncDocToSheet, deleteDocFromSheet } from "./services/sheets-sync.js";
 
 const STATUS_OPTIONS = ["EM ABERTO", "EM ANDAMENTO", "FINALIZADO", "SEM RETORNO", "REAGENDADO"];
 const PAGE_SIZE = 10;
@@ -43,6 +42,9 @@ const state = {
 };
 let unsubscribePageListener = null;
 let unsubscribeStatsListener = null;
+let unsubscribeCardsListener = null;
+let _supportDrawerCloseTimeout = null;
+let _supportDrawerBackdropCloseTimeout = null;
 
 const tbody = document.getElementById("tbody");
 const cardsGrid = document.getElementById("cardsGrid");
@@ -94,7 +96,7 @@ let semRetornoIdPendente = null;
 let indevidoIdPendente = null;
 let notasIdPendente = null;
 const indevidoPendingMap = new Map();
-// Notificações sonoras
+// Notifica��es sonoras
 let notifyEnabled = true;
 const NOTIFY_STORAGE_KEY = "suporte_notify_enabled";
 try {
@@ -375,7 +377,7 @@ function configurarCamposModoEdicao(estaEditando) {
 
 async function associarTecnicoResponsavel(itemId) {
   const item = state.registros.find((registro) => registro.id === itemId);
-  if (!item) throw new Error("Registro não encontrado.");
+  if (!item) throw new Error("Registro n�o encontrado.");
 
   let apiBase = window.__API_BASE_URL;
   if (!apiBase) {
@@ -402,23 +404,28 @@ async function associarTecnicoResponsavel(itemId) {
 
     const data = await response.json();
     if (!response.ok || !data.ok) {
-      throw new Error(data.error || "Erro ao associar técnico.");
+      throw new Error(data.error || "Erro ao associar t�cnico.");
     }
 
     const tecnico = data.tecnico;
     const status = "EM ANDAMENTO";
-    void syncToSheet(itemId, { ...item, tecnico, status, id: itemId });
-    await atualizarEstatisticasDb();
+    atualizarRegistroLocal(itemId, {
+      tecnico,
+      tecnicoKey: normKey(tecnico),
+      status,
+      updatedAt: new Date().toISOString()
+    });await atualizarEstatisticasDb();
     atualizarEstatisticas();
     return tecnico;
   } catch (err) {
     console.warn("[App] associarTecnicoResponsavel fallback (api failed):", err.message || err);
-    // Fallback: atualizar diretamente no Firestore com o usuário atual
+    // Fallback: atualizar diretamente no Firestore com o usu�rio atual
     const tecnicoFallback = authManager.getUserDisplayName() || authManager.getCurrentUserData()?.displayName || (authManager.getCurrentUser()?.email ?? "Desconhecido");
     try {
+      const tecnico = titleCaseName(tecnicoFallback);
       const payload = {
-        tecnico: titleCaseName(tecnicoFallback),
-        tecnicoKey: normKey(titleCaseName(tecnicoFallback)),
+        tecnico,
+        tecnicoKey: normKey(tecnico),
         status: "EM ANDAMENTO",
         updatedAt: serverTimestamp()
       };
@@ -426,14 +433,19 @@ async function associarTecnicoResponsavel(itemId) {
         payload.dataInicioAtendimento = new Date().toISOString();
       }
       await updateDoc(doc(db, COLLECTION, itemId), payload);
-      void syncToSheet(itemId, { ...item, ...payload, id: itemId });
-      await fetchOpenSupports();
+      atualizarRegistroLocal(itemId, {
+        tecnico,
+        tecnicoKey: normKey(tecnico),
+        status: "EM ANDAMENTO",
+        dataInicioAtendimento: item.dataInicioAtendimento || payload.dataInicioAtendimento,
+        updatedAt: new Date().toISOString()
+      });await fetchOpenSupports();
       await atualizarEstatisticasDb();
       atualizarEstatisticas();
       render();
       return tecnicoFallback;
     } catch (err2) {
-      console.error("[App] Fallback de associar técnico falhou:", err2);
+      console.error("[App] Fallback de associar t�cnico falhou:", err2);
       throw err2;
     }
   }
@@ -453,6 +465,7 @@ function mapDocToRegistro(docSnap) {
     tecnicoKey: normKey(data.tecnico || data.tecnicoResponsavel || ""),
     status: normStatus(data.status || data.situacao || data.situacaoAtendimento || "EM ABERTO"),
     statusAbertura: norm(data.statusAbertura || ""),
+    anotacoes: norm(data.anotacoes || data.anotacao || ""),
     motivo: norm(data.motivo || data.motivoSemRetorno || ""),
     motivoIndevido: norm(data.motivoIndevido || ""),
     dataAbertura: resolverDataAbertura(data),
@@ -525,6 +538,41 @@ function buildPageQuery() {
   return query(collectionRef, ...pageConstraints);
 }
 
+function stopCardsListener() {
+  if (unsubscribeCardsListener) {
+    unsubscribeCardsListener();
+    unsubscribeCardsListener = null;
+  }
+}
+
+function startCardsListener() {
+  if (!db || !cardsGrid) return;
+  stopCardsListener();
+
+  const collectionRef = collection(db, COLLECTION);
+  const constraints = buildQueryConstraints();
+  constraints.push(limit(500));
+  const cardsQuery = query(collectionRef, ...constraints);
+
+  unsubscribeCardsListener = onSnapshot(
+    cardsQuery,
+    (snap) => {
+      const docs = snap.docs || [];
+      const mapped = docs.map(mapDocToRegistro).filter((item) => !isRegistroSoluti(item));
+      state.registros = mapped;
+      if (state.filtroStatus === 'EM ABERTO') {
+        state.openRegistros = mapped;
+      }
+      atualizarFiltroAc();
+      render();
+    },
+    (error) => {
+      console.error("[App] Erro no listener de cards:", error);
+      showNotification(`Erro ao sincronizar cart�es: ${error.message || String(error)}`, "error", 4000);
+    }
+  );
+}
+
 function startPageListener() {
   if (!db) return;
   if (unsubscribePageListener) {
@@ -546,7 +594,7 @@ function startPageListener() {
       docs.forEach((docSnap) => {
         if (docSnap.data()?.descricao !== undefined) {
           void updateDoc(doc(db, COLLECTION, docSnap.id), { descricao: deleteField() }).catch((err) => {
-            console.warn("[App] não foi possível remover descricao do documento", docSnap.id, err);
+            console.warn("[App] n�o foi poss�vel remover descricao do documento", docSnap.id, err);
           });
         }
       });
@@ -554,8 +602,8 @@ function startPageListener() {
       render();
     },
     (error) => {
-      console.error("[App] Erro no listener da página:", error);
-      showNotification(`Erro ao sincronizar página: ${error.message || String(error)}`, "error", 4000);
+      console.error("[App] Erro no listener da p�gina:", error);
+      showNotification(`Erro ao sincronizar p�gina: ${error.message || String(error)}`, "error", 4000);
     }
   );
 }
@@ -585,16 +633,16 @@ function startStatsListener() {
         try { await fetchOpenSupports(); } catch (e) { /* ignore */ }
         const newTotal = state.statusCounts?.total ?? 0;
         if (prevTotal !== null && newTotal > prevTotal) {
-          // tocar som de notificação para novos suportes
+          // tocar som de notifica��o para novos suportes
           try { playNotificationSound(); } catch (e) { /* ignore */ }
         }
       } catch (err) {
-        console.warn('[App] Falha ao atualizar estatísticas no listener:', err);
+        console.warn('[App] Falha ao atualizar estat�sticas no listener:', err);
       }
     },
     (error) => {
-      console.error("[App] Erro no listener de estatísticas:", error);
-      showNotification(`Erro ao sincronizar estatísticas: ${error.message || String(error)}`, "error", 4000);
+      console.error("[App] Erro no listener de estat�sticas:", error);
+      showNotification(`Erro ao sincronizar estat�sticas: ${error.message || String(error)}`, "error", 4000);
     }
   );
 }
@@ -615,7 +663,7 @@ function playNotificationSound() {
       });
     }
   } catch (err) {
-    // não bloquear se falhar
+    // n�o bloquear se falhar
     console.warn('[App] playNotificationSound falhou:', err);
     _playOscillatorFallback();
   }
@@ -658,8 +706,8 @@ function setNotifyEnabled(enabled) {
   if (btn) {
     btn.classList.toggle("btn-tonal", notifyEnabled);
     btn.classList.toggle("btn-ghost", !notifyEnabled);
-    btn.textContent = notifyEnabled ? "🔔" : "🔕";
-    btn.title = notifyEnabled ? "Notificação: Ligada (clique para desligar)" : "Notificação: Desligada (clique para ligar)";
+    btn.textContent = notifyEnabled ? "??" : "??";
+    btn.title = notifyEnabled ? "Notifica��o: Ligada (clique para desligar)" : "Notifica��o: Desligada (clique para ligar)";
   }
 }
 
@@ -674,8 +722,8 @@ function ensureNotifyToggleInHeader() {
   btn.type = "button";
   btn.className = notifyEnabled ? "btn btn-tonal" : "btn btn-ghost";
   btn.style.marginLeft = "8px";
-  btn.textContent = notifyEnabled ? "🔔" : "🔕";
-  btn.title = notifyEnabled ? "Notificação: Ligada (clique para desligar)" : "Notificação: Desligada (clique para ligar)";
+  btn.textContent = notifyEnabled ? "??" : "??";
+  btn.title = notifyEnabled ? "Notifica��o: Ligada (clique para desligar)" : "Notifica��o: Desligada (clique para ligar)";
   btn.addEventListener("click", () => setNotifyEnabled(!notifyEnabled));
   actions.appendChild(btn);
 }
@@ -683,8 +731,8 @@ function ensureNotifyToggleInHeader() {
 async function carregar() {
   try {
     if (!db) {
-      console.error("[App] Erro crítico: Firestore não inicializado");
-      showNotification("Erro: Firestore não está configurado. Verifique firebase.js", "error", 5000);
+      console.error("[App] Erro cr�tico: Firestore n�o inicializado");
+      showNotification("Erro: Firestore n�o est� configurado. Verifique firebase.js", "error", 5000);
       return;
     }
 
@@ -708,10 +756,14 @@ async function carregar() {
     }
     atualizarEstatisticas();
 
-    // load initial page of cards for infinite scroll
-    await loadInitialCards();
+    // load initial page of cards or start live listener for card mode
+    if (cardsGrid) {
+      startCardsListener();
+    } else {
+      await loadInitialCards();
+    }
   } catch (error) {
-    console.error("[App] Erro ao carregar página:", error);
+    console.error("[App] Erro ao carregar p�gina:", error);
     showNotification(`Erro ao carregar registros: ${error.message || String(error)}`, "error", 4000);
   }
 }
@@ -729,6 +781,23 @@ function atualizarFiltroAc() {
   });
   state.filtroAc = valorAnterior === "todos" || acs.includes(valorAnterior) ? valorAnterior : "todos";
   filtroAcEl.value = state.filtroAc;
+}
+
+function atualizarRegistroLocal(id, changes = {}) {
+  const idx = state.registros.findIndex((r) => r.id === id);
+  if (idx !== -1) {
+    state.registros[idx] = { ...state.registros[idx], ...changes };
+  }
+  const openIdx = state.openRegistros.findIndex((r) => r.id === id);
+  if (openIdx !== -1) {
+    state.openRegistros[openIdx] = { ...state.openRegistros[openIdx], ...changes };
+  }
+}
+
+function refreshDrawerIfOpen(id) {
+  if (!supportDrawer?.classList.contains("visible")) return;
+  const item = state.registros.find((r) => r.id === id) || state.openRegistros.find((r) => r.id === id);
+  if (item) openSupportDrawer(item);
 }
 
 function getRegistrosFiltrados() {
@@ -856,8 +925,8 @@ function atualizarEstatisticasDb() {
   _estatisticasInFlight = true;
   return (async () => {
     try {
-      await _doAtualizarEstatisticasDb();
-+      await fetchOpenSupports();
+      await _doAtualizarEstatisticasDbFull();
+      await fetchOpenSupports();
     } finally {
       _estatisticasInFlight = false;
       if (_estatisticasPending) {
@@ -870,8 +939,8 @@ function atualizarEstatisticasDb() {
 }
 
 function atualizarRodapePaginacao(totalItens = 0) {
-  const pageText = `Página ${state.paginaAtual}${state.hasNextPage ? "" : " (última)"}`;
-  paginationInfo.textContent = `Mostrando ${totalItens} registro(s) · ${pageText}`;
+  const pageText = `P�gina ${state.paginaAtual}${state.hasNextPage ? "" : " (�ltima)"}`;
+  paginationInfo.textContent = `Mostrando ${totalItens} registro(s) � ${pageText}`;
   document.getElementById("btnPrevPage").disabled = state.paginaAtual <= 1;
   document.getElementById("btnNextPage").disabled = !state.hasNextPage;
 }
@@ -985,14 +1054,14 @@ function render() {
           </svg>
         </button>`
       : "";
-    const btnAssociar = `<button class="btn btn-icon" data-action="associar" data-id="${item.id}" title="Associar técnico" aria-label="Associar técnico responsável">
+    const btnAssociar = `<button class="btn btn-icon" data-action="associar" data-id="${item.id}" title="Associar t�cnico" aria-label="Associar t�cnico respons�vel">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
               <circle cx="9" cy="7" r="4"/>
               <polyline points="16 11 18 13 22 9"/>
             </svg>
           </button>`;
-    // Render apenas 3 colunas: Tipo, Situação e Técnico
+    // Render apenas 3 colunas: Tipo, Situa��o e T�cnico
     tr.innerHTML = `
       <td class="cell-datahora">
         <div class="cell-inline">
@@ -1047,10 +1116,10 @@ function abrirModalAdicionar() {
   modalDataAbertura.value = toDatetimeLocal(new Date().toISOString());
   modalIdAtual.value = "";
   
-  // Preencher responsável com fallback síncrono
+  // Preencher respons�vel com fallback s�ncrono
   const userDisplayName = authManager.getUserDisplayName();
   const email = authManager.getCurrentUser()?.email || "";
-  const responsavel = userDisplayName || (email ? email.split("@")[0] : "Responsável");
+  const responsavel = userDisplayName || (email ? email.split("@")[0] : "Respons�vel");
   modalResponsavelAbertura.value = responsavel;
   modalResponsavelAbertura.disabled = true;
 
@@ -1095,9 +1164,9 @@ function fecharModal() {
 function abrirModalExcluir(item) {
   excluirIdPendente = item.id;
   excluirTudoPendente = false;
-  modalExcluirDetalhes.textContent = `Protocolo ${item.protocolo || "—"} · ${item.responsavelAbertura || "—"}`;
+  modalExcluirDetalhes.textContent = `Protocolo ${item.protocolo || "�"} � ${item.responsavelAbertura || "�"}`;
   document.getElementById("modalExcluirTitulo").textContent = "Excluir suporte?";
-  document.querySelector(".modal-confirm-text").textContent = "Esta ação não pode ser desfeita. O registro será removido permanentemente.";
+  document.querySelector(".modal-confirm-text").textContent = "Esta a��o n�o pode ser desfeita. O registro ser� removido permanentemente.";
   btnConfirmarExclusao.disabled = false;
   btnConfirmarExclusao.textContent = "Excluir";
   modalExcluir.classList.remove("hidden");
@@ -1173,15 +1242,6 @@ async function excluirTodosRegistros() {
   }
 }
 
-async function syncToSheet(id, data) {
-  try {
-    await syncDocToSheet(id, data);
-  } catch (err) {
-    // Silenciosamente falha na sincronização com sheets (não mostra ao usuário)
-    console.warn("Sync com sheets falhou:", err.message);
-  }
-}
-
 async function confirmarExclusao() {
   if (!authManager.isAdmin()) {
     showNotification("Apenas administradores podem excluir suportes.", "error", 3500);
@@ -1193,13 +1253,17 @@ async function confirmarExclusao() {
   try {
     if (excluirTudoPendente) {
       await excluirTodosRegistros();
+      state.registros = [];
+      state.openRegistros = [];
     } else {
       const docId = excluirIdPendente;
       await deleteDoc(doc(db, COLLECTION, docId));
-      void deleteDocFromSheet(docId);
+      state.registros = state.registros.filter((r) => r.id !== docId);
+      state.openRegistros = state.openRegistros.filter((r) => r.id !== docId);
     }
     await atualizarEstatisticasDb();
     atualizarEstatisticas();
+    render();
     fecharModalExcluir();
   } catch (err) {
     btnConfirmarExclusao.disabled = false;
@@ -1275,23 +1339,14 @@ formSuporte.addEventListener("submit", async (e) => {
         ...payload,
         id: ref.id,
         createdAt: payload.dataAbertura || new Date().toISOString()
-      };
-      void syncToSheet(ref.id, docData);
-      showNotification("Suporte adicionado com sucesso.", "success", 2200);
+      };showNotification("Suporte adicionado com sucesso.", "success", 2200);
     } else {
       const docId = modalIdAtual.value;
       const atual = state.registros.find((r) => r.id === docId) || {};
       if (payload.status === "EM ANDAMENTO" && atual.status !== "EM ANDAMENTO" && !atual.dataInicioAtendimento) {
         payload.dataInicioAtendimento = new Date().toISOString();
       }
-      await updateDoc(doc(db, COLLECTION, docId), payload);
-      void syncToSheet(docId, {
-        ...atual,
-        ...payload,
-        id: docId,
-        dataAbertura: atual.dataAbertura || payload.dataAbertura
-      });
-      const itemIndex = state.registros.findIndex((r) => r.id === docId);
+      await updateDoc(doc(db, COLLECTION, docId), payload);const itemIndex = state.registros.findIndex((r) => r.id === docId);
       if (itemIndex !== -1) {
         state.registros[itemIndex] = {
           ...atual,
@@ -1310,25 +1365,96 @@ formSuporte.addEventListener("submit", async (e) => {
   }
 });
 
-// Extrai o processamento de ações para reutilizar tanto no tbody quanto no drawer
+// Mapeia tipo de suporte para mensagem WhatsApp pr�-preenchida
+function getWhatsAppMessageForType(userDisplayName, supportType, protocolNumber) {
+  const typeKey = (supportType || "").toLowerCase().trim();
+  let typeMessage = "";
+
+  if (typeKey.includes("instala")) {
+    typeMessage = "Podemos dar inicio a instala��o do seu certificado?";
+  } else if (typeKey.includes("suporte") || typeKey.includes("t�cnico") || typeKey.includes("tecnico")) {
+    typeMessage = "Podemos dar inicio a seu atendimento referente ao seu certificado digital?";
+  } else if (typeKey.includes("configura")) {
+    typeMessage = "Podemos dar inicio a configura��o da sua m�quina?";
+  } else {
+    typeMessage = "Poderia me ajudar com essa demanda?";
+  }
+
+  return `*[${userDisplayName} | Suporte T�cnico]*\nBom dia, tudo certo?\n${typeMessage}\n\nPedido: #${protocolNumber}`;
+}
+
+// Extrai o processamento de a��es para reutilizar tanto no tbody quanto no drawer
 async function handleActionButton(btn) {
   if (!btn) return;
   const id = btn.dataset.id;
   try {
-    if (btn.dataset.action === "copiar") {
+      if (btn.dataset.action === "copiar") {
       const raw = btn.dataset.value ? decodeURIComponent(btn.dataset.value) : (btn.dataset.text || "");
       try {
         await navigator.clipboard.writeText(raw);
-        showNotification("Copiado para a área de transferência.", "success", 1800);
+        showNotification("Copiado para a �rea de transfer�ncia.", "success", 1800);
       } catch (e) {
         // fallback: select temporary textarea
         const ta = document.createElement('textarea');
         ta.value = raw;
         document.body.appendChild(ta);
         ta.select();
-        try { document.execCommand('copy'); showNotification("Copiado para a área de transferência.", "success", 1800); } catch (err) { showNotification("Falha ao copiar.", "error", 2200); }
+        try { document.execCommand('copy'); showNotification("Copiado para a �rea de transfer�ncia.", "success", 1800); } catch (err) { showNotification("Falha ao copiar.", "error", 2200); }
         ta.remove();
       }
+      return;
+    }
+    if (btn.dataset.action === "abrir-whatsapp") {
+      // Find the support item
+      const item = state.registros.find((r) => r.id === id);
+      if (!item) {
+        showNotification("Registro n�o encontrado.", "error", 2000);
+        return;
+      }
+
+      // prefer E.164 digits provided via data-e164, fallback to data-value/text
+      const e164 = btn.dataset.e164 ? decodeURIComponent(btn.dataset.e164) : (btn.dataset.value ? decodeURIComponent(btn.dataset.value) : (btn.dataset.text || ""));
+      // normalize to digits and ensure country code (default BR = 55)
+      const raw = String(e164 || "").trim();
+      let phoneDigits = raw.replace(/\D/g, "");
+      if (!phoneDigits) {
+        showNotification("N�mero inv�lido para WhatsApp.", "error", 2000);
+        return;
+      }
+
+      // remove international 00 prefix and leading zeros
+      phoneDigits = phoneDigits.replace(/^00+/, "").replace(/^0+/, "");
+      const defaultCountry = "55";
+      if (!phoneDigits.startsWith(defaultCountry)) {
+        // if looks like local BR number (8-11 digits), prefix country code
+        if (phoneDigits.length >= 8 && phoneDigits.length <= 11) {
+          phoneDigits = `${defaultCountry}${phoneDigits}`;
+        }
+      }
+
+      // Build predefined message based on current user and support type
+      const userDisplayName = authManager.getUserDisplayName();
+      const supportType = item.tipo || "Suporte";
+      const protocolNumber = item.protocolo || "N/A";
+      const predefinedMessage = getWhatsAppMessageForType(userDisplayName, supportType, protocolNumber);
+      const encodedMessage = encodeURIComponent(predefinedMessage);
+
+      // Primary: try desktop WhatsApp app
+      const appUrl = `whatsapp://send?phone=${phoneDigits}&text=${encodedMessage}`;
+      // Fallback: WhatsApp Web
+      const webUrl = `https://wa.me/${phoneDigits}?text=${encodedMessage}`;
+
+      // Try to open app; if no response in 700ms, open web
+      const timeout = setTimeout(() => {
+        window.open(webUrl, "_blank");
+        showNotification("Abrindo WhatsApp Web como alternativa...", "info", 2000);
+      }, 700);
+      
+      // Navigate to app protocol (may not work if app not installed, will timeout and use web)
+      window.location.href = appUrl;
+      
+      // Clear timeout if page actually navigated (unlikely but safe)
+      window.addEventListener("pagehide", () => clearTimeout(timeout), { once: true });
       return;
     }
     if (btn.dataset.action === "editar-linha") {
@@ -1337,13 +1463,13 @@ async function handleActionButton(btn) {
         return;
       }
       const item = state.registros.find((r) => r.id === id);
-      if (!item) throw new Error("Registro não encontrado.");
+      if (!item) throw new Error("Registro n�o encontrado.");
       abrirModalEditar(item);
       return;
     }
     if (btn.dataset.action === "anotacoes") {
       const item = state.registros.find((r) => r.id === id);
-      if (!item) throw new Error("Registro não encontrado.");
+      if (!item) throw new Error("Registro n�o encontrado.");
       abrirModalNotas(item);
       return;
     }
@@ -1353,12 +1479,12 @@ async function handleActionButton(btn) {
     }
     if (btn.dataset.action === "associar") {
       const tecnico = await associarTecnicoResponsavel(id);
-      showNotification(`Técnico associado com sucesso: ${tecnico}`, "success", 2200);
+      showNotification(`T�cnico associado com sucesso: ${tecnico}`, "success", 2200);
       await carregar();
     }
     if (btn.dataset.action === "info") {
       const item = state.registros.find((r) => r.id === id);
-      if (!item) throw new Error("Registro não encontrado.");
+      if (!item) throw new Error("Registro n�o encontrado.");
       if (item.statusAbertura === "INDEVIDO" && item.motivoIndevido) {
         const viewModal = document.getElementById("modalIndevidoView");
         const viewTextarea = document.getElementById("modalIndevidoViewTexto");
@@ -1383,13 +1509,10 @@ async function handleActionButton(btn) {
         setTimeout(() => modalSemRetornoTexto.focus(), 50);
       } else {
         const item = state.registros.find((r) => r.id === id);
-        if (!item) throw new Error("Registro não encontrado.");
-        await updateDoc(doc(db, COLLECTION, id), {
-          status: "SEM RETORNO",
-          updatedAt: serverTimestamp()
-        });
-        void syncToSheet(id, { ...item, status: "SEM RETORNO", id });
-        await fetchOpenSupports();
+        if (!item) throw new Error("Registro n�o encontrado.");
+        const payload = { status: "SEM RETORNO", updatedAt: serverTimestamp() };
+        await updateDoc(doc(db, COLLECTION, id), payload);
+        atualizarRegistroLocal(id, { status: "SEM RETORNO", updatedAt: new Date().toISOString() });await fetchOpenSupports();
         await atualizarEstatisticasDb();
         atualizarEstatisticas();
         render();
@@ -1398,7 +1521,7 @@ async function handleActionButton(btn) {
     }
     if (btn.dataset.action === "reagendar") {
       const item = state.registros.find((r) => r.id === id);
-      if (!item) throw new Error("Registro não encontrado.");
+      if (!item) throw new Error("Registro n�o encontrado.");
       if (item.status === "REAGENDADO" && item.dataReagendamento) {
         showNotification(`Reagendado para ${formatDate(item.dataReagendamento)}`, "info", 5000);
         return;
@@ -1414,20 +1537,24 @@ async function handleActionButton(btn) {
         modalReagendar.classList.remove("hidden");
         setTimeout(() => modalReagendarData.focus(), 50);
       } else {
-        throw new Error("Modal de reagendamento não encontrado.");
+        throw new Error("Modal de reagendamento n�o encontrado.");
       }
     }
     if (btn.dataset.action === "concluir") {
       const item = state.registros.find((r) => r.id === id);
-      if (!item) throw new Error("Registro não encontrado.");
+      if (!item) throw new Error("Registro n�o encontrado.");
       const payload = { status: "FINALIZADO", updatedAt: serverTimestamp() };
       if (indevidoPendingMap.has(id)) {
         payload.statusAbertura = "INDEVIDO";
         payload.motivoIndevido = indevidoPendingMap.get(id);
       }
       await updateDoc(doc(db, COLLECTION, id), payload);
-      void syncToSheet(id, { ...item, ...payload, id });
-      if (indevidoPendingMap.has(id)) indevidoPendingMap.delete(id);
+      const updateValues = { status: "FINALIZADO", updatedAt: new Date().toISOString() };
+      if (indevidoPendingMap.has(id)) {
+        updateValues.statusAbertura = "INDEVIDO";
+        updateValues.motivoIndevido = indevidoPendingMap.get(id);
+      }
+      atualizarRegistroLocal(id, updateValues);if (indevidoPendingMap.has(id)) indevidoPendingMap.delete(id);
       await fetchOpenSupports();
       await atualizarEstatisticasDb();
       atualizarEstatisticas();
@@ -1436,11 +1563,10 @@ async function handleActionButton(btn) {
     }
     if (btn.dataset.action === "voltar-em-aberto") {
       const item = state.registros.find((r) => r.id === id);
-      if (!item) throw new Error("Registro não encontrado.");
+      if (!item) throw new Error("Registro n�o encontrado.");
       const payload = { status: "EM ABERTO", tecnico: "", updatedAt: serverTimestamp() };
       await updateDoc(doc(db, COLLECTION, id), payload);
-      void syncToSheet(id, { ...item, ...payload, id });
-      await fetchOpenSupports();
+      atualizarRegistroLocal(id, { status: "EM ABERTO", tecnico: "", updatedAt: new Date().toISOString() });await fetchOpenSupports();
       await atualizarEstatisticasDb();
       atualizarEstatisticas();
       render();
@@ -1459,7 +1585,7 @@ async function handleActionButton(btn) {
   }
 }
 
-// Listener para cliques na tabela: se clicar em botão -> handleActionButton, se clicar na linha -> abrir drawer
+// Listener para cliques na tabela: se clicar em bot�o -> handleActionButton, se clicar na linha -> abrir drawer
 if (tbody) {
   tbody.addEventListener("click", async (e) => {
     const btn = e.target.closest("button[data-action]");
@@ -1471,7 +1597,8 @@ if (tbody) {
     if (!tr) return;
     const id = tr.dataset.id;
     if (!id) return;
-    const item = state.registros.find((r) => r.id === id);
+    let item = state.registros.find((r) => r.id === id);
+    if (!item) item = state.openRegistros.find((r) => r.id === id);
     if (!item) return;
     openSupportDrawer(item);
   });
@@ -1484,25 +1611,27 @@ if (cardsGrid) {
     if (!card) return;
     const id = card.dataset.id;
     if (!id) return;
-    const item = state.registros.find((r) => r.id === id);
+    let item = state.registros.find((r) => r.id === id);
+    if (!item) item = state.openRegistros.find((r) => r.id === id);
     if (!item) return;
     openSupportDrawer(item);
   });
 }
 
-// Drawer (aba lateral) — abrir/fechar e popular conteúdo
+// Drawer (aba lateral) � abrir/fechar e popular conte�do
 const supportDrawer = document.getElementById("supportDrawer");
 const supportDrawerBackdrop = document.getElementById("supportDrawerBackdrop");
 const drawerContent = document.getElementById("drawerContent");
 const drawerActions = document.getElementById("drawerActions");
 const drawerCloseBtn = document.getElementById("drawerCloseBtn");
 
-// Helper: retorna HTML de botão de ação com ícone (reutiliza ícones usados na tabela)
+// Helper: retorna HTML de bot�o de a��o com �cone (reutiliza �cones usados na tabela)
 function renderActionIcon(action, id) {
   const clsMap = {
     'editar-linha': 'btn-icon-pink',
     'anotacoes': '',
     'associar': 'btn-icon-primary',
+    'change-tecnico': 'btn-icon-secondary',
     'concluir': 'btn-icon-success',
     'reagendar': 'btn-icon-clock',
     'sem-retorno': 'btn-icon-secondary',
@@ -1512,14 +1641,15 @@ function renderActionIcon(action, id) {
   };
   const titleMap = {
     'editar-linha': 'Editar',
-    'anotacoes': 'Anotações',
-    'associar': 'Associar técnico',
+    'anotacoes': 'Anota��es',
+    'associar': 'Associar t�cnico',
+    'change-tecnico': 'Alterar t�cnico',
     'concluir': 'Concluir suporte',
     'reagendar': 'Reagendar suporte',
     'sem-retorno': 'Marcar como sem retorno',
     'voltar-em-aberto': 'Voltar para em aberto',
     'excluir': 'Excluir suporte',
-    'info': 'Mudança para indevido',
+    'info': 'Mudan�a para indevido',
     'copiar': 'Copiar'
   };
   const cls = clsMap[action] ? ` ${clsMap[action]}` : '';
@@ -1532,6 +1662,8 @@ function renderActionIcon(action, id) {
       return `<button ${common}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h11a2 2 0 0 1 2 2v14"/><path d="M6 4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12"/><path d="M9 7h6"/><path d="M9 11h6"/><path d="M9 15h4"/></svg></button>`;
     case 'associar':
       return `<button ${common}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></svg></button>`;
+    case 'change-tecnico':
+      return `<button ${common}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0"/><path d="M6 21v-1a4 4 0 0 1 4-4h4"/><path d="M14.5 9.5l5 5"/><path d="M18 10v4h-4"/></svg></button>`;
     case 'concluir':
       return `<button ${common}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></button>`;
     case 'reagendar':
@@ -1551,7 +1683,6 @@ function renderActionIcon(action, id) {
 
 function closeSupportDrawer() {
   if (supportDrawer) {
-    // start closing animation
     supportDrawer.classList.remove("visible");
     supportDrawer.classList.add("closing");
     const onEnd = (e) => {
@@ -1559,17 +1690,37 @@ function closeSupportDrawer() {
       supportDrawer.classList.add("hidden");
       supportDrawer.classList.remove("closing");
       supportDrawer.removeEventListener("transitionend", onEnd);
+      clearTimeout(_supportDrawerCloseTimeout);
+      _supportDrawerCloseTimeout = null;
     };
     supportDrawer.addEventListener("transitionend", onEnd);
+    clearTimeout(_supportDrawerCloseTimeout);
+    _supportDrawerCloseTimeout = setTimeout(() => {
+      if (supportDrawer) {
+        supportDrawer.classList.add("hidden");
+        supportDrawer.classList.remove("closing");
+      }
+    }, 400);
   }
   if (supportDrawerBackdrop) {
     supportDrawerBackdrop.classList.remove("visible");
+    supportDrawerBackdrop.classList.add("closing");
     const onEndBg = (e) => {
       if (e.target !== supportDrawerBackdrop) return;
       supportDrawerBackdrop.classList.add("hidden");
+      supportDrawerBackdrop.classList.remove("closing");
       supportDrawerBackdrop.removeEventListener("transitionend", onEndBg);
+      clearTimeout(_supportDrawerBackdropCloseTimeout);
+      _supportDrawerBackdropCloseTimeout = null;
     };
     supportDrawerBackdrop.addEventListener("transitionend", onEndBg);
+    clearTimeout(_supportDrawerBackdropCloseTimeout);
+    _supportDrawerBackdropCloseTimeout = setTimeout(() => {
+      if (supportDrawerBackdrop) {
+        supportDrawerBackdrop.classList.add("hidden");
+        supportDrawerBackdrop.classList.remove("closing");
+      }
+    }, 400);
   }
 }
 
@@ -1577,10 +1728,10 @@ function openSupportDrawer(item) {
   if (!item) return;
   if (!drawerContent || !drawerActions) return;
   const isAdminLocal = authManager.isAdmin();
-  // Popular conteúdo com os campos solicitados
+  // Popular conte�do com os campos solicitados
   drawerContent.innerHTML = `
     <div class="drawer-section">
-      <h4 class="drawer-section-title">Identificação</h4>
+      <h4 class="drawer-section-title">Identifica��o</h4>
       <div class="drawer-field"><label>Protocolo</label><div class="val">${escapeHtml(item.protocolo || "-")}${item.protocolo ? ` <button class="btn btn-ghost btn-small" data-action="copiar" data-value="${encodeURIComponent(item.protocolo)}" title="Copiar">` +
         `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button>` : ''}</div></div>
       <div class="drawer-field"><label>Data/Hora</label><div class="val">${formatDate(item.dataAbertura)}</div></div>
@@ -1588,11 +1739,13 @@ function openSupportDrawer(item) {
 
     <div class="drawer-section">
       <h4 class="drawer-section-title">Contato</h4>
-      <div class="drawer-field"><label>Responsável pela abertura</label><div class="val">${escapeHtml(item.responsavelAbertura || "-")}</div></div>
+      <div class="drawer-field"><label>Respons�vel pela abertura</label><div class="val">${escapeHtml(item.responsavelAbertura || "-")}</div></div>
       <div class="drawer-field"><label>CPF/CNPJ</label><div class="val">${escapeHtml(item.cpfCnpj || "-")}${item.cpfCnpj ? ` <button class="btn btn-ghost btn-small" data-action="copiar" data-value="${encodeURIComponent(item.cpfCnpj)}" title="Copiar">` +
         `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button>` : ''}</div></div>
       <div class="drawer-field"><label>Contato</label><div class="val">${escapeHtml(item.contato || "-")}${item.contato ? ` <button class="btn btn-ghost btn-small" data-action="copiar" data-value="${encodeURIComponent(item.contato)}" title="Copiar">` +
-        `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button>` : ''}</div></div>
+        `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button>` +
+        ` <button class="btn btn-ghost btn-small" data-action="abrir-whatsapp" data-id="${item.id}" data-e164="${encodeURIComponent(item.contatoE164 || item.contato)}" title="Abrir no WhatsApp">` +
+        `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.2c0 4.5-3.6 8.1-8.1 8.1-1.4 0-2.7-.4-3.9-1.1L3 21l1.9-5.9A8.1 8.1 0 0 1 3 12.2C3 7.7 6.6 4.1 11.1 4.1c4.5 0 8.1 3.6 8.1 8.1z"></path><path d="M17.3 14.1c-.4-.2-2.2-1.1-2.5-1.2-.3-.1-.5-.2-.7.2-.2.4-.8 1.2-1 1.4-.2.2-.4.3-.8.1-.4-.2-1.6-.6-3-1.9-1.1-1.1-1.8-2.5-2-2.9-.2-.4 0-.6.2-.8.2-.2.4-.4.6-.6.2-.2.3-.4.5-.7.2-.2.1-.5 0-.7-.1-.2-1.7-4.1-2.3-5.6-.2-.4-.6-.6-.9-.6-.2 0-.5 0-.7 0-.3 0-.7.1-1 .3-.2.1-.4.3-.5.5-.2.2-.5.6-.5 1.1 0 .5.1 1.1.5 1.7.4.6 1.4 2.1 3 3.7 1.6 1.6 3.1 2.5 4.1 3 1 .5 1.8.7 2.5.9.7.2 1.4.2 1.9.1.5-.1 1.4-.5 1.6-.9.2-.4.2-.7 0-1.1-.2-.5-.8-1-1.2-1.3z"></path></svg></button>` : ''}</div></div>
     </div>
 
     <div class="drawer-section">
@@ -1604,17 +1757,17 @@ function openSupportDrawer(item) {
     </div>
 
     <div class="drawer-section">
-      <h4 class="drawer-section-title">Técnico</h4>
-      <div class="drawer-field"><label>Técnico</label><div class="val">${escapeHtml(item.tecnico || "-")}</div></div>
+      <h4 class="drawer-section-title">T�cnico</h4>
+      <div class="drawer-field"><label>T�cnico</label><div class="val">${escapeHtml(item.tecnico || "-")}${isAdminLocal ? ' ' + renderActionIcon('change-tecnico', item.id) : ''}</div></div>
     </div>
 
     <div class="drawer-section">
-      <h4 class="drawer-section-title">Comentários / Anotações</h4>
+      <h4 class="drawer-section-title">Coment�rios / Anota��es</h4>
       <div class="drawer-field"><div class="val">${escapeHtml(item.anotacoes || item.anotacao || "-")}</div></div>
     </div>
   `;
 
-  // Ações — inserir botões com data-action para reaproveitar handleActionButton
+  // A��es � inserir bot�es com data-action para reaproveitar handleActionButton
   const actions = [];
   if (isAdminLocal) actions.push(renderActionIcon('editar-linha', item.id));
   actions.push(renderActionIcon('anotacoes', item.id));
@@ -1630,6 +1783,9 @@ function openSupportDrawer(item) {
   drawerActions.innerHTML = `<div class="drawer-actions-row">${actions.join('')}</div>`;
   if (supportDrawer) {
     supportDrawer.classList.remove("hidden");
+    supportDrawer.classList.remove("closing");
+    clearTimeout(_supportDrawerCloseTimeout);
+    _supportDrawerCloseTimeout = null;
     // force reflow then add visible to trigger transition
     // eslint-disable-next-line no-unused-expressions
     supportDrawer.offsetWidth;
@@ -1637,6 +1793,9 @@ function openSupportDrawer(item) {
   }
   if (supportDrawerBackdrop) {
     supportDrawerBackdrop.classList.remove("hidden");
+    supportDrawerBackdrop.classList.remove("closing");
+    clearTimeout(_supportDrawerBackdropCloseTimeout);
+    _supportDrawerBackdropCloseTimeout = null;
     // force reflow
     supportDrawerBackdrop.offsetWidth;
     supportDrawerBackdrop.classList.add("visible");
@@ -1646,18 +1805,23 @@ function openSupportDrawer(item) {
 if (drawerCloseBtn) drawerCloseBtn.addEventListener("click", closeSupportDrawer);
 if (supportDrawerBackdrop) supportDrawerBackdrop.addEventListener("click", closeSupportDrawer);
 
-// Delegação de cliques dentro do drawer para reaproveitar handleActionButton
+// Delega��o de cliques dentro do drawer para reaproveitar handleActionButton
 if (supportDrawer) {
   supportDrawer.addEventListener("click", async (e) => {
     const btn = e.target.closest("button[data-action]");
     if (!btn) return;
     await handleActionButton(btn);
-    // Após ação que muda status ou remove item, fechar drawer
-    closeSupportDrawer();
+    const CLOSE_DRAWER_ACTIONS = new Set(["concluir", "reagendar", "sem-retorno", "voltar-em-aberto", "excluir", "associar"]);
+    if (CLOSE_DRAWER_ACTIONS.has(btn.dataset.action)) {
+      closeSupportDrawer();
+    } else {
+      const id = btn.dataset.id;
+      if (id) refreshDrawerIfOpen(id);
+    }
   });
 }
 
-// Modal de alteração de técnico (apenas admins)
+// Modal de altera��o de t�cnico (apenas admins)
 let changeTecnicoPendingId = null;
 function closeChangeTecnicoModal() {
   const m = document.getElementById("modalChangeTecnico");
@@ -1667,18 +1831,18 @@ function closeChangeTecnicoModal() {
 
 function openChangeTecnicoModal(itemId) {
   if (!authManager.isAdmin()) {
-    showNotification("Apenas administradores podem alterar o técnico.", "error", 3000);
+    showNotification("Apenas administradores podem alterar o t�cnico.", "error", 3000);
     return;
   }
   changeTecnicoPendingId = itemId;
   const listEl = document.getElementById("modalChangeTecnicoList");
   if (!listEl) return;
-  // Lista fixa de técnicos — garante exibição consistente
+  // Lista fixa de t�cnicos � garante exibi��o consistente
   const nomes = ["Henrique", "Matheus", "Vinicius", "Victor", "Isabele", "Alexandre"];
   listEl.innerHTML = "";
   if (!nomes.length) {
     const p = document.createElement("p");
-    p.textContent = "Nenhum técnico disponível.";
+    p.textContent = "Nenhum t�cnico dispon�vel.";
     listEl.appendChild(p);
   } else {
     nomes.forEach((nome) => {
@@ -1698,7 +1862,7 @@ function openChangeTecnicoModal(itemId) {
   if (m) m.classList.remove("hidden");
 }
 
-// Delegação de clique na lista de técnicos
+// Delega��o de clique na lista de t�cnicos
 const _changeListEl = document.getElementById("modalChangeTecnicoList");
 if (_changeListEl) {
   _changeListEl.addEventListener("click", async (e) => {
@@ -1707,7 +1871,7 @@ if (_changeListEl) {
     let tecnico = btn.dataset.tecnico;
     if (!changeTecnicoPendingId) return;
     if (!authManager.isAdmin()) {
-      showNotification("Apenas administradores podem alterar o técnico.", "error", 3000);
+      showNotification("Apenas administradores podem alterar o t�cnico.", "error", 3000);
       closeChangeTecnicoModal();
       return;
     }
@@ -1715,14 +1879,13 @@ if (_changeListEl) {
       const item = state.registros.find((r) => r.id === changeTecnicoPendingId) || {};
       tecnico = titleCaseName(tecnico);
       await updateDoc(doc(db, COLLECTION, changeTecnicoPendingId), { tecnico, tecnicoKey: normKey(tecnico), updatedAt: serverTimestamp() });
-      void syncToSheet(changeTecnicoPendingId, { ...item, tecnico, tecnicoKey: normKey(tecnico), id: changeTecnicoPendingId });
       await atualizarEstatisticasDb();
       atualizarEstatisticas();
-      showNotification(`Técnico alterado para: ${tecnico}`, "success", 2200);
+      showNotification(`T�cnico alterado para: ${tecnico}`, "success", 2200);
       closeChangeTecnicoModal();
       await carregar();
     } catch (err) {
-      showNotification(err.message || "Não foi possível alterar o técnico.", "error", 3500);
+      showNotification(err.message || "N�o foi poss�vel alterar o t�cnico.", "error", 3500);
     }
   });
 }
@@ -1745,19 +1908,22 @@ if (btnSalvarNotas) btnSalvarNotas.addEventListener("click", async () => {
   if (!notasIdPendente) return;
   const item = state.registros.find((r) => r.id === notasIdPendente);
   if (!item) {
-    showNotification("Registro não encontrado.", "error", 2800);
+    showNotification("Registro n�o encontrado.", "error", 2800);
     fecharModalNotas();
     return;
   }
+  const anotacoes = modalNotasTexto.value.trim();
   const payload = {
-    anotacoes: modalNotasTexto.value.trim(),
+    anotacoes,
     updatedAt: serverTimestamp()
   };
   await updateDoc(doc(db, COLLECTION, notasIdPendente), payload);
-  void syncToSheet(notasIdPendente, { ...item, ...payload, id: notasIdPendente });
-  await atualizarEstatisticasDb();
+  atualizarRegistroLocal(notasIdPendente, { anotacoes, updatedAt: new Date().toISOString() });await atualizarEstatisticasDb();
   atualizarEstatisticas();
-  showNotification("Anotações salvas.", "success", 2200);
+  if (supportDrawer?.classList.contains("visible")) {
+    refreshDrawerIfOpen(notasIdPendente);
+  }
+  showNotification("Anota��es salvas.", "success", 2200);
   fecharModalNotas();
 });
 modalExcluir.addEventListener("click", (e) => {
@@ -1770,9 +1936,10 @@ const btnFecharIndevidoView = document.getElementById("btnFecharIndevidoView");
 if (btnConfirmarIndevido) {
   btnConfirmarIndevido.addEventListener("click", async () => {
     if (!indevidoIdPendente) return;
+    const id = indevidoIdPendente;
     const text = norm(document.getElementById("modalIndevidoTexto").value || "");
     if (!text) {
-      showNotification("Informe um motivo válido.", "error", 2200);
+      showNotification("Informe um motivo v�lido.", "error", 2200);
       return;
     }
     try {
@@ -1781,19 +1948,17 @@ if (btnConfirmarIndevido) {
         motivoIndevido: text,
         updatedAt: serverTimestamp()
       };
-      const item = state.registros.find((r) => r.id === indevidoIdPendente) || {};
-      await updateDoc(doc(db, COLLECTION, indevidoIdPendente), payload);
-      void syncToSheet(indevidoIdPendente, { ...item, ...payload, id: indevidoIdPendente });
-      const index = state.registros.findIndex((r) => r.id === indevidoIdPendente);
-      if (index !== -1) {
-        state.registros[index] = { ...item, ...payload, id: indevidoIdPendente };
-      }
-      indevidoPendingMap.delete(indevidoIdPendente);
+      const item = state.registros.find((r) => r.id === id) || {};
+      await updateDoc(doc(db, COLLECTION, id), payload);
+      atualizarRegistroLocal(id, { statusAbertura: "INDEVIDO", motivoIndevido: text, updatedAt: new Date().toISOString() });indevidoPendingMap.delete(id);
       indevidoIdPendente = null;
       const m = document.getElementById("modalIndevido");
       if (m) m.classList.add("hidden");
       await atualizarEstatisticasDb();
       atualizarEstatisticas();
+      if (supportDrawer?.classList.contains("visible")) {
+        refreshDrawerIfOpen(id);
+      }
       showNotification("Motivo indevido salvo.", "success", 2200);
     } catch (err) {
       showNotification(err.message || "Nao foi possivel salvar o motivo indevido.", "error", 3500);
@@ -1822,9 +1987,12 @@ if (btnMudarParaDevido) {
       const item = state.registros.find((r) => r.id === id) || {};
       const payload = { statusAbertura: "DEVIDO", updatedAt: serverTimestamp() };
       await updateDoc(doc(db, COLLECTION, id), payload);
-      void syncToSheet(id, { ...item, ...payload, id });
-      await atualizarEstatisticasDb();
+      atualizarRegistroLocal(id, { statusAbertura: "DEVIDO", updatedAt: new Date().toISOString() });await atualizarEstatisticasDb();
       atualizarEstatisticas();
+      render();
+      if (supportDrawer?.classList.contains("visible")) {
+        refreshDrawerIfOpen(id);
+      }
       const m = document.getElementById("modalIndevidoView");
       if (m) m.classList.add("hidden");
       showNotification("Status alterado para Devido.", "success", 2200);
@@ -1889,13 +2057,15 @@ if (btnConfirmarSemRetorno) {
         motivo,
         updatedAt: serverTimestamp()
       });
-      void syncToSheet(id, { ...item, status: "SEM RETORNO", motivo, id });
-      semRetornoIdPendente = null;
+      atualizarRegistroLocal(id, { status: "SEM RETORNO", motivo, updatedAt: new Date().toISOString() });semRetornoIdPendente = null;
       if (modalSemRetorno) modalSemRetorno.classList.add("hidden");
       await fetchOpenSupports();
       await atualizarEstatisticasDb();
       atualizarEstatisticas();
       render();
+      if (supportDrawer?.classList.contains("visible")) {
+        refreshDrawerIfOpen(id);
+      }
       showNotification("Suporte marcado como sem retorno.", "success", 2200);
     } catch (err) {
       showNotification(err.message || "Nao foi possivel marcar como sem retorno.", "error", 3500);
@@ -1943,8 +2113,7 @@ if (btnConfirmarReagendar) {
         dataReagendamento: dataReagendamento,
         updatedAt: serverTimestamp()
       });
-      void syncToSheet(id, { ...item, status: "REAGENDADO", dataReagendamento, id });
-      reagendarIdPendente = null;
+      atualizarRegistroLocal(id, { status: "REAGENDADO", dataReagendamento: dataReagendamento.toISOString(), updatedAt: new Date().toISOString() });reagendarIdPendente = null;
       if (modalReagendar) modalReagendar.classList.add("hidden");
       await fetchOpenSupports();
       await atualizarEstatisticasDb();
@@ -2028,7 +2197,7 @@ async function protegerPagina() {
     const userInfo = document.createElement("span");
     userInfo.className = "user-info";
     userInfo.innerHTML = `
-      <span style="margin-right: 12px;">👤 ${userDisplayName}</span>
+      <span style="margin-right: 12px;">?? ${userDisplayName}</span>
       <button id="btnLogout" class="btn btn-ghost btn-small" style="margin: 0;">Logout</button>
     `;
     const actions = header.querySelector(".actions");
@@ -2067,13 +2236,13 @@ async function preencherResponsavelAbertura() {
 
     // Fallback para email
     const email = authManager.getCurrentUser()?.email || "";
-    const emailUser = email.split("@")[0] || "Responsável";
+    const emailUser = email.split("@")[0] || "Respons�vel";
     modalResponsavelAbertura.value = emailUser;
     modalResponsavelAbertura.disabled = true;
   } catch (err) {
     // Se tudo falhar, usa email mesmo assim
     const email = authManager.getCurrentUser()?.email || "";
-    const emailUser = email.split("@")[0] || "Responsável";
+    const emailUser = email.split("@")[0] || "Respons�vel";
     modalResponsavelAbertura.value = emailUser;
     modalResponsavelAbertura.disabled = true;
   }
@@ -2116,10 +2285,7 @@ async function verificarReagendados() {
           updatedAt: serverTimestamp()
         });
         
-        // Sincronizar com Sheets
-        void syncToSheet(docSnap.id, { ...data, status: "EM ABERTO", id: docSnap.id });
-        
-        // Notificações
+        // Sincronizar com Sheets// Notifica��es
         playNotificationSound();
         showNotification(
           `Suporte ${data.protocolo || "S/N"} retornou para Em Aberto!`,
@@ -2129,7 +2295,7 @@ async function verificarReagendados() {
       }
     }
     
-    // Atualizar lista se necessário
+    // Atualizar lista se necess�rio
     const hasReagendados = state.registros.some((r) => r.status === "REAGENDADO");
     if (hasReagendados) {
       await atualizarEstatisticasDb();
@@ -2144,7 +2310,7 @@ function iniciarVerificacaoReagendados() {
   if (checkReagendadoInterval) clearInterval(checkReagendadoInterval);
   // Verificar a cada 5 minutos em vez de 30 segundos para reduzir leituras repetidas.
   checkReagendadoInterval = setInterval(verificarReagendados, 5 * 60 * 1000);
-  // Fazer a primeira verificação imediatamente
+  // Fazer a primeira verifica��o imediatamente
   verificarReagendados();
 }
 
@@ -2155,28 +2321,29 @@ function pararVerificacaoReagendados() {
   }
 }
 
-// Inicializar em sequência correta para evitar race conditions
+// Inicializar em sequ�ncia correta para evitar race conditions
 (async () => {
   try {
-    // 1. Aguardar inicialização do Auth
+    // 1. Aguardar inicializa��o do Auth
     await authManager.initialize();
-    console.log("[App] ✅ Auth inicializado");
+    console.log("[App] ? Auth inicializado");
     
-    // 2. Proteger página (redireciona se não autenticado)
+    // 2. Proteger p�gina (redireciona se n�o autenticado)
     await protegerPagina();
-    console.log("[App] ✅ Página protegida");
+    console.log("[App] ? P�gina protegida");
     
-    // 3. Carregar a primeira página com filtros atuais
+    // 3. Carregar a primeira p�gina com filtros atuais
     await carregar();
-    console.log("[App] ✅ Registros carregados");
+    console.log("[App] ? Registros carregados");
     
-    // 4. Iniciar verificação de suportes reagendados
+    // 4. Iniciar verifica��o de suportes reagendados
     iniciarVerificacaoReagendados();
-    console.log("[App] ✅ Verificação de reagendados iniciada");
+    console.log("[App] ? Verifica��o de reagendados iniciada");
   } catch (error) {
-    console.error("[App] ❌ Erro na inicialização:", error);
+    console.error("[App] ? Erro na inicializa��o:", error);
     showNotification(`Erro ao inicializar: ${error.message}`, "error", 5000);
   }
 })();
 
 // debug panel removed
+

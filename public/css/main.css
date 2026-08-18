@@ -514,6 +514,7 @@ tbody tr:last-child td { border-bottom: 0; }
   pointer-events: none;
 }
 .drawer-backdrop.visible { opacity: 1; pointer-events: auto; }
+.drawer-backdrop.closing { opacity: 0; pointer-events: none; }
 .support-drawer {
   position: fixed;
   right: 0;
@@ -555,6 +556,7 @@ tbody tr:last-child td { border-bottom: 0; }
 .card .card-top { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
 .card .card-time { font-size:0.82rem; color:var(--muted); }
 .card .card-type { font-weight:600; color:var(--text); margin-top:4px; }
+.card .card-protocolo { font-size:0.75rem; color:var(--muted); margin-top:2px; font-family:monospace; }
 .card .card-status { margin-top:8px; }
 .card .card-tech { margin-left:auto; font-size:0.86rem; color:var(--text-secondary); font-weight:700; }
 .card { padding-bottom: 12px; }

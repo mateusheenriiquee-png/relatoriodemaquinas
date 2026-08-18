@@ -9,11 +9,6 @@ export const APP_CONFIG = {
   FIRESTORE_COLLECTION: "suportes_tecnicos",
   FIRESTORE_USERS_COLLECTION: "usuarios",
 
-  // Google Sheets
-  SHEETS_SPREADSHEET_ID: process.env.REACT_APP_SHEETS_SPREADSHEET_ID || "",
-  SHEETS_RANGE: "Suportes!A:N",
-  SHEETS_SYNC_TOKEN: process.env.REACT_APP_SHEETS_SYNC_TOKEN || "default-token",
-
   // URLs de API
   API_BASE_URL: process.env.REACT_APP_API_BASE_URL || "http://localhost:3000",
   WEBHOOK_URL: process.env.REACT_APP_WEBHOOK_URL || "http://localhost:3000/webhook/suportes",

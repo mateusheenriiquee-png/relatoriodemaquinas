@@ -3,11 +3,14 @@ import {
   collection,
   doc,
   getDoc,
-  serverTimestamp
+  getDocs,
+  limit,
+  query,
+  serverTimestamp,
+  where
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 import { db } from "../config/firebase.js";
 import { authManager } from "../auth.js";
-import { syncDocToSheet } from "../services/sheets-sync.js";
 
 const COLLECTION = "suportes_tecnicos";
 const STATUS_OPTIONS = ["EM ABERTO", "EM ANDAMENTO", "FINALIZADO", "SEM RETORNO", "REAGENDADO"];
@@ -129,6 +132,24 @@ function buildPayload() {
   return payload;
 }
 
+async function checkIfSupportAlreadyExists(payload = {}) {
+  const protocolo = norm(payload.protocolo || fields.protocolo.value);
+  if (!protocolo || !db) return false;
+
+  try {
+    const q = query(
+      collection(db, COLLECTION),
+      where("protocolo", "==", protocolo),
+      limit(1)
+    );
+    const snap = await getDocs(q);
+    return !snap.empty;
+  } catch (err) {
+    console.warn("[NovoSuporte] Falha ao verificar duplicidade:", err);
+    return false;
+  }
+}
+
 function resetForm() {
   fields.protocolo.value = "";
   fields.cpfCnpj.value = "";
@@ -209,6 +230,14 @@ formSuporte.addEventListener("submit", async (e) => {
   btnSalvar.textContent = "Salvando...";
 
   try {
+    const alreadyExists = await checkIfSupportAlreadyExists(payload);
+    if (alreadyExists) {
+      showNotification("Já existe um suporte com esse protocolo. Verifique antes de salvar.", "warning", 4000);
+      btnSalvar.disabled = false;
+      btnSalvar.textContent = "Salvar suporte";
+      return;
+    }
+
     const ref = await addDoc(collection(db, COLLECTION), {
       ...payload,
       createdAt: serverTimestamp()
@@ -219,12 +248,6 @@ formSuporte.addEventListener("submit", async (e) => {
       id: ref.id,
       createdAt: payload.dataAbertura || new Date().toISOString()
     };
-
-    try {
-      await syncDocToSheet(ref.id, docData);
-    } catch (err) {
-      console.warn("[NovoSuporte] Sync com sheets falhou:", err.message);
-    }
 
     showNotification("Suporte adicionado com sucesso.", "success", 2200);
     resetForm();

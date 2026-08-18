@@ -273,6 +273,32 @@ function formatPhoneText(text) {
   return v;
 }
 
+function phoneToE164(text, defaultCountry = "55") {
+  if (!text) return "";
+  let digits = String(text).replace(/\D/g, "");
+  if (!digits) return "";
+
+  // Strip international prefix like 00
+  digits = digits.replace(/^00+/, "");
+
+  // Remove leading zeros that are not part of country code
+  digits = digits.replace(/^0+/, "");
+
+  // If it already starts with the country code, assume it's complete
+  if (digits.startsWith(defaultCountry)) {
+    return digits;
+  }
+
+  // If looks like local Brazilian number (8-11 digits), prefix default country
+  // We accept 8/9 (no DDD), 10/11 (with DDD). For all these, prefix country code.
+  if (digits.length >= 8 && digits.length <= 11) {
+    return `${defaultCountry}${digits}`;
+  }
+
+  // For other lengths, just return digits (best-effort)
+  return digits;
+}
+
 function formatProtocoloText(text) {
   const v = normalizeText(text || "");
   if (!v) return v;
@@ -356,7 +382,11 @@ function normalizeSupport(input, options = {}) {
     partial
   );
   if (result.contato) {
+    // formatted human-readable contato
     result.contato = formatPhoneText(result.contato);
+    // also store an E.164-ish digits-only form (e.g. 5511999999999) for WhatsApp links
+    const rawContato = getValueByAliases(["contato", "contato ou grupo", "telefone", "celular", "whatsapp", "email"], ...sources);
+    result.contatoE164 = phoneToE164(rawContato);
   }
   assignField(
     result,
@@ -402,6 +432,7 @@ function normalizeSupport(input, options = {}) {
 module.exports = {
   normalizeSupport,
   normalizeText,
+  phoneToE164,
   hasAcceptableWebhookInput,
   collectUnmappedFields,
   stripTokenFromInput

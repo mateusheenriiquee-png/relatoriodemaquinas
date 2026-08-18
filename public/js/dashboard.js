@@ -1,4 +1,4 @@
-import { collection, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import { collection, getDocs, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 import { db } from "./config/firebase.js";
 import { authManager } from "./auth.js";
 
@@ -12,6 +12,10 @@ const state = {
   filtroAc: "todos",
   filtroTecnico: "todos"
 };
+
+let unsubscribeDashboardListener = null;
+let _dashboardListenerDebounceTimer = null;
+const DASHBOARD_LISTENER_DEBOUNCE_MS = 1500;
 
 const charts = {};
 
@@ -591,33 +595,55 @@ function render() {
   renderTabelas(dados);
 }
 
+function startDashboardListener() {
+  if (!db) return;
+  if (unsubscribeDashboardListener) {
+    unsubscribeDashboardListener();
+    unsubscribeDashboardListener = null;
+  }
+  clearTimeout(_dashboardListenerDebounceTimer);
+
+  const collectionRef = collection(db, COLLECTION);
+  let registrosQuery = collectionRef;
+
+  // Aplicar filtro de período no listener também
+  if (state.filtroPeriodo !== "todos") {
+    const dias = Number(state.filtroPeriodo);
+    if (dias && !Number.isNaN(dias)) {
+      const limite = new Date(Date.now() - dias * 24 * 60 * 60 * 1000).toISOString();
+      registrosQuery = query(collectionRef, where("dataAbertura", ">=", limite));
+    }
+  }
+
+  unsubscribeDashboardListener = onSnapshot(
+    registrosQuery,
+    (snap) => {
+      state.registros = snap.docs
+        .map((d) => mapDoc(d.id, d.data()))
+        .filter((record) => !isRegistroSoluti(record));
+      
+      atualizarFiltrosDinamicos();
+      
+      // Debounce para evitar renderizações muito frequentes
+      clearTimeout(_dashboardListenerDebounceTimer);
+      _dashboardListenerDebounceTimer = setTimeout(() => {
+        render();
+      }, DASHBOARD_LISTENER_DEBOUNCE_MS);
+    },
+    (error) => {
+      console.error("[Dashboard] Erro no listener em tempo real:", error);
+    }
+  );
+}
+
 async function carregar() {
   const loading = document.getElementById("dashboardLoading");
   loading.classList.remove("hidden");
   try {
-    const collectionRef = collection(db, COLLECTION);
-    let registrosQuery = collectionRef;
-
-    // Otimização de leituras: quando um período está selecionado, filtramos
-    // no servidor (Firestore) em vez de baixar a coleção inteira toda vez.
-    // ATENÇÃO: documentos sem o campo "dataAbertura" nunca aparecerão aqui
-    // (limitação do Firestore com orderBy/where em campo ausente). Rode a
-    // migração de backfill (ver README/CHANGELOG) se notar registros antigos
-    // sumindo dos períodos 7/30/90 dias.
-    if (state.filtroPeriodo !== "todos") {
-      const dias = Number(state.filtroPeriodo);
-      if (dias && !Number.isNaN(dias)) {
-        const limite = new Date(Date.now() - dias * 24 * 60 * 60 * 1000).toISOString();
-        registrosQuery = query(collectionRef, where("dataAbertura", ">=", limite));
-      }
-    }
-
-    const snap = await getDocs(registrosQuery);
-    state.registros = snap.docs
-      .map((d) => mapDoc(d.id, d.data()))
-      .filter((record) => !isRegistroSoluti(record));
-    atualizarFiltrosDinamicos();
-    render();
+    // Iniciar listener em tempo real em vez de apenas getDocs
+    startDashboardListener();
+    // Aguardar um pouco para a renderização inicial acontecer
+    await new Promise(resolve => setTimeout(resolve, 100));
   } finally {
     loading.classList.add("hidden");
   }

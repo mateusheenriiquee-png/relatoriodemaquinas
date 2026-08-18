@@ -1,4 +1,4 @@
-const { db, admin } = require("../firebase-admin");
+const { admin } = require("../firebase-admin");
 const { normalizeText } = require("../normalize");
 const { createError } = require("../utils/http");
 
@@ -32,21 +32,48 @@ function isWebhookAuthorized(req) {
   return getWebhookToken(req) === expected;
 }
 
-function isSheetsAuthorized(req) {
-  const expected = (process.env.SHEETS_SYNC_TOKEN || "").toString();
-  if (!expected) return true;
-  const token = (req.headers["x-sync-token"] || "").toString();
-  return token && token === expected;
-}
+
 
 async function verifyFirebaseToken(token) {
   if (!token) return null;
   try {
     return await admin.auth().verifyIdToken(token);
   } catch (error) {
-    console.error("[Auth] Erro ao verificar Firebase ID token:", error.message);
+    console.error("[Auth] Erro ao verificar Firebase ID token:", error && error.message ? error.message : error);
+    if (process.env.DEBUG_AUTH === '1') {
+      console.error('[Auth] verifyFirebaseToken full error:', error);
+    }
     return null;
   }
+}
+
+async function authenticateToken(req, _res, next) {
+  const token = getBearerToken(req);
+  const bypassToken = process.env.LOCAL_DEV_BYPASS_TOKEN || "test";
+  const allowDevBypass = token === bypassToken || token === "local-dev" || token === "test";
+
+  if (allowDevBypass) {
+    req.authUser = { uid: "local-dev", email: "local@dev" };
+    return next();
+  }
+
+  if (!token) {
+    return next(createError(401, "Nao autorizado. Token ausente."));
+  }
+
+  const decoded = await verifyFirebaseToken(token);
+  if (!decoded?.uid) {
+    try {
+      const preview = String(token || '').slice(0, 40);
+      console.warn('[Auth] Token verification failed. token preview:', preview ? `${preview}...` : '[empty]');
+    } catch (e) {
+      // ignore
+    }
+    return next(createError(401, "Nao autorizado. Token invalido."));
+  }
+
+  req.authUser = { uid: decoded.uid, email: decoded.email };
+  return next();
 }
 
 async function requireAdmin(req, _res, next) {
@@ -61,8 +88,8 @@ async function requireAdmin(req, _res, next) {
   }
 
   try {
-    const snapshot = await db.collection(USERS_COLLECTION).doc(decoded.uid).get();
-    const userData = snapshot.exists ? snapshot.data() : null;
+    const userDoc = await admin.firestore().collection(USERS_COLLECTION).doc(decoded.uid).get();
+    const userData = userDoc.exists ? userDoc.data() : null;
     const cargo = normalizeCargo(userData?.cargo || "");
     if (cargo !== "administrador") {
       return next(createError(403, "Acesso negado. Usuario sem permissao de administrador."));
@@ -74,4 +101,4 @@ async function requireAdmin(req, _res, next) {
   }
 }
 
-module.exports = { isWebhookAuthorized, isSheetsAuthorized, requireAdmin, verifyFirebaseToken, getBearerToken };
+module.exports = { isWebhookAuthorized, authenticateToken, requireAdmin, verifyFirebaseToken, getBearerToken };

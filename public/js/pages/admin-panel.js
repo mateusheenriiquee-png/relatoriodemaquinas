@@ -1,4 +1,4 @@
-import { authManager } from "../auth.js";
+﻿import { authManager } from "../auth.js";
 
 const tabs = document.querySelectorAll(".admin-tab");
 const sections = document.querySelectorAll(".admin-section");
