@@ -1,0 +1,56 @@
+/* Acabamentos que não pertencem ao sistema de tokens */
+
+/* Barras de rolagem no tom da interface */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: var(--r-pill);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--faint);
+  background-clip: content-box;
+}
+
+::selection {
+  background: var(--accent-line);
+  color: var(--text-strong);
+}
+
+/* Impressão: sem cromo de interface, fundo branco */
+@media print {
+  .actions,
+  .toolbar,
+  .theme-toggle,
+  .drawer-backdrop,
+  .support-drawer,
+  .toast-container,
+  .chart-colors-panel {
+    display: none !important;
+  }
+
+  .container {
+    margin: 0;
+    border: 0;
+    box-shadow: none;
+  }
+
+  body {
+    background: #fff;
+  }
+}

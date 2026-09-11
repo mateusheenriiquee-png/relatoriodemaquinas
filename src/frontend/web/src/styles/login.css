@@ -1,0 +1,123 @@
+/* Tela de login — mesma linguagem visual do painel */
+
+.login-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.login-container {
+  width: 100%;
+  max-width: 420px;
+  padding: 36px 32px 30px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-lg);
+  animation: surface-in 300ms ease both;
+}
+
+.login-brand {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.login-brand .brand-mark {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  font-size: 1.15rem;
+}
+
+.login-header {
+  text-align: center;
+  margin-bottom: 26px;
+}
+
+.login-header h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.login-header p {
+  margin: 8px 0 0;
+  font-size: 0.86rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.login-form .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.login-button {
+  margin-top: 6px;
+  padding: 13px 16px;
+  font-family: inherit;
+  font-size: 0.94rem;
+  font-weight: 700;
+  color: var(--accent-ink);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition: background var(--t-fast), box-shadow var(--t-fast);
+}
+
+.login-button:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+
+.login-button:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.login-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.login-button .loading-spinner {
+  border-color: rgba(255, 255, 255, 0.35);
+  border-top-color: var(--accent-ink);
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+.login-error {
+  margin-bottom: 16px;
+  padding: 11px 14px;
+  border-radius: var(--r-md);
+  background: var(--st-aberto-bg);
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  font-size: 0.86rem;
+  text-align: center;
+  animation: card-in 180ms ease both;
+}
+
+.login-footer {
+  margin-top: 22px;
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--faint);
+}
+
+.login-theme-toggle {
+  display: flex;
+  justify-content: center;
+  margin-top: 18px;
+}

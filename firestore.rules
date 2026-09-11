@@ -1,0 +1,79 @@
+rules_version = '2';
+
+// =============================================================================
+// Regras do Firestore — suportetecnico-api2
+//
+// Baseadas nas regras que já estavam publicadas, com três correções:
+//
+//  1. O cargo é comparado sem diferenciar maiúsculas e aceita as duas grafias
+//     em uso ("admin" legado e "Administrador", que é o que o painel grava).
+//     Com a comparação exata a 'admin', quem fosse promovido pelo painel virava
+//     admin na tela mas não nas regras.
+//  2. Ninguém altera o próprio cargo — antes, qualquer usuário autenticado
+//     conseguia se promover a admin escrevendo no próprio documento.
+//  3. A checagem de admin não quebra quando o usuário do Auth ainda não tem
+//     documento em /usuarios (o front trata esse caso; as regras não tratavam,
+//     e o get() sem documento derruba a avaliação inteira).
+//
+// Publicar:
+//   firebase deploy --only firestore:rules --config config/firebase.json
+//
+// O Admin SDK (webhook e rotas /admin) ignora estas regras.
+// =============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function autenticado() {
+      return request.auth != null;
+    }
+
+    function cargoDoUsuario() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.get('cargo', '');
+    }
+
+    function ehAdmin() {
+      return autenticado()
+        && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+        && cargoDoUsuario().lower() in ['admin', 'administrador'];
+    }
+
+    // ---------------------------------------------------------------- usuários
+    match /usuarios/{userId} {
+      allow read: if autenticado();
+
+      allow create: if ehAdmin();
+      allow delete: if ehAdmin();
+
+      // Admin altera qualquer campo. O próprio usuário edita seu perfil, mas o
+      // cargo tem que continuar o mesmo — senão vira auto-promoção.
+      allow update: if ehAdmin()
+        || (autenticado()
+            && request.auth.uid == userId
+            && request.resource.data.get('cargo', '') == resource.data.get('cargo', ''));
+    }
+
+    // ---------------------------------------------------------------- suportes
+    match /suportes_tecnicos/{document=**} {
+      allow read: if autenticado();
+      allow create: if autenticado();
+      allow update: if autenticado();
+
+      // Excluir é a única ação destrutiva e fica restrita a administradores.
+      allow delete: if ehAdmin();
+    }
+
+    // ------------------------------------------------------------ configuração
+    match /config/{document=**} {
+      allow read: if autenticado();
+      allow write: if ehAdmin();
+    }
+
+    // --------------------------------------------------------------- auditoria
+    // Escrito só pelo backend via Admin SDK; ninguém lê ou edita pelo cliente.
+    match /audit_logs/{logId} {
+      allow read: if ehAdmin();
+      allow write: if false;
+    }
+  }
+}

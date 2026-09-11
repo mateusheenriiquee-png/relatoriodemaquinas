@@ -1,0 +1,47 @@
+name = "suportetecnico-api"
+main = "../src/backend/index.mjs"
+compatibility_date = "2024-11-12"
+compatibility_flags = ["nodejs_compat"]
+keep_vars = true
+
+# --- Cron Triggers -----------------------------------------------------------
+# Reabre os suportes cujo reagendamento venceu (handler `scheduled` em
+# src/backend/index.mjs).
+#
+# Antes essa varredura vivia no navegador, num setInterval da tela de suportes:
+# se ninguém estivesse com o painel aberto às 8h, o suporte reagendado para as
+# 8h só voltava para EM ABERTO quando alguém abrisse a tela. Aqui ela não
+# depende de aba nenhuma.
+#
+# Cron da Cloudflare é sempre UTC. `*/5` mantém a mesma cadência de 5 minutos
+# de antes, então o fuso não muda nada na prática — a granularidade do
+# reagendamento é o que define a precisão.
+#
+# `keep_vars = true` não vale para triggers: o que estiver aqui substitui a
+# lista de crons no deploy. Apagar esta seção desliga a rotina.
+[triggers]
+crons = ["*/5 * * * *"]
+
+[env.production]
+# Variables are managed in the Cloudflare Dashboard. Leaving this table
+# empty prevents `wrangler deploy` from overwriting values that already
+# exist in the remote environment.
+
+# --- Front-end servido pelo Worker -------------------------------------------
+# Hoje publica o front antigo (multi-página) de src/frontend/public.
+#
+# Para publicar a versão React, rode `npm run web:build` e troque a linha
+# `directory` abaixo por:
+#
+#     directory = "./src/frontend/web/dist"
+#
+# Só faça a troca quando o painel admin e o import/export estiverem migrados —
+# hoje essas telas só existem no front antigo.
+#
+# `not_found_handling` já está ligado: sem ele, abrir /dashboard direto ou dar
+# F5 em qualquer rota do React devolve 404. Não afeta o front antigo, onde cada
+# tela é um arquivo .html de verdade.
+[assets]
+directory = "../src/frontend/web/dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"

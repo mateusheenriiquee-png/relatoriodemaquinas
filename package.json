@@ -2,21 +2,26 @@
   "name": "suportetecnico-api",
   "version": "1.0.0",
   "description": "Painel web + API webhook para registro de suportes tecnicos",
-  "main": "api/src/server.js",
+  "main": "src/api/server.js",
   "scripts": {
-    "start": "node api/src/server.js",
-    "dev": "node api/src/server.js",
-    "pages:dev": "wrangler pages dev public",
+    "start": "node src/api/server.js",
+    "dev": "node src/api/server.js",
+    "pages:dev": "wrangler pages dev src/frontend/public",
     "cf:deploy": "node scripts/cf-pages-deploy.js",
+    "web:install": "npm install --prefix src/frontend/web",
+    "web:dev": "npm run dev --prefix src/frontend/web",
+    "web:build": "npm run build --prefix src/frontend/web",
+    "web:preview": "npm run preview --prefix src/frontend/web",
+    "web:test": "npm run test --prefix src/frontend/web",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "test": "echo \"No tests configured\""
+    "test": "npm run test --prefix src/frontend/web"
   },
   "devDependencies": {
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.0.0",
     "prettier": "^3.0.0",
-    "wrangler": "^4.95.0"
+    "wrangler": "^4.124.0"
   },
   "engines": {
     "node": ">=18"

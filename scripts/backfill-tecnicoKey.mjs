@@ -1,21 +1,8 @@
-import admin from 'firebase-admin';
-import fs from 'fs';
-import path from 'path';
+import { explicarErro, iniciarFirestore } from './lib/firebase-admin.mjs';
 
-// Adjust path to your service account JSON file in the repo
-const SERVICE_ACCOUNT_PATH = path.resolve(process.cwd(), 'suportetecnico-api2-firebase-adminsdk-fbsvc-2af735b884.json');
-if (!fs.existsSync(SERVICE_ACCOUNT_PATH)) {
-  console.error('Service account file not found:', SERVICE_ACCOUNT_PATH);
-  process.exit(1);
-}
+const { db, caminho } = iniciarFirestore();
+console.log('Credencial:', caminho);
 
-const serviceAccount = JSON.parse(fs.readFileSync(SERVICE_ACCOUNT_PATH, 'utf8'));
-
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
-});
-
-const db = admin.firestore();
 const COLLECTION = 'suportes_tecnicos';
 
 function normKey(v) {
@@ -69,6 +56,6 @@ async function run() {
 }
 
 run().catch(err => {
-  console.error('Backfill failed:', err);
+  console.error('Backfill failed:', explicarErro(err));
   process.exit(1);
 });

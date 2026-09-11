@@ -1,9 +1,14 @@
 const { execSync } = require("child_process");
 const path = require("path");
 
-process.chdir(path.resolve(__dirname, ".."));
+const repoRoot = path.resolve(__dirname, "..");
+process.chdir(repoRoot);
 
-execSync("npx wrangler deploy --config wrangler.toml --keep-vars", {
+// O wrangler.toml vive em config/, não na raiz. Antes o caminho estava
+// como "wrangler.toml" e o deploy falhava sem nunca chegar a subir nada.
+const configPath = path.join("config", "wrangler.toml");
+
+execSync(`npx wrangler deploy --config ${configPath} --env="" --keep-vars`, {
   stdio: "inherit",
   env: process.env
 });

@@ -26,8 +26,18 @@ My workflow.json
 node_modules/
 .env
 .env.local
+.env.production
 
+# Credenciais e dados sensíveis
+credentials/
+data/*.csv
+
+# Arquivos de ambiente
 *-firebase-adminsdk-*.json
-.env
-.env.local
 firebase-key.json
+
+# Build outputs
+.wrangler/
+dist/
+build/
+.cache/
