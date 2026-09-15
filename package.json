@@ -13,9 +13,10 @@
     "web:build": "npm run build --prefix src/frontend/web",
     "web:preview": "npm run preview --prefix src/frontend/web",
     "web:test": "npm run test --prefix src/frontend/web",
+    "test:backend": "node --test \"src/backend/__tests__/*.test.mjs\"",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "test": "npm run test --prefix src/frontend/web"
+    "test": "npm run test:backend && npm run web:test"
   },
   "devDependencies": {
     "eslint": "^8.57.0",

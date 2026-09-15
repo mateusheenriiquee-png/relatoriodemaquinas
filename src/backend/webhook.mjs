@@ -1,6 +1,7 @@
 import { normalizeText } from "../shared/normalize.js";
 import { upsertRecords } from "./firestore-rest.mjs";
-import { prepareWebhookRecords } from "../shared/webhook-shared.js";
+import { prepareWebhookRecords, MAX_RECORDS_POR_REQUISICAO } from "../shared/webhook-shared.js";
+import { registrarErro } from "./erros.mjs";
 
 function getEnv(env) {
   // Tentar primeiro FIREBASE_SERVICE_ACCOUNT_BASE64, depois fallback
@@ -60,7 +61,18 @@ export async function processWebhookPost(
 
   try {
     const config = getEnv(env);
-    const parsedBody = body ? JSON.parse(body) : {};
+
+    // O corpo é lido antes da checagem do token porque o token pode vir dentro
+    // dele. Por isso o JSON quebrado precisa de tratamento próprio: antes caía
+    // no 500 com a mensagem do parser — resposta alcançável por qualquer um,
+    // sem token nenhum, e contada como falha do servidor quando o erro é do
+    // cliente.
+    let parsedBody;
+    try {
+      parsedBody = body ? JSON.parse(body) : {};
+    } catch {
+      return jsonResponse(400, { ok: false, error: "JSON invalido." });
+    }
 
     if (!isAuthorized({ headers, queryStringParameters, body: parsedBody }, config.webhookToken)) {
       return jsonResponse(401, { ok: false, error: "Nao autorizado." });
@@ -69,6 +81,14 @@ export async function processWebhookPost(
     const inputs = Array.isArray(parsedBody) ? parsedBody : [parsedBody];
     if (!inputs.length) {
       return jsonResponse(400, { ok: false, error: "Payload vazio." });
+    }
+    // Defesa em profundidade: mesmo com o token, uma chamada não pode virar um
+    // lote arbitrariamente grande de escritas no Firestore (ver MAX_RECORDS_POR_REQUISICAO).
+    if (inputs.length > MAX_RECORDS_POR_REQUISICAO) {
+      return jsonResponse(413, {
+        ok: false,
+        error: `Payload com ${inputs.length} registros excede o limite de ${MAX_RECORDS_POR_REQUISICAO} por chamada. Divida em requisições menores.`
+      });
     }
 
     const records = prepareWebhookRecords(inputs, origemIntegracao);
@@ -87,10 +107,7 @@ export async function processWebhookPost(
 
     return jsonResponse(201, { ok: true, upserted, inserted: upserted });
   } catch (error) {
-    return jsonResponse(500, {
-      ok: false,
-      error: "Erro interno ao processar webhook.",
-      details: String(error?.message || error)
-    });
+    const ref = registrarErro("Webhook", error);
+    return jsonResponse(500, { ok: false, error: "Erro interno ao processar webhook.", ref });
   }
 }

@@ -3,6 +3,7 @@ import { processKommoWebhookPost } from "./webhook-kommo.mjs";
 import { processarReagendadosVencidos } from "./reagendados.mjs";
 import { handleAdminRequest } from "./admin-api.mjs";
 import { normalizeText } from "../shared/normalize.js";
+import { registrarErro } from "./erros.mjs";
 
 const JSON_HEADERS = {
   "Content-Type": "application/json",
@@ -99,13 +100,9 @@ export default {
       // 🔙 Serve static assets (frontend)
       return env.ASSETS.fetch(request);
     } catch (error) {
-      console.error("[Worker] Erro não tratado:", error);
+      const ref = registrarErro("Worker", error);
       return new Response(
-        JSON.stringify({
-          ok: false,
-          error: "Erro interno",
-          details: error?.message
-        }),
+        JSON.stringify({ ok: false, error: "Erro interno.", ref }),
         {
           status: 500,
           headers: { "Content-Type": "application/json" }

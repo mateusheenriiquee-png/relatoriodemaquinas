@@ -4,6 +4,13 @@ const ToastContext = createContext(null);
 
 let nextId = 1;
 
+// Sem teto, uma sequência rápida de ações (ex.: várias linhas de uma planilha
+// falhando uma atrás da outra) empilha toasts fora da tela, cada um pedindo
+// atenção — o de baixo nem chega a ser lido antes do próximo empurrar. Acima
+// do limite, o mais antigo sai para o novo entrar; é sempre o aviso mais
+// recente que importa mais.
+const MAX_VISIVEIS = 4;
+
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
 
@@ -14,7 +21,10 @@ export function ToastProvider({ children }) {
   const notify = useCallback(
     (message, type = "info", timeout = 2500) => {
       const id = nextId++;
-      setToasts((atual) => [...atual, { id, message: String(message || ""), type }]);
+      setToasts((atual) => {
+        const proximo = [...atual, { id, message: String(message || ""), type }];
+        return proximo.length > MAX_VISIVEIS ? proximo.slice(proximo.length - MAX_VISIVEIS) : proximo;
+      });
       if (timeout > 0) setTimeout(() => remove(id), timeout);
       return id;
     },

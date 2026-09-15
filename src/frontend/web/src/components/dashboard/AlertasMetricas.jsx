@@ -52,15 +52,34 @@ function descricaoCompleta(registro) {
 export default function AlertasMetricas({ futuros, outliers, inconsistentes = [], stats, onAbrir }) {
   if (!futuros.length && !outliers.length && !inconsistentes.length) return null;
 
-  const Link = ({ registro }) => (
+  /*
+   * Chip em vez de link solto na frase corrida: com 18-40 protocolos numa
+   * mesma linha (o caso real que motivou isto), o texto virava uma parede
+   * ilegível — pior ainda no celular, onde cada vírgula obrigava a achar o
+   * próximo link no meio do parágrafo. Em grade, cada chamado é um alvo de
+   * toque isolado, do tamanho de um dedo.
+   */
+  const Chip = ({ registro, sufixo }) => (
     <button
       type="button"
-      className="alerta-link"
+      className="alerta-chip"
       title={descricaoCompleta(registro)}
       onClick={() => onAbrir?.(registro)}
     >
       {rotuloChamado(registro)}
+      {sufixo ? <span className="alerta-chip-sufixo">{sufixo}</span> : null}
     </button>
+  );
+
+  const Grade = ({ registros, comData = false }) => (
+    <div className="alerta-grade">
+      {registros.slice(0, LIMITE_LISTA).map((r) => (
+        <Chip key={r.id} registro={r} sufixo={comData ? formatDate(r.dataAbertura) : null} />
+      ))}
+      {registros.length > LIMITE_LISTA ? (
+        <span className="alerta-mais">+{registros.length - LIMITE_LISTA}</span>
+      ) : null}
+    </div>
   );
 
   return (
@@ -71,14 +90,8 @@ export default function AlertasMetricas({ futuros, outliers, inconsistentes = []
             🕒 {futuros.length} chamado(s) com data de abertura no futuro.
           </strong>{" "}
           Provável erro de digitação na abertura retroativa — eles distorcem a ordenação e o
-          tempo médio. Confira:{" "}
-          {futuros.slice(0, LIMITE_LISTA).map((r, i) => (
-            <span key={r.id}>
-              {i > 0 ? ", " : ""}
-              <Link registro={r} /> ({formatDate(r.dataAbertura)})
-            </span>
-          ))}
-          {futuros.length > LIMITE_LISTA ? " …" : ""}
+          tempo médio. Confira:
+          <Grade registros={futuros} comData />
         </div>
       ) : null}
 
@@ -88,14 +101,8 @@ export default function AlertasMetricas({ futuros, outliers, inconsistentes = []
             ⛔ {inconsistentes.length} chamado(s) encerrados antes da data de abertura.
           </strong>{" "}
           As datas se contradizem, então eles ficam fora das médias de tempo — mas continuam
-          contando como encerrados. Corrija a abertura:{" "}
-          {inconsistentes.slice(0, LIMITE_LISTA).map((r, i) => (
-            <span key={r.id}>
-              {i > 0 ? ", " : ""}
-              <Link registro={r} />
-            </span>
-          ))}
-          {inconsistentes.length > LIMITE_LISTA ? " …" : ""}
+          contando como encerrados. Corrija a abertura:
+          <Grade registros={inconsistentes} />
         </div>
       ) : null}
 
@@ -103,14 +110,8 @@ export default function AlertasMetricas({ futuros, outliers, inconsistentes = []
         <div className="alerta-box">
           <strong>⚠ {outliers.length} chamado(s) com duração fora do padrão</strong> (acima de 2
           desvios-padrão da média de {humanDur(stats.media)}). Abra e justifique para excluir da
-          média:{" "}
-          {outliers.slice(0, LIMITE_LISTA).map((r, i) => (
-            <span key={r.id}>
-              {i > 0 ? ", " : ""}
-              <Link registro={r} />
-            </span>
-          ))}
-          {outliers.length > LIMITE_LISTA ? " …" : ""}
+          média:
+          <Grade registros={outliers} />
         </div>
       ) : null}
     </div>

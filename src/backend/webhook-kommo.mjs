@@ -3,6 +3,8 @@ import { parseKommoBody } from "../shared/kommo-form-parser.js";
 import { getLead } from "../shared/kommo-client.js";
 import { buildSupportRecordFromKommoLead } from "../shared/kommo-mapper.js";
 import { getDocument, upsertRecords } from "./firestore-rest.mjs";
+import { MAX_RECORDS_POR_REQUISICAO } from "../shared/webhook-shared.js";
+import { registrarErro } from "./erros.mjs";
 
 function getEnv(env) {
   const firebaseBase64 = env.FIREBASE_SERVICE_ACCOUNT_BASE64;
@@ -97,6 +99,15 @@ export async function processKommoWebhookPost(
         error: "Nenhuma mudanca de lead reconhecida no payload."
       });
     }
+    // Defesa em profundidade: cada mudança dispara uma chamada de volta à API
+    // do Kommo (getLead) antes de escrever — aqui o custo por item é maior
+    // ainda que no webhook genérico, então o mesmo teto vale a pena.
+    if (changes.length > MAX_RECORDS_POR_REQUISICAO) {
+      return jsonResponse(413, {
+        ok: false,
+        error: `Payload com ${changes.length} mudancas excede o limite de ${MAX_RECORDS_POR_REQUISICAO} por chamada.`
+      });
+    }
 
     if (!config.kommoAccessToken || !config.kommoBaseUrl) {
       return jsonResponse(500, {
@@ -130,10 +141,14 @@ export async function processKommoWebhookPost(
     }
 
     if (!records.length) {
+      // As mensagens da API do Kommo ficam no log; na resposta vão só os IDs,
+      // que bastam para saber quais leads reprocessar.
+      const ref = registrarErro("Kommo", JSON.stringify(errors));
       return jsonResponse(502, {
         ok: false,
         error: "Falha ao buscar leads no Kommo.",
-        details: errors
+        leadsComFalha: errors.map((e) => e.leadId),
+        ref
       });
     }
 
@@ -149,10 +164,7 @@ export async function processKommoWebhookPost(
       errors: errors.length ? errors : undefined
     });
   } catch (error) {
-    return jsonResponse(500, {
-      ok: false,
-      error: "Erro interno ao processar webhook do Kommo.",
-      details: String(error?.message || error)
-    });
+    const ref = registrarErro("Kommo", error);
+    return jsonResponse(500, { ok: false, error: "Erro interno ao processar webhook do Kommo.", ref });
   }
 }

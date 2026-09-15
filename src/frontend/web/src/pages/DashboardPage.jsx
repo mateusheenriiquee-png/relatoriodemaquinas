@@ -12,7 +12,12 @@ import ThemeToggle from "../components/ThemeToggle";
 import { useToast } from "../components/ToastProvider";
 import { useAuth } from "../contexts/AuthContext";
 import { useTheme } from "../contexts/ThemeContext";
-import { cssVar, resolverCoresDeStatus, useChartColors } from "../hooks/useChartColors";
+import {
+  STATUS_CSS_VARS,
+  cssVar,
+  resolverCoresDeStatus,
+  useChartColors
+} from "../hooks/useChartColors";
 import { useDashboard } from "../hooks/useDashboard";
 import { useMetricasConfig } from "../hooks/useMetricasConfig";
 import {
@@ -37,6 +42,7 @@ import {
   estatisticasDuracao,
   filtrarPorAbertura,
   humanDur,
+  intervaloAnterior,
   metricasDoPeriodo,
   rotuloIntervalo,
   temDatasInconsistentes
@@ -71,8 +77,13 @@ function Delta({ valor, inverso = false }) {
   const bom = inverso ? !subiu : subiu;
 
   return (
-    <small className={`delta ${bom ? "delta-bom" : "delta-ruim"}`}>
-      {subiu ? "▲" : "▼"} {Math.abs(arredondado)}% vs. período anterior
+    // Texto curto para caber numa linha nos 8 cards da fileira; a frase inteira
+    // fica no title para quem passar o mouse.
+    <small
+      className={`delta ${bom ? "delta-bom" : "delta-ruim"}`}
+      title={`${subiu ? "Subiu" : "Caiu"} ${Math.abs(arredondado)}% em relação ao período anterior`}
+    >
+      {subiu ? "▲" : "▼"} {Math.abs(arredondado)}% vs. anterior
     </small>
   );
 }
@@ -209,6 +220,14 @@ export default function DashboardPage() {
     () => (intervaloB ? metricasDoPeriodo(todos, intervaloB, config) : null),
     [todos, intervaloB, config]
   );
+
+  // Janela imediatamente anterior, do mesmo tamanho, calculada com as MESMAS
+  // regras de metricasA — as setas dos KPIs comparam base igual com base igual.
+  // "Todo o período" não tem anterior, e aí as setas simplesmente não aparecem.
+  const metricasAnt = useMemo(() => {
+    const anterior = intervaloAnterior(intervaloA);
+    return anterior ? metricasDoPeriodo(todos, anterior, config) : null;
+  }, [todos, intervaloA, config]);
 
   const statsDuracao = useMemo(() => estatisticasDuracao(todos, config), [todos, config]);
 
@@ -495,50 +514,80 @@ export default function DashboardPage() {
           onAbrir={abrirChamado}
         />
 
+        {/*
+          Uma fileira só. Antes eram duas, contando por datas diferentes: a de
+          cima pela data de ENCERRAMENTO, a de baixo pela de ABERTURA — e por
+          isso apareciam lado a lado "Taxa de sucesso 100%" e "Taxa 83%",
+          "Abertos 222" repetido como "Total 222", "Em aberto agora" e
+          "Pendentes" medindo quase o mesmo. Aqui tudo que fala de desfecho
+          (finalizados, sem retorno, taxa) usa o encerramento, e as setas
+          comparam com a janela anterior pelas mesmas regras.
+        */}
+        {carregando ? (
+          // Antes os cards eram desenhados com a lista ainda vazia e mostravam
+          // "Taxa de sucesso 0%", "Abertos 0" até os dados chegarem — um número
+          // falso, e em conexão lenta, por tempo suficiente para alguém ler.
+          <section className="stats dashboard-kpis" aria-busy="true" aria-label="Carregando indicadores">
+            {Array.from({ length: 8 }, (_, i) => (
+              <div className="stat-card stat-card-skeleton" key={i} aria-hidden="true">
+                <span className="skeleton-linha skeleton-kpi-titulo" />
+                <span className="skeleton-linha skeleton-kpi-numero" />
+              </div>
+            ))}
+          </section>
+        ) : (
         <section className="stats dashboard-kpis">
-          <div
-            className="stat-card"
-            title="Chamados abertos dentro do período A."
+          <button
+            type="button"
+            className="stat-card kpi-highlight"
+            onClick={() => abrirLista({})}
+            title="Chamados abertos dentro do período. Clique para ver na lista."
           >
-            <span>Abertos no período</span>
+            <span>Abertos</span>
             <strong>{metricasA.abertos}</strong>
+            {metricasAnt ? <Delta valor={variacao(metricasA.abertos, metricasAnt.abertos)} /> : null}
+          </button>
+
+          <button
+            type="button"
+            className="stat-card"
+            onClick={() => abrirLista({ status: "FINALIZADO" })}
+            title="Chamados encerrados com sucesso dentro do período — inclusive os abertos antes dele. Clique para ver na lista."
+          >
+            <span>Finalizados</span>
+            <strong>{metricasA.sucesso}</strong>
+            <small>de {metricasA.encerrados} encerrados</small>
+            {metricasAnt ? <Delta valor={variacao(metricasA.sucesso, metricasAnt.sucesso)} /> : null}
+          </button>
+
+          <button
+            type="button"
+            className="stat-card"
+            onClick={() => abrirLista({ status: "SEM RETORNO" })}
+            title="Chamados encerrados sem retorno do cliente dentro do período. Clique para ver na lista."
+          >
+            <span>Sem retorno</span>
+            <strong>{metricasA.encerrados - metricasA.sucesso}</strong>
+            {metricasAnt ? (
+              <Delta
+                valor={variacao(
+                  metricasA.encerrados - metricasA.sucesso,
+                  metricasAnt.encerrados - metricasAnt.sucesso
+                )}
+                inverso
+              />
+            ) : null}
+          </button>
+
+          <div className="stat-card" title="Chamados não encerrados agora, independentemente do período.">
+            <span>Em aberto agora</span>
+            <strong>{abertosAgora}</strong>
           </div>
 
-          <div
-            className="stat-card"
-            title="Chamados ENCERRADOS dentro do período — inclusive os que foram abertos antes dele."
-          >
-            <span>Encerrados no período</span>
-            <strong>{metricasA.encerrados}</strong>
-          </div>
-
-          <div
-            className="stat-card"
-            title={`Relógio de parede menos os dias não trabalhados. Média de ${metricasA.medidos} atendimento(s) encerrado(s); os chamados fora da média não entram.`}
-          >
-            <span>Tempo médio ajustado</span>
-            <strong>{humanDur(metricasA.tempoAjustado)}</strong>
-            <small>abertura → encerramento</small>
-          </div>
-
-          <div
-            className="stat-card"
-            title={`Só as horas dentro do expediente (${config.bhStart}–${config.bhEnd}), nos dias de trabalho configurados.`}
-          >
-            <span>Tempo médio útil</span>
-            <strong>{humanDur(metricasA.tempoUtil)}</strong>
-            <small>
-              {config.bhStart}–{config.bhEnd}
-            </small>
-          </div>
-
-          <div
-            className="stat-card"
-            title="Encerrados com sucesso ÷ total de encerrados no período."
-          >
+          <div className="stat-card" title="Finalizados ÷ total de encerrados no período.">
             <span>Taxa de sucesso</span>
             <strong>{metricasA.taxa}%</strong>
-            <small>{metricasA.sucesso} de {metricasA.encerrados}</small>
+            {metricasAnt ? <Delta valor={variacao(metricasA.taxa, metricasAnt.taxa)} /> : null}
           </div>
 
           <div
@@ -550,78 +599,31 @@ export default function DashboardPage() {
             <small>{metricasA.reincidencia.reincidentes} de {metricasA.reincidencia.total}</small>
           </div>
 
-          <div className="stat-card" title="Chamados não encerrados agora, independentemente do período.">
-            <span>Em aberto agora</span>
-            <strong>{abertosAgora}</strong>
-          </div>
-        </section>
-
-        <section className="stats dashboard-kpis">
-          <button
-            type="button"
-            className="stat-card kpi-highlight"
-            onClick={() => abrirLista({})}
-            title="Ver estes atendimentos na lista"
-          >
-            <span>Total</span>
-            <strong>{kpis.total}</strong>
-            {temComparacao ? <Delta valor={variacao(atual.total, anterior.total)} /> : null}
-          </button>
-
-          <button
-            type="button"
+          <div
             className="stat-card"
-            onClick={() => abrirLista({ status: "FINALIZADO" })}
-            title="Ver os finalizados na lista"
+            title={`Média só das horas dentro do expediente (${config.bhStart}–${config.bhEnd}), da abertura ao encerramento. Chamados fora da média não entram. O "ajustado" é o relógio de parede menos os dias não trabalhados.`}
           >
-            <span>Finalizados</span>
-            <strong>{kpis.finalizados}</strong>
-            {temComparacao ? (
-              <Delta valor={variacao(atual.finalizados, anterior.finalizados)} />
-            ) : null}
-          </button>
-
-          <div className="stat-card">
-            <span>Pendentes</span>
-            <strong>{kpis.pendentes}</strong>
-            {temComparacao ? (
-              <Delta valor={variacao(atual.pendentes, anterior.pendentes)} inverso />
+            <span>Tempo útil</span>
+            <strong>{humanDur(metricasA.tempoUtil)}</strong>
+            <small>ajustado {humanDur(metricasA.tempoAjustado)}</small>
+            {metricasAnt ? (
+              <Delta valor={variacao(metricasA.tempoUtil, metricasAnt.tempoUtil)} inverso />
             ) : null}
           </div>
-
-          <div className="stat-card">
-            <span>Taxa</span>
-            <strong>{kpis.taxa}</strong>
-            {temComparacao ? <Delta valor={variacao(atual.taxaNum, anterior.taxaNum)} /> : null}
-          </div>
-
-          <button
-            type="button"
-            className="stat-card"
-            onClick={() => abrirLista({ status: "SEM RETORNO" })}
-            title="Ver os sem retorno na lista"
-          >
-            <span>S/ retorno</span>
-            <strong>{kpis.semRetorno}</strong>
-            {temComparacao ? (
-              <Delta valor={variacao(atual.semRetorno, anterior.semRetorno)} inverso />
-            ) : null}
-          </button>
 
           <div
             className="stat-card"
             title={`Da associação do técnico (ou da abertura, nos registros antigos) até o encerramento. ${kpis.medidos} de ${kpis.total} medidos, ${kpis.precisos} com carimbo exato; ${kpis.emAberto} ainda não encerrados.`}
           >
-            <span>Tempo de resolução</span>
+            <span>Resolução</span>
             <strong>{kpis.mediana}</strong>
-            <small>
-              mediana · p90 {kpis.p90} · média {kpis.tempoMedio}
-            </small>
+            <small>mediana · p90 {kpis.p90}</small>
             {temComparacao ? (
               <Delta valor={variacao(atual.medianaHoras, anterior.medianaHoras)} inverso />
             ) : null}
           </div>
         </section>
+        )}
 
         {metricasB ? (
           <ComparacaoPeriodos
@@ -712,7 +714,7 @@ export default function DashboardPage() {
                 </div>
               </ChartCard>
 
-              <ChartCard titulo="Finalização" meta={kpis.taxa}>
+              <ChartCard titulo="Finalização" meta={`${kpis.taxa} dos abertos no período`}>
                 <div className="chart-wrap chart-wrap-donut">
                   <ChartCanvas
                     type="doughnut"
@@ -970,6 +972,7 @@ export default function DashboardPage() {
                 <BreakdownList
                   itens={breakdownStatus}
                   aoClicar={(status) => abrirLista({ status })}
+                  cores={STATUS_CSS_VARS}
                 />
               </ChartCard>
 

@@ -43,16 +43,18 @@ function Field({ label, children }) {
   );
 }
 
-function ActionButton({ className, title, onClick, children }) {
+function ActionButton({ className, title, onClick, carregando, children }) {
   return (
     <button
       type="button"
       className={`btn btn-icon ${className}`}
       title={title}
       aria-label={title}
+      aria-busy={carregando || undefined}
+      disabled={carregando}
       onClick={onClick}
     >
-      {children}
+      {carregando ? <span className="loading-spinner loading-spinner-btn" /> : children}
     </button>
   );
 }
@@ -61,6 +63,17 @@ export default function SupportDrawer({ item, open, onClose, actions }) {
   const { isAdmin, displayName } = useAuth();
   const toast = useToast();
   const [visible, setVisible] = useState(false);
+  // Nome da ação que acabou de ser clicada, só para o botão mostrar um
+  // spinner por meio segundo. A gravação em si é otimista (o Firestore já
+  // atualiza a tela antes de confirmar com o servidor — ver `executar` em
+  // SuportesPage.jsx); isto aqui é só para o dedo não conseguir clicar duas
+  // vezes no instante entre o clique e a tela reagir.
+  const [acaoEmCurso, setAcaoEmCurso] = useState(null);
+
+  // Item novo ou painel fechado: nenhuma ação daquele clique ainda vale.
+  useEffect(() => {
+    setAcaoEmCurso(null);
+  }, [item?.id, open]);
 
   useEffect(() => {
     if (!open) {
@@ -109,6 +122,13 @@ export default function SupportDrawer({ item, open, onClose, actions }) {
       item.protocolo || "N/A"
     );
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(mensagem)}`, "_blank");
+  }
+
+  /** Marca o botão ocupado, dispara a ação e libera sozinho em meio segundo. */
+  function disparar(nome, fn) {
+    setAcaoEmCurso(nome);
+    fn();
+    setTimeout(() => setAcaoEmCurso((atual) => (atual === nome ? null : atual)), 600);
   }
 
   const encerrado = item.status === "FINALIZADO" || item.status === "SEM RETORNO";
@@ -231,9 +251,16 @@ export default function SupportDrawer({ item, open, onClose, actions }) {
               <button
                 type="button"
                 className="btn btn-ghost btn-small"
-                onClick={() => actions.onForaDaMedia(item)}
+                disabled={acaoEmCurso === "fora-media"}
+                onClick={() => disparar("fora-media", () => actions.onForaDaMedia(item))}
               >
-                {item.excluirDaMedia ? "Devolver à média" : "Excluir da média"}
+                {acaoEmCurso === "fora-media" ? (
+                  <span className="loading-spinner loading-spinner-btn" />
+                ) : item.excluirDaMedia ? (
+                  "Devolver à média"
+                ) : (
+                  "Excluir da média"
+                )}
               </button>
             </Field>
             {item.excluirDaMedia && item.justificativaMedia ? (
@@ -319,7 +346,8 @@ export default function SupportDrawer({ item, open, onClose, actions }) {
             <ActionButton
               className="btn-icon-assign"
               title="Associar técnico"
-              onClick={() => actions.onAssociar(item)}
+              carregando={acaoEmCurso === "associar"}
+              onClick={() => disparar("associar", () => actions.onAssociar(item))}
             >
               <IconAssign />
             </ActionButton>
@@ -366,7 +394,8 @@ export default function SupportDrawer({ item, open, onClose, actions }) {
               <ActionButton
                 className="btn-icon-reopen"
                 title="Voltar para em aberto"
-                onClick={() => actions.onVoltarEmAberto(item)}
+                carregando={acaoEmCurso === "voltar-aberto"}
+                onClick={() => disparar("voltar-aberto", () => actions.onVoltarEmAberto(item))}
               >
                 <IconReturn />
               </ActionButton>

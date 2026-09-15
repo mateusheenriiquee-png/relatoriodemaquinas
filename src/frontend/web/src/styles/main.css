@@ -656,7 +656,13 @@ input[type="color"] {
 .stat-card {
   position: relative;
   overflow: hidden;
-  display: block;
+  /* Flex em coluna centrado nos dois eixos: o grid estica os cards da mesma
+     fileira até a mesma altura, e sem isto o <button> (que o navegador já
+     centraliza) e o <div> (que cola no topo) ficavam desalinhados entre si. */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   width: 100%;
   padding: 14px 12px;
   text-align: center;
@@ -806,6 +812,17 @@ input[type="color"] {
   gap: 10px;
 }
 
+/* Sem min-width: 0 um item flex não encolhe abaixo do conteúdo, e o nome longo
+   do cliente empurraria o selo do técnico para fora em vez de ganhar reticências. */
+.card-top > div:first-child {
+  min-width: 0;
+  flex: 1;
+}
+
+.card-tech {
+  flex-shrink: 0;
+}
+
 .card-time {
   display: flex;
   align-items: center;
@@ -850,6 +867,30 @@ input[type="color"] {
   margin-top: 4px;
   font-weight: 600;
   color: var(--text-strong);
+  /* Nome de empresa longo ("FERRAGISTA SAO FRANCISCO LTDA") não pode empurrar
+     o selo do técnico nem quebrar em três linhas: corta com reticências e o
+     nome inteiro fica no title. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Tipo e protocolo dividindo a linha: sem espaço, quem encolhe é o tipo. O
+   protocolo é o que se copia e se dita ao cliente — nunca pode sair cortado. */
+.card-protocolo-linha {
+  display: flex;
+  gap: 5px;
+}
+
+.card-tipo-discreto {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-family);
+}
+
+.card-protocolo-numero {
+  flex-shrink: 0;
 }
 
 .card-protocolo {
@@ -857,6 +898,9 @@ input[type="color"] {
   font-size: 0.74rem;
   color: var(--muted);
   font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .card-tech {
@@ -1266,6 +1310,14 @@ tbody tr:hover td {
   cursor: default;
 }
 
+/* Oito indicadores numa fileira deixam cada card estreito: o número não pode
+   quebrar ("15h / 42min" em duas linhas vira outro número para quem bate o
+   olho), então ele fica numa linha só, um pouco menor que o padrão. */
+.dashboard-kpis .stat-card strong {
+  font-size: 1.35rem;
+  white-space: nowrap;
+}
+
 /* Os KPIs que levam à lista filtrada são <button> e continuam clicáveis. */
 .dashboard-kpis button.stat-card {
   cursor: pointer;
@@ -1361,9 +1413,12 @@ tbody tr:hover td {
 
 .chart-card-head {
   display: flex;
+  /* Card estreito (celular): o texto do canto desce para baixo do título em
+     vez de empurrar a página para o lado. No desktop, cabendo, fica igual. */
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: 10px;
+  gap: 4px 10px;
   margin-bottom: 14px;
   padding-bottom: 10px;
   border-bottom: 1px solid var(--border);
@@ -1519,6 +1574,10 @@ tbody tr:hover td {
 }
 
 .chart-colors-panel {
+  /* Antes só tinha margin-bottom: o painel vinha logo depois de um
+     .dashboard-grid (que não tem margem própria) e o card "Venda
+     ganha/perdida" ficava colado nesta barra, sem respiro nenhum. */
+  margin-top: 14px;
   margin-bottom: 14px;
   padding: 14px 16px;
   background: var(--surface-2);
@@ -1791,6 +1850,10 @@ tbody tr:hover td {
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
+  /* Sem isto o <select> encolhe para caber na coluna e mostra só "A" de
+     "Administrador" — cabe a seta, não o texto. "Administrador" é o maior dos
+     4 cargos; a largura cobre ele com folga para os mais curtos. */
+  min-width: 130px;
 }
 
 .cargo-select:focus-visible {
@@ -2057,6 +2120,77 @@ tbody tr:hover td {
   font-size: 0.9rem;
 }
 
+/* Cards fantasma do carregamento. As alturas imitam as linhas do SupportCard
+   (data, nome, protocolo, selo do técnico, pílula de status) para a troca
+   pelos cards reais não mexer no layout. */
+.card-skeleton {
+  cursor: default;
+  pointer-events: none;
+}
+
+.skeleton-linha {
+  display: block;
+  height: 10px;
+  border-radius: var(--r-pill);
+  background: linear-gradient(90deg, var(--border) 25%, var(--surface-hover) 50%, var(--border) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-brilho 1.4s ease-in-out infinite;
+}
+
+.skeleton-linha + .skeleton-linha {
+  margin-top: 8px;
+}
+
+.skeleton-curta {
+  width: 45%;
+}
+
+.skeleton-media {
+  width: 75%;
+  height: 13px;
+}
+
+.skeleton-selo {
+  width: 64px;
+  height: 22px;
+  border-radius: var(--r-pill);
+}
+
+.skeleton-pilula {
+  width: 96px;
+  height: 20px;
+}
+
+/* Indicadores do dashboard enquanto carregam: mesma altura do card real, para
+   a fileira não pular quando os números chegam. */
+.stat-card-skeleton {
+  min-height: 84px;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.skeleton-kpi-titulo {
+  width: 60%;
+}
+
+.skeleton-kpi-numero {
+  width: 40%;
+  height: 20px;
+}
+
+.skeleton-linha + .skeleton-kpi-numero {
+  margin-top: 0;
+}
+
+@keyframes skeleton-brilho {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
 .app-loading {
   min-height: 100vh;
   display: flex;
@@ -2075,6 +2209,16 @@ tbody tr:hover td {
   border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 700ms linear infinite;
+}
+
+/* Um pouco menor: cabe dentro de um .btn-icon de 38px ou ao lado de texto
+   curto ("Devolver à média"), sem herdar a cor da ação — enquanto carrega, o
+   botão já está cinza (:disabled), e um traço colorido destoaria. */
+.loading-spinner-btn {
+  width: 13px;
+  height: 13px;
+  border-color: var(--border-strong);
+  border-top-color: var(--muted);
 }
 
 /* ------------------------------------------------------------ animações */
@@ -2208,8 +2352,42 @@ tbody tr:hover td {
     grid-template-columns: 1fr;
   }
 
+  /* Botões do cabeçalho em três colunas compactas. Antes cada um ocupava a
+     largura inteira: seis botões empilhados davam 509px, 63% de um celular, e
+     o primeiro chamado só aparecia depois de quase duas telas de rolagem.
+     "Novo Suporte" continua em largura cheia — é a ação principal da tela. */
   .actions .btn {
-    flex: 1 1 100%;
+    flex: 1 1 calc(33.333% - 7px);
+    min-height: 40px;
+    padding: 8px 6px;
+    gap: 5px;
+    font-size: 0.78rem;
+  }
+
+  .actions .btn-primary {
+    flex-basis: 100%;
+    min-height: 44px;
+  }
+
+  /* Botão de tema e "usuário / Sair" dividem a mesma linha, em vez de o botão
+     de tema ocupar uma linha inteira sozinho. */
+  .actions .user-info {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+  }
+
+  /* 16 quadrados de 14px não cabem num card de celular; 12px cabem sem rolagem.
+     Seletor com o contêiner na frente: as regras base do mapa ficam mais abaixo
+     neste arquivo e, com a mesma especificidade, venceriam esta. */
+  .heatmap-dia-hora .heatmap-linha {
+    grid-template-columns: 30px repeat(16, 12px);
+    gap: 2px;
+  }
+
+  .heatmap-dia-hora .heatmap-quadrado {
+    width: 12px;
+    height: 12px;
   }
 }
 
@@ -2251,22 +2429,49 @@ tbody tr:hover td {
   border-left-color: var(--danger);
 }
 
-/* Link de protocolo: é um <button> por acessibilidade, mas precisa parecer o
-   link que é — sem isso vira um botão cinza no meio de uma frase. */
-.alerta-link {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--accent);
-  font: inherit;
-  font-variant-numeric: tabular-nums;
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 2px;
+/* Grade de chips, um chamado por alvo de toque — troca a frase corrida com
+   vírgulas (18 a 40 protocolos numa linha só, no caso real que motivou isto)
+   por algo escaneável e fácil de tocar no celular. */
+.alerta-grade {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
 }
 
-.alerta-link:hover {
+.alerta-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 4px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  /* Alvo de toque de verdade: o padding sozinho deixa a altura baixa demais
+     para 44px recomendados, então a altura mínima entra à parte. */
+  min-height: 30px;
+}
+
+.alerta-chip:hover {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
   color: var(--accent-strong);
+}
+
+.alerta-chip-sufixo {
+  color: var(--faint);
+  font-size: 0.72rem;
+}
+
+.alerta-mais {
+  align-self: center;
+  color: var(--faint);
+  font-size: 0.78rem;
 }
 
 /* -------------------------------------------------------- comparação A/B */
@@ -2336,7 +2541,11 @@ tbody tr:hover td {
   background: var(--surface-hover);
 }
 
+/* Quem cede espaço numa linha apertada é o rótulo (quebra linha); a barra e o
+   número nunca são empurrados para fora do card. */
 .breakdown-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
   color: var(--text);
 }
 
@@ -2345,6 +2554,7 @@ tbody tr:hover td {
   align-items: center;
   gap: 9px;
   flex: 1;
+  flex-shrink: 0;
   justify-content: flex-end;
   font-variant-numeric: tabular-nums;
 }

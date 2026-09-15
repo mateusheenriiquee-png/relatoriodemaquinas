@@ -8,7 +8,12 @@
  * `subItens` recebe o detalhamento de uma linha (as plataformas de um uso),
  * mostrado recuado sob ela.
  */
-export default function BreakdownList({ itens, subItens = {}, aoClicar }) {
+/**
+ * `cores` (opcional) mapeia rótulo → cor da barra. Usado em "Por situação" para
+ * cada status sair com a mesma cor da pílula da lista e do gráfico de status —
+ * sem isso todas as barras saíam laranja e o olho perdia a associação.
+ */
+export default function BreakdownList({ itens, subItens = {}, aoClicar, cores = {} }) {
   const maximo = Math.max(1, ...itens.map(([, valor]) => valor));
 
   return (
@@ -39,7 +44,10 @@ export default function BreakdownList({ itens, subItens = {}, aoClicar }) {
               <span className="breakdown-valor">
                 <span
                   className="breakdown-bar"
-                  style={{ width: `${Math.round((valor / maximo) * 90)}px` }}
+                  style={{
+                    width: `${Math.round((valor / maximo) * 90)}px`,
+                    ...(cores[rotulo] ? { background: cores[rotulo] } : {})
+                  }}
                 />
                 <b>{valor}</b>
               </span>

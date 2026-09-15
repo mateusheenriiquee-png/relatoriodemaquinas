@@ -18,6 +18,7 @@ import { criarUsuarioFirebase } from "./criar-usuario.mjs";
 import { atualizarCargo, editarUsuario, excluirUsuario } from "./gerenciar-usuario.mjs";
 import { normalizarCargo } from "../shared/funcoes.mjs";
 import { normalizeTecnico } from "../shared/tecnico.js";
+import { registrarErro } from "./erros.mjs";
 
 export const ADMIN_PREFIX = "/api/admin";
 
@@ -44,7 +45,10 @@ async function autenticar(request, env) {
 
   const verificado = await verifyFirebaseIdToken(token, env);
   if (!verificado.valid) {
-    return { ok: false, status: 401, error: `Token inválido: ${verificado.error}` };
+    // O motivo ("iss inválido", "kid não encontrado"...) vai só para o log:
+    // na resposta ele serviria de guia para quem estiver forjando tokens.
+    console.warn("[Admin] Token recusado:", verificado.error);
+    return { ok: false, status: 401, error: "Token inválido." };
   }
 
   const collection = env.USUARIOS_COLLECTION || "usuarios";
@@ -160,12 +164,8 @@ export async function handleAdminRequest(request, env, url) {
 
     return json(404, { ok: false, error: "Rota administrativa não encontrada." });
   } catch (error) {
-    console.error("[Admin] Erro não tratado:", error?.stack || error);
-    return json(500, {
-      ok: false,
-      error: "Erro interno na API administrativa.",
-      details: String(error?.message || error)
-    });
+    const ref = registrarErro("Admin", error);
+    return json(500, { ok: false, error: "Erro interno na API administrativa.", ref });
   }
 }
 

@@ -43,8 +43,25 @@ export default function SupportCard({ item, onClick }) {
               </span>
             ) : null}
           </div>
-          <div className="card-type">{item.tipo || "-"}</div>
-          {item.protocolo ? <div className="card-protocolo">#{item.protocolo}</div> : null}
+          {/* Quem varre a lista procura o cliente, não o tipo — o nome vai na
+              linha em destaque e o tipo desce para a linha discreta, sem o
+              card crescer. Sem nome (registros antigos), fica como era. */}
+          {item.nomeCliente ? (
+            <>
+              <div className="card-type" title={item.nomeCliente}>
+                {item.nomeCliente}
+              </div>
+              <div className="card-protocolo card-protocolo-linha">
+                <span className="card-tipo-discreto">{item.tipo || "-"}</span>
+                {item.protocolo ? <span className="card-protocolo-numero">· #{item.protocolo}</span> : null}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="card-type">{item.tipo || "-"}</div>
+              {item.protocolo ? <div className="card-protocolo">#{item.protocolo}</div> : null}
+            </>
+          )}
         </div>
         <div className="card-tech">{item.tecnico || "-"}</div>
       </div>

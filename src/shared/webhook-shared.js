@@ -16,6 +16,18 @@ const {
 } = require("./normalize");
 const { getIdempotencyDocId, stripEmptyFields } = require("./support-id");
 
+/**
+ * Teto de registros aceitos numa única chamada aos webhooks.
+ *
+ * Nenhuma integração real manda mais que uma dúzia de linhas por vez — é
+ * disparo por evento (um formulário enviado, um lead mudando de etapa), não
+ * lote. O número existe para o caso do token vazar: sem ele, um payload de
+ * 50 mil "registros" viraria 50 mil escritas no Firestore numa chamada só,
+ * o que pesa no billing antes de qualquer coisa quebrar. 100 dá folga
+ * generosa para qualquer uso legítimo e ainda limita o pior caso.
+ */
+const MAX_RECORDS_POR_REQUISICAO = 100;
+
 function prepareWebhookRecords(inputs, origemIntegracao = "webhook") {
   const records = [];
 
@@ -48,5 +60,6 @@ function prepareWebhookRecords(inputs, origemIntegracao = "webhook") {
 }
 
 module.exports = {
-  prepareWebhookRecords
+  prepareWebhookRecords,
+  MAX_RECORDS_POR_REQUISICAO
 };

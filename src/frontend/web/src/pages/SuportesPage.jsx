@@ -548,7 +548,23 @@ export default function SuportesPage() {
 
       <div className="cards-wrapper">
         {carregando ? (
-          <div className="infinite-loader">Carregando...</div>
+          // Cards "fantasma" no mesmo grid e altura dos reais: a lista aparece
+          // no lugar deles, sem empurrar a página como o "Carregando..." fazia.
+          <div className="cards-grid" aria-busy="true" aria-label="Carregando atendimentos">
+            {Array.from({ length: 6 }, (_, i) => (
+              <div className="card card-skeleton" key={i} aria-hidden="true">
+                <div className="card-top">
+                  <div>
+                    <span className="skeleton-linha skeleton-curta" />
+                    <span className="skeleton-linha skeleton-media" />
+                    <span className="skeleton-linha skeleton-curta" />
+                  </div>
+                  <span className="skeleton-linha skeleton-selo" />
+                </div>
+                <span className="skeleton-linha skeleton-pilula" />
+              </div>
+            ))}
+          </div>
         ) : statusBusca.estado === "buscando" ? (
           <div className="infinite-loader">
             Nada na lista carregada. Procurando “{statusBusca.termo}” no banco...
