@@ -1,13 +1,27 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
   <head>
-    <meta charset="UTF-8">
-    <title>Entrando...</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0c0a09" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23f97316'/%3E%3Ctext x='32' y='42' font-family='Inter,Segoe UI,sans-serif' font-size='26' font-weight='800' fill='%231c0a02' text-anchor='middle'%3EST%3C/text%3E%3C/svg%3E"
+    />
+    <title>Novo Suporte - Suporte Técnico</title>
     <script>
-      window.location.replace('login.html?next=novo-suporte.html');
+      // Tema salvo aplicado antes da primeira pintura (mesma chave do painel), para não piscar.
+      try {
+        var t = localStorage.getItem("suporte-tema");
+        if (t !== "dark" && t !== "light") {
+          t = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+        }
+        document.documentElement.setAttribute("data-theme", t);
+      } catch (e) {}
     </script>
   </head>
   <body>
-    <p>Redirecionando para <a href="login.html?next=novo-suporte.html">login</a>...</p>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

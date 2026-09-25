@@ -1,21 +1,5 @@
-import {
-  addDoc,
-  arrayUnion,
-  collection,
-  deleteDoc,
-  deleteField,
-  doc,
-  getCountFromServer,
-  getDocs,
-  limit,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-  updateDoc,
-  where
-} from "firebase/firestore";
-import { db, getApiBaseUrl } from "../config/firebase";
+import { supabase, getApiBaseUrl } from "../config/supabase";
+import { paraIso, paraLinha, linhaParaDados } from "../../../../shared/suporte-row.mjs";
 import { TOTAL_FOLLOWUPS } from "../utils/followup";
 import {
   formatContato,
@@ -28,16 +12,18 @@ import {
   titleCaseName,
   toComparableDate
 } from "../utils/format";
+import { aplicarLocal, assinarTabela } from "./suportesStore";
 
-export const COLLECTION = "suportes_tecnicos";
+export const COLLECTION = "suportes";
+const TABELA = "suportes";
 
 /**
  * Chave de busca do nome do cliente — minúscula e sem acento.
  *
- * O Firestore não faz busca case-insensitive nem ignora acento: consultar
- * `nomeCliente` direto acharia "Bruno Ramos" só para quem digitasse com o B
- * maiúsculo. O campo normalizado é gravado junto do nome e é nele que a
- * consulta por prefixo roda. Mesma ideia do `tecnicoKey`.
+ * No Firestore era um campo gravado junto do nome; no Postgres a coluna
+ * `busca` é GERADA pelo banco (protocolo + nome + CPF + contato + responsável,
+ * sem acento), então não há mais o que esquecer de gravar. A função continua
+ * exportada porque a importação e os testes a usam para comparar nomes.
  */
 export function chaveNomeCliente(nome) {
   return normalizeSearchText(nome);
@@ -65,10 +51,10 @@ function resolverDateTime(value) {
   return String(value);
 }
 
-export function mapDocToRegistro(docSnap) {
-  const data = docSnap.data() || {};
+/** Dados no formato camelCase (o que o Firestore devolvia) -> registro da tela. */
+export function mapDadosParaRegistro(id, data = {}) {
   return {
-    id: docSnap.id,
+    id,
     protocolo: norm(data.protocolo || data.idSuporte || ""),
     responsavelAbertura: norm(data.responsavelAbertura || data.responsavel || data.cliente || ""),
     // Nome do cliente final (Kommo: "Nome completo", com fallback pro "Lead
@@ -108,8 +94,28 @@ export function mapDocToRegistro(docSnap) {
     // Contagem vinda de planilha, quando não há os carimbos de cada tentativa.
     followupsImportados: Number(data.followupsImportados) || 0,
     historico: Array.isArray(data.historico) ? data.historico : [],
-    foraDaMedia: Boolean(data.foraDaMedia)
+    foraDaMedia: Boolean(data.foraDaMedia),
+    // Preenchidos na tela de finalização (ConcluirSuporteModal).
+    emailCliente: norm(data.emailCliente || ""),
+    comprouOutroProduto: typeof data.comprouOutroProduto === "boolean" ? data.comprouOutroProduto : null,
+    protocoloCertificado: norm(data.protocoloCertificado || ""),
+    dataEmissao: norm(data.dataEmissao || ""),
+    dataVencimento: norm(data.dataVencimento || ""),
+    tipoCertificado: norm(data.tipoCertificado || ""),
+    validadeEstendida: norm(data.validadeEstendida || ""),
+    sistema: norm(data.sistema || ""),
+    valorVenda: Number(data.valorVenda) || 0
   };
+}
+
+/** Compatível com o formato antigo: qualquer coisa com `id` e `data()`. */
+export function mapDocToRegistro(docSnap) {
+  return mapDadosParaRegistro(docSnap.id, docSnap.data() || {});
+}
+
+/** Linha da tabela `suportes` -> registro da tela. */
+export function mapLinhaParaRegistro(linha) {
+  return mapDadosParaRegistro(linha.id, linhaParaDados(linha));
 }
 
 function involvesSoluti(...values) {
@@ -128,91 +134,125 @@ export function isRegistroSoluti(record) {
 
 /* -------------------------------------------------------------------- queries */
 
-export function buildQueryConstraints(filtros = {}) {
-  const constraints = [orderBy("dataAbertura", "desc")];
+/** Marca "apagar este campo" (o `deleteField()` do Firestore). Vira NULL/'' no banco. */
+const deleteField = () => null;
 
-  if (filtros.status && filtros.status !== "todos") {
-    constraints.push(where("status", "==", filtros.status));
-  }
-  if (filtros.ac && filtros.ac !== "todos") {
-    constraints.push(where("ac", "==", filtros.ac));
-  }
+const inicioIso = (dia) => new Date(`${dia}T00:00:00Z`).toISOString();
+const fimIso = (dia) => new Date(`${dia}T23:59:59Z`).toISOString();
+
+/** Aplica os filtros da tela à consulta do banco. */
+export function aplicarFiltros(qb, filtros = {}) {
+  let q = qb;
+  if (filtros.status && filtros.status !== "todos") q = q.eq("status", filtros.status);
+  if (filtros.ac && filtros.ac !== "todos") q = q.eq("ac", filtros.ac);
   if (filtros.tecnico && filtros.tecnico !== "todos") {
-    constraints.push(where("tecnico", "==", titleCaseName(filtros.tecnico)));
+    q = q.eq("tecnico", titleCaseName(filtros.tecnico));
   }
-  if (filtros.dataInicio) {
-    constraints.push(
-      where("dataAbertura", ">=", new Date(`${filtros.dataInicio}T00:00:00Z`).toISOString())
-    );
+  if (filtros.dataInicio) q = q.gte("data_abertura", inicioIso(filtros.dataInicio));
+  if (filtros.dataFim) q = q.lte("data_abertura", fimIso(filtros.dataFim));
+  return q;
+}
+
+/**
+ * O mesmo filtro, para registros que chegam pelo realtime ou pelo feedback
+ * otimista — eles não passam pela consulta, então o teste precisa ser refeito
+ * aqui. Tem que dizer o mesmo que `aplicarFiltros`, senão a lista mostraria
+ * linhas que o filtro esconderia (ou o contrário) até o próximo recarregamento.
+ */
+export function registroPassaNosFiltros(registro, filtros = {}) {
+  if (filtros.status && filtros.status !== "todos" && registro.status !== filtros.status) return false;
+  if (filtros.ac && filtros.ac !== "todos" && registro.ac !== filtros.ac) return false;
+  if (
+    filtros.tecnico &&
+    filtros.tecnico !== "todos" &&
+    registro.tecnico !== titleCaseName(filtros.tecnico)
+  ) {
+    return false;
   }
-  if (filtros.dataFim) {
-    constraints.push(
-      where("dataAbertura", "<=", new Date(`${filtros.dataFim}T23:59:59Z`).toISOString())
-    );
+  const quando = registro.dataAbertura ? new Date(registro.dataAbertura).getTime() : NaN;
+  if (filtros.dataInicio && !(quando >= new Date(inicioIso(filtros.dataInicio)).getTime())) return false;
+  if (filtros.dataFim && !(quando <= new Date(fimIso(filtros.dataFim)).getTime())) return false;
+  return true;
+}
+
+/**
+ * Aplica um patch otimista a um registro da tela. `patch` tem a forma
+ * { campos, historico, followup } — os mesmos dados que vão para o banco.
+ */
+function aplicarPatchLocal(registro, patch) {
+  const campos = patch.campos || {};
+  const proximo = { ...registro };
+  for (const [campo, valor] of Object.entries(campos)) {
+    if (campo === "tecnicoKey" || campo === "nomeClienteKey") continue;
+    if (valor === null) {
+      proximo[campo] = typeof registro[campo] === "boolean" ? false : "";
+    } else if (valor instanceof Date) {
+      proximo[campo] = valor.toISOString();
+    } else {
+      proximo[campo] = valor;
+    }
   }
-  return constraints;
+  if (Object.prototype.hasOwnProperty.call(campos, "tecnico")) {
+    proximo.tecnicoKey = normKey(proximo.tecnico);
+  }
+  if (Object.prototype.hasOwnProperty.call(campos, "status")) {
+    proximo.status = normStatus(proximo.status);
+  }
+  if (patch.historico) proximo.historico = [...registro.historico, patch.historico];
+  if (patch.followup) proximo.followups = [...registro.followups, patch.followup];
+  return proximo;
+}
+
+function assinarRegistros({ filtros, onData, onError, rotulo }) {
+  return assinarTabela({
+    tabela: TABELA,
+    // Mais recentes primeiro, como o Firestore fazia.
+    consulta: (qb) =>
+      aplicarFiltros(qb, filtros)
+        .order("data_abertura", { ascending: false, nullsFirst: false })
+        .limit(MAX_LIVE_DOCS),
+    mapear: mapLinhaParaRegistro,
+    predicado: (r) => registroPassaNosFiltros(r, filtros) && !isRegistroSoluti(r),
+    aplicarPatch: aplicarPatchLocal,
+    teto: MAX_LIVE_DOCS,
+    onData,
+    onError: (error) => {
+      console.error(`[Suportes] Erro no listener${rotulo}:`, error);
+      onError?.(error);
+    }
+  });
 }
 
 /**
  * Listener em tempo real da lista principal. Retorna unsubscribe.
- * O segundo argumento de `onData` avisa quando o teto de documentos foi
+ * O segundo argumento de `onData` avisa quando o teto de registros foi
  * atingido — sem isso a tela mostraria menos registros do que existem, calada.
  */
 export function subscribeRegistros(filtros, onData, onError) {
-  const q = query(
-    collection(db, COLLECTION),
-    ...buildQueryConstraints(filtros),
-    limit(MAX_LIVE_DOCS)
-  );
-  return onSnapshot(
-    q,
-    (snap) => {
-      const registros = snap.docs.map(mapDocToRegistro).filter((r) => !isRegistroSoluti(r));
-      onData(registros, { truncado: snap.docs.length >= MAX_LIVE_DOCS, teto: MAX_LIVE_DOCS });
-    },
-    (error) => {
-      console.error("[Suportes] Erro no listener:", error);
-      onError?.(error);
-    }
-  );
+  return assinarRegistros({ filtros: filtros || {}, onData, onError, rotulo: "" });
 }
 
 /** Listener dedicado aos suportes EM ABERTO (independente dos filtros). */
 export function subscribeSuportesEmAberto(onData, onError) {
-  const q = query(
-    collection(db, COLLECTION),
-    where("status", "==", "EM ABERTO"),
-    orderBy("dataAbertura", "desc"),
-    limit(MAX_LIVE_DOCS)
-  );
-  return onSnapshot(
-    q,
-    (snap) =>
-      onData(snap.docs.map(mapDocToRegistro).filter((r) => !isRegistroSoluti(r)), {
-        truncado: snap.docs.length >= MAX_LIVE_DOCS,
-        teto: MAX_LIVE_DOCS
-      }),
-    (error) => {
-      console.error("[Suportes] Erro no listener EM ABERTO:", error);
-      onError?.(error);
-    }
-  );
+  return assinarRegistros({ filtros: { status: "EM ABERTO" }, onData, onError, rotulo: " EM ABERTO" });
 }
 
 export async function contarPorStatus() {
-  const ref = collection(db, COLLECTION);
-  const contar = async (constraints = []) => {
-    const snap = await getCountFromServer(query(ref, ...constraints));
-    return Number(snap.data().count || 0);
+  const contar = async (status) => {
+    let q = supabase.from(TABELA).select("id", { count: "exact", head: true });
+    if (status) q = q.eq("status", status);
+    const { count, error } = await q;
+    if (error) throw error;
+    return Number(count || 0);
   };
 
   const [total, abertos, andamento, finalizados, semRetorno, reagendado] = await Promise.all([
     contar(),
-    contar([where("status", "==", "EM ABERTO")]),
-    contar([where("status", "==", "EM ANDAMENTO")]),
-    contar([where("status", "==", "FINALIZADO")]),
-    contar([where("status", "==", "SEM RETORNO")]),
-    contar([where("status", "==", "REAGENDADO")])
+    contar("EM ABERTO"),
+    contar("EM ANDAMENTO"),
+    contar("FINALIZADO"),
+    contar("SEM RETORNO"),
+    contar("REAGENDADO")
   ]);
 
   return { total, abertos, andamento, finalizados, semRetorno, reagendado };
@@ -223,9 +263,9 @@ export async function contarPorStatus() {
 /**
  * Uma linha da linha do tempo do chamado.
  *
- * Gravamos data em ISO (e não serverTimestamp) porque `arrayUnion` não aceita
- * sentinelas dentro do array — e a diferença de relógio aqui é irrelevante
- * perto da granularidade de minutos que a tela exibe.
+ * A data vai em ISO, gerada no cliente: o histórico é um array dentro do
+ * chamado, e a diferença de relógio é irrelevante perto da granularidade de
+ * minutos que a tela exibe.
  */
 function entradaHistorico(texto, por) {
   return {
@@ -246,52 +286,81 @@ function textoStatus(novo, anterior) {
 /* ------------------------------------------------------------------- escritas */
 
 /**
- * Garante que `nomeClienteKey` acompanhe `nomeCliente` em toda escrita.
- *
- * Fica aqui, e não em cada chamador, porque um lugar que esquecesse de gravar
- * a chave criaria um chamado invisível para a busca por nome — falha silenciosa,
- * que só apareceria quando alguém não achasse o cliente pelo nome. A chave só
- * entra quando o nome está no payload: `atualizarSuporte` é usado para
- * alterações parciais (mudar status, por exemplo) e não pode zerar o campo.
+ * Executa uma escrita com feedback otimista: a tela muda já, e volta atrás se
+ * o banco recusar. É o que o Firestore fazia sozinho com o cache local.
  */
-function comChaveDeNome(payload = {}) {
-  if (!Object.prototype.hasOwnProperty.call(payload, "nomeCliente")) return payload;
-  return { ...payload, nomeClienteKey: chaveNomeCliente(payload.nomeCliente) };
+async function comFeedbackOtimista(id, patch, gravar, opcoes) {
+  const local = aplicarLocal(TABELA, id, patch, opcoes);
+  try {
+    const resultado = await gravar();
+    local.confirmar();
+    return resultado;
+  } catch (erro) {
+    local.reverter();
+    throw erro;
+  }
+}
+
+function lancarSeErro({ error }) {
+  if (error) {
+    const e = new Error(error.message || "Falha ao gravar no banco.");
+    e.code = error.code;
+    throw e;
+  }
 }
 
 /**
  * `nota` entra na primeira linha do histórico. Hoje é usada pela abertura
  * retroativa: a data do chamado passa a ser outra que não a de criação do
  * registro, e essa diferença precisa estar escrita em algum lugar.
+ *
+ * Devolve `{ id }`, como o `addDoc` devolvia uma referência com `.id`.
  */
-export function criarSuporte(payload, { por, nota } = {}) {
+export async function criarSuporte(payload, { por, nota } = {}) {
   const descricao = [payload.tipo, payload.ac].filter(Boolean).join(" · ");
-  return addDoc(collection(db, COLLECTION), {
-    ...comChaveDeNome(payload),
-    historico: [
-      entradaHistorico(
-        `Chamado aberto${descricao ? ` · ${descricao}` : ""}${nota ? ` · ${nota}` : ""}`,
-        por
-      )
-    ],
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp()
-  });
+  const historico = [
+    entradaHistorico(
+      `Chamado aberto${descricao ? ` · ${descricao}` : ""}${nota ? ` · ${nota}` : ""}`,
+      por
+    )
+  ];
+  // O id nasce aqui para a tela poder mostrar o chamado antes do banco responder.
+  const id = crypto.randomUUID();
+  const dados = { dataAbertura: new Date().toISOString(), ...payload, historico };
+  const linha = { id, ...paraLinha(dados) };
+  const base = mapDadosParaRegistro(id, { ...dados, createdAt: new Date().toISOString() });
+
+  await comFeedbackOtimista(
+    id,
+    { campos: dados },
+    async () => lancarSeErro(await supabase.from(TABELA).insert(linha)),
+    { base }
+  );
+  return { id };
 }
 
 /**
  * Atualização genérica. `historico` (opcional) é a frase que descreve a
  * mudança — quando presente, entra na linha do tempo na mesma escrita, para
- * que nunca exista alteração sem registro correspondente.
+ * que nunca exista alteração sem registro correspondente. `followup`
+ * (opcional) acrescenta uma tentativa de contato no mesmo passo: a função do
+ * banco `atualizar_suporte` faz tudo numa operação só.
  */
-export function atualizarSuporte(id, payload, historico = null) {
-  return updateDoc(doc(db, COLLECTION, id), {
-    ...comChaveDeNome(payload),
-    ...(historico
-      ? { historico: arrayUnion(entradaHistorico(historico.texto, historico.por)) }
-      : {}),
-    updatedAt: serverTimestamp()
-  });
+export function atualizarSuporte(id, payload, historico = null, followup = null) {
+  const entrada = historico ? entradaHistorico(historico.texto, historico.por) : null;
+  return comFeedbackOtimista(
+    id,
+    { campos: payload, historico: entrada, followup },
+    async () =>
+      lancarSeErro(
+        await supabase.rpc("atualizar_suporte", {
+          p_id: id,
+          p_patch: paraLinha(payload),
+          p_historico: entrada,
+          p_followup: followup
+        })
+      )
+  );
 }
 
 /** Anotação livre na linha do tempo, sem alterar mais nada no chamado. */
@@ -300,7 +369,9 @@ export function registrarNoHistorico(id, texto, por) {
 }
 
 export function excluirSuporte(id) {
-  return deleteDoc(doc(db, COLLECTION, id));
+  return comFeedbackOtimista(id, { excluir: true }, async () =>
+    lancarSeErro(await supabase.from(TABELA).delete().eq("id", id))
+  );
 }
 
 /**
@@ -339,7 +410,6 @@ export function voltarParaEmAberto(id, { por, statusAnterior } = {}) {
     {
       status: "EM ABERTO",
       tecnico: "",
-      tecnicoKey: "",
       dataInicioAtendimento: deleteField(),
       dataFinalizacao: deleteField()
     },
@@ -402,11 +472,7 @@ export function definirForaDaMedia(id, { excluir, justificativa = "" }, { por } 
 
 export function alterarTecnico(id, tecnico, { por } = {}) {
   const nome = titleCaseName(tecnico);
-  return atualizarSuporte(
-    id,
-    { tecnico: nome, tecnicoKey: normKey(nome) },
-    { texto: `Técnico alterado para ${nome}`, por }
-  );
+  return atualizarSuporte(id, { tecnico: nome }, { texto: `Técnico alterado para ${nome}`, por });
 }
 
 /* ----------------------------------------------------------------- follow-up */
@@ -428,26 +494,25 @@ export function registrarFollowup(id, { ordem, observacao = "", por = "" }) {
   }
 
   const texto = String(observacao || "").trim();
-  const payload = {
-    followups: arrayUnion({
-      ordem: numero,
-      em: new Date().toISOString(),
-      observacao: texto.slice(0, 300),
-      por: String(por || "")
-    })
+  const tentativa = {
+    ordem: numero,
+    em: new Date().toISOString(),
+    observacao: texto.slice(0, 300),
+    por: String(por || "")
   };
 
-  if (numero === TOTAL_FOLLOWUPS) {
-    payload.foraDaMedia = true;
-  }
-
-  return atualizarSuporte(id, payload, {
-    texto:
-      `${numero}º follow-up por ligação registrado` +
-      (texto ? ` · ${texto}` : "") +
-      (numero === TOTAL_FOLLOWUPS ? " · chamado sai da média" : ""),
-    por
-  });
+  return atualizarSuporte(
+    id,
+    numero === TOTAL_FOLLOWUPS ? { foraDaMedia: true } : {},
+    {
+      texto:
+        `${numero}º follow-up por ligação registrado` +
+        (texto ? ` · ${texto}` : "") +
+        (numero === TOTAL_FOLLOWUPS ? " · chamado sai da média" : ""),
+      por
+    },
+    tentativa
+  );
 }
 
 /**
@@ -455,7 +520,7 @@ export function registrarFollowup(id, { ordem, observacao = "", por = "" }) {
  *
  * Caminho preferido: a API do Worker, que resolve o nome pelo perfil no
  * servidor — assim ninguém assume um chamado com o nome de outra pessoa.
- * Se ela não responder, grava direto no Firestore com o nome do usuário logado,
+ * Se ela não responder, grava direto no banco com o nome do usuário logado,
  * para o painel não travar por causa do backend.
  */
 export async function associarTecnico(item, { getIdToken, displayName }) {
@@ -472,11 +537,7 @@ export async function associarTecnico(item, { getIdToken, displayName }) {
   } catch (err) {
     console.warn("[Suportes] associarTecnico via API falhou, usando fallback:", err?.message || err);
     const tecnico = titleCaseName(displayName || "Desconhecido");
-    const payload = {
-      tecnico,
-      tecnicoKey: normKey(tecnico),
-      status: "EM ANDAMENTO"
-    };
+    const payload = { tecnico, status: "EM ANDAMENTO" };
     if (!item.dataInicioAtendimento) {
       payload.dataInicioAtendimento = new Date().toISOString();
     }
@@ -491,22 +552,9 @@ export async function associarTecnico(item, { getIdToken, displayName }) {
 /* --------------------------------------------------------- busca no servidor */
 
 /**
- * Campos aceitos pela busca. Cada um tem índice de campo único no Firestore —
- * o que é automático.
- *
- * Os identificadores e o nome pedem termos diferentes: protocolo/CPF/contato
- * são consultados nas variações formatadas do que foi digitado, enquanto o
- * nome é consultado na forma normalizada (ver `chaveNomeCliente`). Cruzar
- * todos com todos só geraria consultas que nunca casam.
- */
-const CAMPOS_IDENTIFICADOR = ["protocolo", "cpfCnpj", "contato"];
-const CAMPO_NOME = "nomeClienteKey";
-
-/**
  * O banco guarda os valores já formatados (123-456-789, 000.000.000-00,
  * (85) 99999-9999). Quem digita raramente formata. Geramos então as variações
- * plausíveis do termo e consultamos todas — é mais barato do que varrer a
- * coleção, e cobre os dois jeitos de digitar.
+ * plausíveis do termo e procuramos todas — cobre os dois jeitos de digitar.
  */
 function variacoesDeBusca(termo) {
   const bruto = norm(termo);
@@ -525,63 +573,42 @@ function variacoesDeBusca(termo) {
   return [...variacoes].filter(Boolean);
 }
 
+/** Tira o que viraria curinga ou quebraria a sintaxe do filtro `or` do PostgREST. */
+const limparParaFiltro = (t) => t.replace(/[%_\\",()*]/g, " ").replace(/\s+/g, " ").trim();
+
 /**
- * Busca direta no Firestore por protocolo / CPF-CNPJ / contato / nome do cliente.
+ * Busca no banco inteiro por protocolo / CPF-CNPJ / contato / nome do cliente.
  *
- * O nome é consultado em `nomeClienteKey`, e não em `nomeCliente`: a busca do
- * Firestore diferencia maiúscula e acento, então "bruno" só acha "Bruno Ramos"
- * pela chave normalizada.
- *
- * O filtro da tela só enxerga os registros já carregados pelo listener (teto de
- * MAX_LIVE_DOCS). Procurar um protocolo de seis meses atrás não achava nada e a
- * tela não sabia dizer se era "não existe" ou "não carreguei". Esta função vai
- * ao banco: usa consulta por prefixo (`>=` termo, `<` termo + "\uf8ff"), que o
- * Firestore resolve com o índice de campo único, sem índice composto.
+ * Usa a coluna `busca` (gerada pelo banco: sem acento e minúscula) com
+ * `ilike '%termo%'` — busca por TRECHO, o que o Firestore não fazia (só
+ * prefixo): "ramos" agora acha "Bruno Ramos". O índice trigrama a mantém
+ * rápida mesmo com centenas de milhares de linhas.
  *
  * Não aplica os filtros da tela de propósito: quem busca um protocolo quer
  * achá-lo esteja ele em que status estiver.
  */
 export async function buscarRegistrosNoServidor(termo, { max = 50 } = {}) {
-  const variacoes = variacoesDeBusca(termo);
-  const nomeNormalizado = chaveNomeCliente(termo);
-  if (!variacoes.length && !nomeNormalizado) return [];
+  const alvos = new Set(variacoesDeBusca(termo).map((v) => limparParaFiltro(chaveNomeCliente(v))));
+  const nome = limparParaFiltro(chaveNomeCliente(termo));
+  if (nome) alvos.add(nome);
+  const validos = [...alvos].filter(Boolean);
+  if (!validos.length) return [];
 
-  const ref = collection(db, COLLECTION);
+  const filtro = validos.map((v) => `busca.ilike."%${v}%"`).join(",");
+  const { data, error } = await supabase
+    .from(TABELA)
+    .select("*")
+    .or(filtro)
+    .order("data_abertura", { ascending: false, nullsFirst: false })
+    .limit(max);
 
-  // Pares (campo, termo): o nome vai s\u00f3 na sua chave normalizada.
-  const alvos = CAMPOS_IDENTIFICADOR.flatMap((campo) =>
-    variacoes.map((valor) => [campo, valor])
-  );
-  if (nomeNormalizado) alvos.push([CAMPO_NOME, nomeNormalizado]);
-
-  const consultas = alvos.map(([campo, valor]) =>
-    getDocs(
-      query(
-        ref,
-        where(campo, ">=", valor),
-        where(campo, "<", `${valor}\uf8ff`),
-        orderBy(campo),
-        limit(max)
-      )
-    )
-  );
-
-  // `allSettled`: um campo sem índice ou uma permissão negada não pode derrubar
-  // a busca inteira — o que os outros campos acharem ainda vale.
-  const resultados = await Promise.allSettled(consultas);
-  const porId = new Map();
-
-  for (const resultado of resultados) {
-    if (resultado.status !== "fulfilled") {
-      console.warn("[Suportes] Consulta de busca falhou:", resultado.reason?.message);
-      continue;
-    }
-    for (const docSnap of resultado.value.docs) {
-      if (!porId.has(docSnap.id)) porId.set(docSnap.id, mapDocToRegistro(docSnap));
-    }
+  if (error) {
+    console.warn("[Suportes] Busca no servidor falhou:", error.message);
+    return [];
   }
 
-  return [...porId.values()]
+  return data
+    .map(mapLinhaParaRegistro)
     .filter((registro) => !isRegistroSoluti(registro))
     .sort((a, b) => toComparableDate(b.dataAbertura) - toComparableDate(a.dataAbertura))
     .slice(0, max);
@@ -592,30 +619,17 @@ export async function buscarRegistrosNoServidor(termo, { max = 50 } = {}) {
  *
  * A execução periódica disso é do Cron Trigger do Worker (src/backend/reagendados.mjs) —
  * o front chama esta versão só como rede de segurança na abertura da tela.
+ * É um único UPDATE condicional: não há janela entre "ler quem venceu" e
+ * "reabrir" em que outro cliente possa alterar o mesmo chamado.
  */
 export async function processarReagendadosVencidos() {
-  const snap = await getDocs(
-    query(collection(db, COLLECTION), where("status", "==", "REAGENDADO"))
-  );
-  const agora = new Date();
-  const reabertos = [];
-
-  for (const docSnap of snap.docs) {
-    const data = docSnap.data();
-    if (!data.dataReagendamento) continue;
-
-    let dataReag = data.dataReagendamento;
-    if (dataReag?.toDate) dataReag = dataReag.toDate();
-    else if (typeof dataReag === "string") dataReag = new Date(dataReag);
-
-    if (dataReag instanceof Date && !Number.isNaN(dataReag.getTime()) && dataReag <= agora) {
-      await updateDoc(doc(db, COLLECTION, docSnap.id), {
-        status: "EM ABERTO",
-        dataReagendamento: deleteField(),
-        updatedAt: serverTimestamp()
-      });
-      reabertos.push(data.protocolo || "S/N");
-    }
-  }
-  return reabertos;
+  const { data, error } = await supabase
+    .from(TABELA)
+    .update({ status: "EM ABERTO", data_reagendamento: null })
+    .eq("status", "REAGENDADO")
+    .not("data_reagendamento", "is", null)
+    .lte("data_reagendamento", paraIso(new Date()))
+    .select("protocolo");
+  if (error) throw error;
+  return (data || []).map((linha) => linha.protocolo || "S/N");
 }

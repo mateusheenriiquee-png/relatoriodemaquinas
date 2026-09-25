@@ -1,16 +1,17 @@
-import { collection, onSnapshot } from "firebase/firestore";
-import { db } from "../config/firebase";
+import { assinarTabela } from "./suportesStore";
 import { normalizarCargo } from "../contexts/AuthContext";
 import { norm, titleCaseName } from "../utils/format";
 
 export const USUARIOS_COLLECTION = "usuarios";
+const comparaNomes = (a, b) =>
+  (a.displayName || a.email).localeCompare(b.displayName || b.email, "pt-BR", { sensitivity: "base" });
 
 /**
- * usuariosService.js — leitura da coleção `usuarios`.
+ * usuariosService.js — leitura da tabela `usuarios`.
  *
  * Fica fora do adminService de propósito: quem escolhe um técnico não é
- * necessariamente administrador, e as Firestore Rules já liberam leitura desta
- * coleção para qualquer usuário autenticado.
+ * necessariamente administrador, e a RLS do banco já libera leitura desta
+ * tabela para qualquer usuário autenticado.
  */
 
 /**
@@ -21,34 +22,26 @@ export const USUARIOS_COLLECTION = "usuarios";
  * todo mundo que foi cadastrado antes.
  */
 export function subscribeUsuarios(onData, onError) {
-  return onSnapshot(
-    collection(db, USUARIOS_COLLECTION),
-    (snap) => {
-      const usuarios = snap.docs
-        .map((d) => {
-          const dados = d.data() || {};
-          return {
-            id: d.id,
-            uid: dados.uid || d.id,
-            email: norm(dados.email),
-            displayName: norm(dados.displayName),
-            cargo: normalizarCargo(dados.cargo),
-            status: norm(dados.status) || "ativo",
-            criadoEm: dados.createdAt || dados.criadoEm || ""
-          };
-        })
-        .sort((a, b) =>
-          (a.displayName || a.email).localeCompare(b.displayName || b.email, "pt-BR", {
-            sensitivity: "base"
-          })
-        );
-      onData(usuarios);
-    },
-    (error) => {
+  return assinarTabela({
+    tabela: USUARIOS_COLLECTION,
+    consulta: (qb) => qb.limit(1000),
+    mapear: (linha) => ({
+      id: linha.id,
+      uid: linha.id,
+      email: norm(linha.email),
+      displayName: norm(linha.display_name),
+      cargo: normalizarCargo(linha.cargo),
+      status: norm(linha.status) || "ativo",
+      criadoEm: linha.created_at || ""
+    }),
+    ordenar: comparaNomes,
+    teto: 1000,
+    onData: (usuarios) => onData(usuarios),
+    onError: (error) => {
       console.error("[Usuários] Erro ao carregar:", error);
       onError?.(error);
     }
-  );
+  });
 }
 
 /**

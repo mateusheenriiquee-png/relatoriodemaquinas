@@ -1,13 +1,5 @@
-import {
-  collection,
-  doc,
-  getDocs,
-  query,
-  serverTimestamp,
-  where,
-  writeBatch
-} from "firebase/firestore";
-import { db } from "../config/firebase";
+import { supabase } from "../config/supabase";
+import { paraLinha, linhaParaDados } from "../../../../shared/suporte-row.mjs";
 import { COLLECTION, chaveNomeCliente } from "./suportesService";
 import { classificarMotivo, classificarUso } from "../utils/catalogos";
 
@@ -75,7 +67,7 @@ const FIELD_ALIASES = {
   justificativaMedia: ["justificativa", "justificativa da media"],
   tecnicoCentral: ["responsavel"],
   // Valor do lead/negócio ligado ao chamado — alimenta a métrica de venda
-  // ganha/perdida do dashboard (ver ConcluirVendaModal/metricasService).
+  // ganha/perdida do dashboard (ver ConcluirSuporteModal/metricasService).
   valorVenda: ["lead venda r$", "valor da venda", "venda r$"],
 
   /* Colunas exclusivas do export de leads do Kommo (ver ehLayoutKommo). Ficam
@@ -694,28 +686,40 @@ export function diagnosticarRegistros(registros = []) {
 /* ----------------------------------------------------------------- escrita */
 
 async function apagarTudo(onProgresso) {
-  const limite = 500;
-  let removidos = 0;
-  // Sem recursão nem paginação por cursor: cada volta relê o que sobrou, o que
-  // é seguro mesmo se outra pessoa estiver gravando ao mesmo tempo.
-  for (;;) {
-    const snap = await getDocs(collection(db, COLLECTION));
-    if (snap.empty) break;
-    const batch = writeBatch(db);
-    snap.docs.slice(0, limite).forEach((docSnap) => batch.delete(doc(db, COLLECTION, docSnap.id)));
-    await batch.commit();
-    removidos += Math.min(snap.size, limite);
-    onProgresso?.(`Removendo registros existentes... (${removidos})`);
-    if (snap.size <= limite) break;
+  // O PostgREST exige um filtro em DELETE; `neq` com um id impossível é o
+  // "todos". Um único comando, atômico: ou some tudo ou nada (no Firestore eram
+  // lotes de 500, e uma queda no meio deixava a coleção pela metade).
+  const { count, error } = await supabase
+    .from(COLLECTION)
+    .delete({ count: "exact" })
+    .neq("id", "__nenhum__");
+  if (error) throw new Error(error.message);
+  onProgresso?.(`Removendo registros existentes... (${count || 0})`);
+  return count || 0;
+}
+
+/**
+ * O upsert em lote do PostgREST grava TODAS as colunas do lote em cada linha e,
+ * onde a linha não trouxe a coluna, usa o valor padrão — o que apagaria campos
+ * que a planilha não tem (o "mesclar"). Por isso as linhas são agrupadas pelo
+ * conjunto exato de colunas que trazem: dentro de cada grupo todas as linhas
+ * gravam as mesmas colunas e o resto do registro fica intacto.
+ */
+function agruparPorColunas(linhas) {
+  const grupos = new Map();
+  for (const linha of linhas) {
+    const chave = Object.keys(linha).sort().join("|");
+    if (!grupos.has(chave)) grupos.set(chave, []);
+    grupos.get(chave).push(linha);
   }
-  return removidos;
+  return [...grupos.values()];
 }
 
 /**
  * Grava os registros lidos.
  *
  * modo "mesclar": faz merge por docId, preservando campos que a planilha não traz.
- * modo "substituir": APAGA a coleção inteira antes. É irreversível.
+ * modo "substituir": APAGA a tabela inteira antes. É irreversível.
  */
 export async function importarRegistros(registros, modo = "mesclar", onProgresso) {
   if (!registros.length) return { gravados: 0, removidos: 0 };
@@ -728,28 +732,31 @@ export async function importarRegistros(registros, modo = "mesclar", onProgresso
   let gravados = 0;
   for (let i = 0; i < registros.length; i += BATCH_SIZE) {
     const lote = registros.slice(i, i + BATCH_SIZE);
-    const batch = writeBatch(db);
+    const linhas = [];
 
     lote.forEach((registro, indice) => {
       const { docId: bruto, ...campos } = registro;
       const docId = sanitizeDocId(bruto, `b${i + indice}`);
       if (!docId) return;
-      batch.set(
-        doc(db, COLLECTION, docId),
-        {
+      linhas.push({
+        id: docId,
+        ...paraLinha({
           ...campos,
           // Linhas de um export do Kommo já chegam com origemIntegracao:
           // "kommo" (ver ehLayoutKommo em parseRows); as demais continuam
           // marcadas como importação de planilha comum.
-          origemIntegracao: campos.origemIntegracao || "import-csv",
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        },
-        { merge: true }
-      );
+          origemIntegracao: campos.origemIntegracao || "import-csv"
+        })
+      });
     });
 
-    await batch.commit();
+    for (const grupo of agruparPorColunas(linhas)) {
+      const { error } = await supabase
+        .from(COLLECTION)
+        .upsert(grupo, { onConflict: "id", defaultToNull: false });
+      if (error) throw new Error(error.message);
+    }
+
     gravados += lote.length;
     onProgresso?.(`Gravando... ${gravados} de ${registros.length}`);
   }
@@ -765,7 +772,10 @@ function resolverDataExport(data = {}) {
     const parsed = new Date(bruto);
     if (!Number.isNaN(parsed.getTime())) return parsed;
   }
-  if (typeof data.createdAt?.toDate === "function") return data.createdAt.toDate();
+  if (data.createdAt) {
+    const parsed = new Date(data.createdAt);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
   return null;
 }
 
@@ -785,17 +795,18 @@ function formatarDataCsv(value) {
 /**
  * Segunda passada do filtro de período, agora no cliente.
  *
- * A consulta ao Firestore usa `dataAbertura` como string ISO, o que deixa
- * passar registros antigos cuja data só existe em `carimboDataHora` ou no
- * `createdAt`. Aqui a data é resolvida de verdade, campo a campo.
+ * A consulta ao banco corta por `data_abertura` em UTC; aqui a data é
+ * resolvida de novo no horário do navegador (e cai para `createdAt` quando o
+ * registro não tem data de abertura), que é o que a pessoa quis dizer ao
+ * escolher "de hoje até hoje".
  */
 function filtrarPorPeriodo(docs, dataInicio, dataFim) {
   const inicio = parseFiltroData(dataInicio, false);
   const fim = parseFiltroData(dataFim, true);
   if (!inicio && !fim) return docs;
 
-  return docs.filter((docSnap) => {
-    const data = resolverDataExport(docSnap.data());
+  return docs.filter((dados) => {
+    const data = resolverDataExport(dados);
     if (!data) return false;
     if (inicio && data < inicio) return false;
     if (fim && data > fim) return false;
@@ -808,30 +819,33 @@ function filtrarPorPeriodo(docs, dataInicio, dataFim) {
  * Devolve a quantidade exportada — 0 significa "nada no período".
  */
 export async function exportarCSV({ dataInicio = "", dataFim = "" } = {}) {
-  const constraints = [];
-  if (dataInicio) {
-    constraints.push(
-      where("dataAbertura", ">=", new Date(`${dataInicio}T00:00:00Z`).toISOString())
-    );
-  }
-  if (dataFim) {
-    constraints.push(
-      where("dataAbertura", "<=", new Date(`${dataFim}T23:59:59Z`).toISOString())
-    );
+  // O PostgREST devolve no máximo 1000 linhas por resposta: sem paginar, uma
+  // exportação de 1500 chamados sairia com 1000 e ninguém notaria.
+  const PAGINA = 1000;
+  // Folga de um dia nas pontas: o corte exato é feito depois, no horário local.
+  const DIA_MS = 24 * 60 * 60 * 1000;
+  const linhasDoBanco = [];
+  for (let de = 0; ; de += PAGINA) {
+    let q = supabase.from(COLLECTION).select("*");
+    if (dataInicio) q = q.gte("data_abertura", new Date(Date.parse(`${dataInicio}T00:00:00Z`) - DIA_MS).toISOString());
+    if (dataFim) q = q.lte("data_abertura", new Date(Date.parse(`${dataFim}T23:59:59Z`) + DIA_MS).toISOString());
+    // Ordem estável (id desempata) — sem ela a paginação pode repetir ou pular linhas.
+    const { data, error } = await q
+      .order("data_abertura", { ascending: true })
+      .order("id", { ascending: true })
+      .range(de, de + PAGINA - 1);
+    if (error) throw new Error(error.message);
+    linhasDoBanco.push(...data);
+    if (data.length < PAGINA) break;
   }
 
-  const snap = constraints.length
-    ? await getDocs(query(collection(db, COLLECTION), ...constraints))
-    : await getDocs(collection(db, COLLECTION));
-
-  const filtrados = filtrarPorPeriodo(snap.docs, dataInicio, dataFim);
+  const filtrados = filtrarPorPeriodo(linhasDoBanco.map(linhaParaDados), dataInicio, dataFim);
   if (!filtrados.length) return 0;
 
   const escapar = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const csv = [
     COLUNAS_EXPORT.join(","),
-    ...filtrados.map((docSnap) => {
-      const r = docSnap.data();
+    ...filtrados.map((r) => {
       const linha = {
         ...r,
         dataAbertura: formatarDataCsv(r.dataAbertura || r.carimboDataHora || r.createdAt),

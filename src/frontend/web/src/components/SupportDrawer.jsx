@@ -34,6 +34,12 @@ function automaticamenteForaDaMedia(item) {
   );
 }
 
+/** "2026-09-23" -> "23/09/2026", sem passar por Date (que puxaria para o dia anterior no UTC-3). */
+function formatarDia(dia) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dia || "");
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : "-";
+}
+
 function Field({ label, children }) {
   return (
     <div className="drawer-field">
@@ -227,6 +233,30 @@ export default function SupportDrawer({ item, open, onClose, actions }) {
               <Field label="Motivo">{item.motivo}</Field>
             ) : null}
           </div>
+
+          {/* Dados preenchidos ao finalizar. Chamados antigos (ou finalizados
+              antes desta tela existir) não têm nada disso — a seção some. */}
+          {item.emailCliente || item.protocoloCertificado || item.tipoCertificado ? (
+            <div className="drawer-section">
+              <h4 className="drawer-section-title">Finalização</h4>
+              <Field label="Email">{item.emailCliente || "-"}</Field>
+              <Field label="Comprou outro produto">
+                {item.comprouOutroProduto === true ? "Sim" : item.comprouOutroProduto === false ? "Não" : "-"}
+              </Field>
+              <Field label="Protocolo do certificado">{item.protocoloCertificado || "-"}</Field>
+              <Field label="Tipo de certificado">{item.tipoCertificado || "-"}</Field>
+              <Field label="Emissão / vencimento">
+                {formatarDia(item.dataEmissao)} → {formatarDia(item.dataVencimento)}
+              </Field>
+              <Field label="Valor">
+                {item.valorVenda
+                  ? item.valorVenda.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+                  : "-"}
+              </Field>
+              <Field label="Validade estendida">{item.validadeEstendida || "-"}</Field>
+              <Field label="Sistema">{item.sistema || "-"}</Field>
+            </div>
+          ) : null}
 
           <div className="drawer-section">
             <h4 className="drawer-section-title">Classificação</h4>

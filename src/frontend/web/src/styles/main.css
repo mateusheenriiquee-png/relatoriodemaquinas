@@ -2915,3 +2915,34 @@ tbody tr:hover td {
 .diag-ok .diag-marca {
   color: var(--success);
 }
+
+/* ------------------------------------------ formulário de finalização */
+
+/* Rótulo de um grupo que não é <label> (o Sim/Não é um par de botões). */
+.field-rotulo {
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.opcoes-sim-nao {
+  display: flex;
+  gap: 10px;
+}
+
+.opcoes-sim-nao .btn {
+  flex: 1;
+  min-height: 42px;
+}
+
+.field-erro input,
+.field-erro select {
+  border-color: var(--danger);
+}
+
+.field-erro-texto {
+  font-size: 0.78rem;
+  color: var(--danger);
+}

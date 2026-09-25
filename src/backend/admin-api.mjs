@@ -7,14 +7,12 @@
  * só nunca tinham sido ligados a uma rota. Antes disso o painel antigo chamava
  * a API Express, que não é o que está publicado.
  *
- * Listar usuários NÃO passa por aqui: as Firestore Rules já liberam leitura
- * para autenticados, então o React lê direto e ganha a lista em tempo real.
+ * Listar usuários NÃO passa por aqui: a RLS do banco já libera leitura para
+ * autenticados, então o React lê direto e ganha a lista em tempo real.
  */
 
-import { verifyFirebaseIdToken } from "./verify-id-token.mjs";
-import { getDocument, updateDocument } from "./firestore-rest.mjs";
-import { getServiceAccountRaw } from "./identity-rest.mjs";
-import { criarUsuarioFirebase } from "./criar-usuario.mjs";
+import { atualizarSuporte, lerPerfil, lerSuporte, verificarToken } from "./supabase-rest.mjs";
+import { criarUsuario } from "./criar-usuario.mjs";
 import { atualizarCargo, editarUsuario, excluirUsuario } from "./gerenciar-usuario.mjs";
 import { normalizarCargo } from "../shared/funcoes.mjs";
 import { normalizeTecnico } from "../shared/tecnico.js";
@@ -34,16 +32,16 @@ function json(status, payload) {
 }
 
 /**
- * Identifica quem está chamando: valida o ID token pela JWKS do Firebase e
- * lê o cargo no Firestore. O cargo do token não serve — ele não existe lá; a
- * fonte da verdade é o documento em `usuarios`.
+ * Identifica quem está chamando: o Supabase Auth valida o access_token e o
+ * cargo vem de `public.usuarios`. O cargo do token não serve — ele não existe
+ * lá; a fonte da verdade é a linha do perfil.
  */
 async function autenticar(request, env) {
   const header = request.headers.get("authorization") || "";
   const token = header.toLowerCase().startsWith("bearer ") ? header.slice(7).trim() : "";
   if (!token) return { ok: false, status: 401, error: "Token ausente." };
 
-  const verificado = await verifyFirebaseIdToken(token, env);
+  const verificado = await verificarToken(env, token);
   if (!verificado.valid) {
     // O motivo ("iss inválido", "kid não encontrado"...) vai só para o log:
     // na resposta ele serviria de guia para quem estiver forjando tokens.
@@ -51,14 +49,9 @@ async function autenticar(request, env) {
     return { ok: false, status: 401, error: "Token inválido." };
   }
 
-  const collection = env.USUARIOS_COLLECTION || "usuarios";
   let perfil = null;
   try {
-    perfil = await getDocument({
-      serviceAccountRaw: getServiceAccountRaw(env),
-      collection,
-      docId: verificado.uid
-    });
+    perfil = await lerPerfil(env, verificado.uid);
   } catch (error) {
     console.error("[Admin] Falha ao ler perfil do usuário:", error?.message || error);
   }
@@ -68,7 +61,7 @@ async function autenticar(request, env) {
     ok: true,
     uid: verificado.uid,
     email: verificado.email || perfil?.email || "",
-    displayName: String(perfil?.displayName || "").trim(),
+    displayName: String(perfil?.display_name || "").trim(),
     cargo,
     isAdmin: cargo === "Administrador"
   };
@@ -113,7 +106,7 @@ export async function handleAdminRequest(request, env, url) {
 
     if (rota === "/usuarios" && request.method === "POST") {
       const corpo = await lerCorpo(request);
-      const resultado = await criarUsuarioFirebase({
+      const resultado = await criarUsuario({
         email: corpo.email,
         password: corpo.password,
         displayName: corpo.displayName,
@@ -136,7 +129,7 @@ export async function handleAdminRequest(request, env, url) {
           return json(400, { ok: false, error: "Você não pode alterar o próprio cargo." });
         }
 
-        // Só o cargo mudou? O caminho curto não toca no Firebase Auth.
+        // Só o cargo mudou? O caminho curto não toca no Supabase Auth.
         const soCargo = Object.keys(corpo).every((chave) => chave === "cargo");
         const resultado = soCargo
           ? await atualizarCargo(uid, normalizarCargo(corpo.cargo), env)
@@ -173,7 +166,7 @@ export async function handleAdminRequest(request, env, url) {
  * Title Case, igual ao `titleCaseName` do painel.
  *
  * `normalizeTecnico` devolve o nome em MAIÚSCULAS, mas o painel grava e
- * FILTRA em Title Case (`where("tecnico", "==", "Matheus")`). Gravar "MATHEUS"
+ * FILTRA em Title Case (`eq("tecnico", "Matheus")`). Gravar "MATHEUS"
  * daqui faria o chamado sumir do filtro por técnico — então usamos
  * normalizeTecnico só para casar com a lista canônica e reescrevemos no
  * formato que a tela espera.
@@ -199,9 +192,6 @@ function titleCaseNome(valor) {
  * navegador — assim ninguém assume um chamado com o nome de outra pessoa.
  */
 async function associarTecnico(env, supportId, sessao) {
-  const collection = env.FIRESTORE_COLLECTION || "suportes_tecnicos";
-  const serviceAccountRaw = getServiceAccountRaw(env);
-
   const tecnico = titleCaseNome(
     normalizeTecnico(sessao.displayName || (sessao.email ? sessao.email.split("@")[0] : ""))
   );
@@ -209,24 +199,23 @@ async function associarTecnico(env, supportId, sessao) {
     return json(400, { ok: false, error: "Não foi possível determinar o nome do técnico." });
   }
 
-  const atual = await getDocument({ serviceAccountRaw, collection, docId: supportId });
+  const atual = await lerSuporte(env, supportId);
   if (!atual) return json(404, { ok: false, error: "Registro não encontrado." });
 
-  const agora = new Date().toISOString();
-  await updateDocument({
-    serviceAccountRaw,
-    collection,
-    docId: supportId,
-    fields: {
+  // Campos + linha do histórico na mesma operação (função atualizar_suporte).
+  // `tecnicoKey` deixou de existir: a busca por técnico usa a própria coluna.
+  await atualizarSuporte(
+    env,
+    supportId,
+    {
       tecnico,
-      tecnicoKey: tecnico.toLowerCase(),
       status: "EM ANDAMENTO",
       // Só marca o início na primeira associação — reassociar não pode zerar a
       // medição de tempo de um atendimento que já começou.
-      dataInicioAtendimento: atual.dataInicioAtendimento || agora,
-      updatedAt: agora
-    }
-  });
+      dataInicioAtendimento: atual.data_inicio_atendimento || new Date().toISOString()
+    },
+    { em: new Date().toISOString(), texto: `Atendimento assumido por ${tecnico}`, por: tecnico }
+  );
 
   return json(200, { ok: true, tecnico, message: `Técnico associado: ${tecnico}` });
 }

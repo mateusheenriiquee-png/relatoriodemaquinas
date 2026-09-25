@@ -560,25 +560,6 @@ export default function DashboardPage() {
             {metricasAnt ? <Delta valor={variacao(metricasA.sucesso, metricasAnt.sucesso)} /> : null}
           </button>
 
-          <button
-            type="button"
-            className="stat-card"
-            onClick={() => abrirLista({ status: "SEM RETORNO" })}
-            title="Chamados encerrados sem retorno do cliente dentro do período. Clique para ver na lista."
-          >
-            <span>Sem retorno</span>
-            <strong>{metricasA.encerrados - metricasA.sucesso}</strong>
-            {metricasAnt ? (
-              <Delta
-                valor={variacao(
-                  metricasA.encerrados - metricasA.sucesso,
-                  metricasAnt.encerrados - metricasAnt.sucesso
-                )}
-                inverso
-              />
-            ) : null}
-          </button>
-
           <div className="stat-card" title="Chamados não encerrados agora, independentemente do período.">
             <span>Em aberto agora</span>
             <strong>{abertosAgora}</strong>

@@ -1,5 +1,4 @@
-import { doc, getDoc, setDoc } from "firebase/firestore";
-import { db } from "../config/firebase";
+import { supabase } from "../config/supabase";
 
 export const CONFIG_COLLECTION = "config";
 export const ADMIN_EMAIL_KEY = "admin_email";
@@ -62,21 +61,26 @@ async function chamarApi(caminho, { metodo = "GET", corpo, getIdToken }) {
 export { subscribeUsuarios, USUARIOS_COLLECTION } from "./usuariosService";
 
 export async function lerEmailAdmin() {
-  const snap = await getDoc(doc(db, CONFIG_COLLECTION, ADMIN_EMAIL_KEY));
-  return snap.exists() ? snap.data()?.value || snap.data()?.email || "" : "";
+  const { data, error } = await supabase
+    .from(CONFIG_COLLECTION)
+    .select("valor")
+    .eq("chave", ADMIN_EMAIL_KEY)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.valor?.value || data?.valor?.email || "";
 }
 
-export function salvarEmailAdmin(email) {
-  return setDoc(
-    doc(db, CONFIG_COLLECTION, ADMIN_EMAIL_KEY),
-    { value: email, email, updatedAt: new Date().toISOString() },
-    { merge: true }
-  );
+export async function salvarEmailAdmin(email) {
+  const { error } = await supabase.rpc("mesclar_config", {
+    p_chave: ADMIN_EMAIL_KEY,
+    p_valor: { value: email, email, updatedAt: new Date().toISOString() }
+  });
+  if (error) throw new Error(error.message);
 }
 
 /* ------------------------------------------------------------------ escrita */
 
-/** Criar usuário mexe no Firebase Auth: só o Worker consegue. */
+/** Criar usuário mexe no Supabase Auth: só o Worker consegue. */
 export function criarUsuario({ email, password, displayName, cargo }, { getIdToken }) {
   return chamarApi("/usuarios", {
     metodo: "POST",

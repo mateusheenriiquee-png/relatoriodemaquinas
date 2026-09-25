@@ -2,29 +2,13 @@ import { normalizeText } from "../shared/normalize.js";
 import { parseKommoBody } from "../shared/kommo-form-parser.js";
 import { getLead } from "../shared/kommo-client.js";
 import { buildSupportRecordFromKommoLead } from "../shared/kommo-mapper.js";
-import { getDocument, upsertRecords } from "./firestore-rest.mjs";
+import { lerConfig, upsertRecords } from "./supabase-rest.mjs";
 import { MAX_RECORDS_POR_REQUISICAO } from "../shared/webhook-shared.js";
 import { registrarErro } from "./erros.mjs";
 
 function getEnv(env) {
-  const firebaseBase64 = env.FIREBASE_SERVICE_ACCOUNT_BASE64;
-  const firebaseRaw = env.FIREBASE_SERVICE_ACCOUNT;
-
-  let serviceAccountRaw = firebaseBase64 || firebaseRaw;
-  const isBase64 = !!firebaseBase64;
-
-  if (isBase64 && serviceAccountRaw) {
-    try {
-      serviceAccountRaw = atob(serviceAccountRaw);
-    } catch (e) {
-      console.error("[Kommo] Erro ao decodificar Base64:", e.message);
-    }
-  }
-
   return {
-    collection: env.FIRESTORE_COLLECTION || "suportes_tecnicos",
     webhookToken: normalizeText(env.WEBHOOK_TOKEN || ""),
-    serviceAccountRaw,
     kommoBaseUrl: normalizeText(env.KOMMO_BASE_URL || ""),
     kommoAccessToken: normalizeText(env.KOMMO_ACCESS_TOKEN || "")
   };
@@ -116,12 +100,8 @@ export async function processKommoWebhookPost(
       });
     }
 
-    const kommoConfig =
-      (await getDocument({
-        serviceAccountRaw: config.serviceAccountRaw,
-        collection: "config",
-        docId: "kommo"
-      })) || {};
+    // Mapa de estágios/tags do Kommo — linha "kommo" da tabela config.
+    const kommoConfig = (await lerConfig(env, "kommo")) || {};
 
     const records = [];
     const errors = [];
@@ -152,11 +132,7 @@ export async function processKommoWebhookPost(
       });
     }
 
-    const upserted = await upsertRecords({
-      serviceAccountRaw: config.serviceAccountRaw,
-      collection: config.collection,
-      records
-    });
+    const upserted = await upsertRecords({ env, records });
 
     return jsonResponse(201, {
       ok: true,

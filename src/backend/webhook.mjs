@@ -1,30 +1,10 @@
 import { normalizeText } from "../shared/normalize.js";
-import { upsertRecords } from "./firestore-rest.mjs";
+import { upsertRecords } from "./supabase-rest.mjs";
 import { prepareWebhookRecords, MAX_RECORDS_POR_REQUISICAO } from "../shared/webhook-shared.js";
 import { registrarErro } from "./erros.mjs";
 
 function getEnv(env) {
-  // Tentar primeiro FIREBASE_SERVICE_ACCOUNT_BASE64, depois fallback
-  const firebaseBase64 = env.FIREBASE_SERVICE_ACCOUNT_BASE64;
-  const firebaseRaw = env.FIREBASE_SERVICE_ACCOUNT;
-  
-  let serviceAccountRaw = firebaseBase64 || firebaseRaw;
-  let isBase64 = !!firebaseBase64;
-  
-  // Se for Base64, decodificar
-  if (isBase64 && serviceAccountRaw) {
-    try {
-      serviceAccountRaw = atob(serviceAccountRaw);
-    } catch (e) {
-      console.error("[Webhook] Erro ao decodificar Base64:", e.message);
-    }
-  }
-  
-  return {
-    collection: env.FIRESTORE_COLLECTION || "suportes_tecnicos",
-    webhookToken: normalizeText(env.WEBHOOK_TOKEN || ""),
-    serviceAccountRaw
-  };
+  return { webhookToken: normalizeText(env.WEBHOOK_TOKEN || "") };
 }
 
 function isAuthorized({ headers = {}, queryStringParameters = {}, body = {} }, webhookToken) {
@@ -83,7 +63,7 @@ export async function processWebhookPost(
       return jsonResponse(400, { ok: false, error: "Payload vazio." });
     }
     // Defesa em profundidade: mesmo com o token, uma chamada não pode virar um
-    // lote arbitrariamente grande de escritas no Firestore (ver MAX_RECORDS_POR_REQUISICAO).
+    // lote arbitrariamente grande de escritas no banco (ver MAX_RECORDS_POR_REQUISICAO).
     if (inputs.length > MAX_RECORDS_POR_REQUISICAO) {
       return jsonResponse(413, {
         ok: false,
@@ -99,11 +79,7 @@ export async function processWebhookPost(
       });
     }
 
-    const upserted = await upsertRecords({
-      serviceAccountRaw: config.serviceAccountRaw,
-      collection: config.collection,
-      records
-    });
+    const upserted = await upsertRecords({ env, records });
 
     return jsonResponse(201, { ok: true, upserted, inserted: upserted });
   } catch (error) {

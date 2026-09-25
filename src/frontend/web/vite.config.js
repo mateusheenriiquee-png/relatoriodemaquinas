@@ -5,7 +5,10 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    open: true
+    open: true,
+    // O painel importa src/shared (o mesmo mapeador de linhas que o Worker usa),
+    // que fica fora da raiz do Vite.
+    fs: { allow: ["../../.."] }
   },
   build: {
     rollupOptions: {
@@ -16,7 +19,7 @@ export default defineConfig({
          * de rebaixar meio megabyte a cada correção de uma linha nossa.
          */
         manualChunks: {
-          firebase: ["firebase/app", "firebase/auth", "firebase/firestore"],
+          supabase: ["@supabase/supabase-js"],
           chartjs: ["chart.js/auto"]
         }
       }

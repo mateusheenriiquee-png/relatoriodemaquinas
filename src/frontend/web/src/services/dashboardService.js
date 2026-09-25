@@ -1,10 +1,10 @@
-import { collection, limit, onSnapshot, orderBy, query, where } from "firebase/firestore";
-import { db } from "../config/firebase";
+import { linhaParaDados } from "../../../../shared/suporte-row.mjs";
 import { norm, normKey, normStatus } from "../utils/format";
 import { classificarMotivo, classificarUso } from "../utils/catalogos";
 import { isRegistroSoluti } from "./suportesService";
+import { assinarTabela } from "./suportesStore";
 
-const COLLECTION = "suportes_tecnicos";
+const TABELA = "suportes";
 const MAX_DOCS = 2000;
 
 function toDate(value) {
@@ -261,29 +261,28 @@ export function formatarDuracao(horas) {
  * inteiro em toda troca de filtro.
  */
 export function subscribeDashboard(limiteMs, onData, onError) {
-  const constraints = [];
+  const temLimite = limiteMs !== null && limiteMs !== undefined && Number.isFinite(limiteMs);
 
-  if (limiteMs !== null && limiteMs !== undefined && Number.isFinite(limiteMs)) {
-    constraints.push(where("dataAbertura", ">=", new Date(limiteMs).toISOString()));
-    constraints.push(orderBy("dataAbertura", "desc"));
-  }
-
-  const q = query(collection(db, COLLECTION), ...constraints, limit(MAX_DOCS));
-
-  return onSnapshot(
-    q,
-    (snap) => {
-      const registros = snap.docs
-        .map((d) => mapDashboardDoc(d.id, d.data()))
-        .filter((r) => !isRegistroSoluti(r));
-      // Se o teto foi atingido, as médias e contagens abaixo estão incompletas.
-      onData(registros, { truncado: snap.docs.length >= MAX_DOCS, teto: MAX_DOCS });
+  // Se o teto for atingido, as médias e contagens ficam incompletas — o
+  // segundo argumento de onData avisa a tela (`truncado`).
+  return assinarTabela({
+    tabela: TABELA,
+    consulta: (qb) => {
+      let q = qb;
+      if (temLimite) q = q.gte("data_abertura", new Date(limiteMs).toISOString());
+      return q.order("data_abertura", { ascending: false, nullsFirst: false }).limit(MAX_DOCS);
     },
-    (error) => {
+    mapear: (linha) => mapDashboardDoc(linha.id, linhaParaDados(linha)),
+    predicado: (r) =>
+      !isRegistroSoluti(r) && (!temLimite || (r.dataAbertura && r.dataAbertura.getTime() >= limiteMs)),
+    ordenar: (a, b) => (b.dataAbertura?.getTime() || 0) - (a.dataAbertura?.getTime() || 0),
+    teto: MAX_DOCS,
+    onData,
+    onError: (error) => {
       console.error("[Dashboard] Erro no listener:", error);
       onError?.(error);
     }
-  );
+  });
 }
 
 /* --------------------------------------------------------------- agregações */

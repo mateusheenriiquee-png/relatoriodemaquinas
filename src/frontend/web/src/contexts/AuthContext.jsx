@@ -1,15 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import {
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signOut,
-  setPersistence,
-  browserSessionPersistence
-} from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import { auth, db } from "../config/firebase";
+import { supabase } from "../config/supabase";
 
-const USUARIOS_COLLECTION = "usuarios";
+const USUARIOS_TABLE = "usuarios";
 
 const CARGO_LEGACY_MAP = {
   operador: "Operador",
@@ -25,20 +17,35 @@ export function normalizarCargo(cargo = "") {
   return CARGO_LEGACY_MAP[String(cargo).toLowerCase().trim()] || "Operador";
 }
 
+/** Códigos de erro do Supabase Auth (AuthApiError.code) traduzidos para a tela de login. */
 const AUTH_ERROR_MESSAGES = {
-  "auth/email-already-in-use": "Este email já está cadastrado.",
-  "auth/weak-password": "Senha muito fraca. Use pelo menos 6 caracteres.",
-  "auth/invalid-email": "Email inválido.",
-  "auth/user-not-found": "Usuário não encontrado.",
-  "auth/wrong-password": "Senha incorreta.",
-  "auth/invalid-credential": "Email ou senha incorretos.",
-  "auth/user-disabled": "Esta conta foi desativada.",
-  "auth/too-many-requests": "Muitas tentativas de login. Tente novamente mais tarde.",
-  "auth/network-request-failed": "Falha de conexão. Verifique sua internet."
+  user_already_exists: "Este email já está cadastrado.",
+  email_exists: "Este email já está cadastrado.",
+  weak_password: "Senha muito fraca. Use pelo menos 6 caracteres.",
+  validation_failed: "Email inválido.",
+  user_not_found: "Usuário não encontrado.",
+  invalid_credentials: "Email ou senha incorretos.",
+  email_not_confirmed: "Email ainda não confirmado.",
+  user_banned: "Esta conta foi desativada.",
+  over_request_rate_limit: "Muitas tentativas de login. Tente novamente mais tarde.",
+  over_email_send_rate_limit: "Muitas tentativas de login. Tente novamente mais tarde.",
+  network_error: "Falha de conexão. Verifique sua internet."
 };
 
 export function getAuthErrorMessage(code) {
   return AUTH_ERROR_MESSAGES[code] || "Erro na autenticação. Tente novamente.";
+}
+
+/** Linha de `public.usuarios` -> o objeto que o painel sempre usou (userData). */
+function paraUserData(linha, fallback) {
+  if (!linha) return fallback;
+  return {
+    uid: linha.id,
+    email: linha.email,
+    displayName: linha.display_name || "",
+    cargo: normalizarCargo(linha.cargo),
+    status: linha.status || "ativo"
+  };
 }
 
 const AuthContext = createContext(null);
@@ -48,41 +55,67 @@ export function AuthProvider({ children }) {
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // 1) A sessão. O callback NÃO faz chamadas ao Supabase: o cliente segura um
+  // lock durante ele, e uma consulta aqui dentro trava o login (armadilha
+  // documentada do supabase-js). O perfil é carregado no efeito abaixo.
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setUser(firebaseUser);
+    let vivo = true;
 
-      if (!firebaseUser) {
+    supabase.auth.getSession().then(({ data }) => {
+      if (!vivo) return;
+      const usuario = data.session?.user || null;
+      setUser(usuario ? { ...usuario, uid: usuario.id } : null);
+      if (!usuario) setLoading(false);
+    });
+
+    const { data: assinatura } = supabase.auth.onAuthStateChange((_evento, sessao) => {
+      const usuario = sessao?.user || null;
+      setUser((atual) => {
+        if (!usuario) return null;
+        // TOKEN_REFRESHED chega a cada hora com o mesmo usuário: manter a
+        // referência evita recarregar o perfil e re-renderizar o painel todo.
+        return atual?.id === usuario.id ? atual : { ...usuario, uid: usuario.id };
+      });
+      if (!usuario) {
         setUserData(null);
-        setLoading(false);
-        return;
-      }
-
-      const fallback = {
-        uid: firebaseUser.uid,
-        email: firebaseUser.email,
-        displayName: firebaseUser.displayName || "",
-        cargo: "Operador"
-      };
-
-      try {
-        const snap = await getDoc(doc(db, USUARIOS_COLLECTION, firebaseUser.uid));
-        if (snap.exists()) {
-          const data = snap.data();
-          setUserData({ ...data, cargo: normalizarCargo(data.cargo) });
-        } else {
-          setUserData(fallback);
-        }
-      } catch (err) {
-        console.error("[Auth] Erro ao carregar dados do usuário:", err);
-        setUserData(fallback);
-      } finally {
         setLoading(false);
       }
     });
 
-    return unsubscribe;
+    return () => {
+      vivo = false;
+      assinatura.subscription.unsubscribe();
+    };
   }, []);
+
+  // 2) O perfil (cargo, nome) — quem manda no acesso é a RLS, isto é só exibição.
+  useEffect(() => {
+    if (!user) return undefined;
+    let vivo = true;
+
+    const fallback = {
+      uid: user.id,
+      email: user.email,
+      displayName: user.user_metadata?.display_name || "",
+      cargo: "Operador"
+    };
+
+    supabase
+      .from(USUARIOS_TABLE)
+      .select("id, email, display_name, cargo, status")
+      .eq("id", user.id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!vivo) return;
+        if (error) console.error("[Auth] Erro ao carregar dados do usuário:", error);
+        setUserData(paraUserData(error ? null : data, fallback));
+        setLoading(false);
+      });
+
+    return () => {
+      vivo = false;
+    };
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const value = useMemo(() => {
     const isAdmin = normalizarCargo(userData?.cargo) === "Administrador";
@@ -96,25 +129,21 @@ export function AuthProvider({ children }) {
       isAdmin,
       displayName,
       async login(email, password) {
-        try {
-          await setPersistence(auth, browserSessionPersistence);
-          const result = await signInWithEmailAndPassword(auth, email, password);
-          return { success: true, user: result.user };
-        } catch (error) {
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) {
           return { success: false, error: getAuthErrorMessage(error.code) };
         }
+        return { success: true, user: data.user };
       },
       async logout() {
-        try {
-          await signOut(auth);
-          return { success: true };
-        } catch (error) {
-          return { success: false, error: error.message };
-        }
+        const { error } = await supabase.auth.signOut();
+        return error ? { success: false, error: error.message } : { success: true };
       },
+      /** JWT da sessão — o Worker o valida no Supabase Auth. O cliente o renova sozinho. */
       async getIdToken() {
-        if (!auth.currentUser) throw new Error("Usuário não autenticado.");
-        return auth.currentUser.getIdToken();
+        const { data } = await supabase.auth.getSession();
+        if (!data.session) throw new Error("Usuário não autenticado.");
+        return data.session.access_token;
       }
     };
   }, [user, userData, loading]);

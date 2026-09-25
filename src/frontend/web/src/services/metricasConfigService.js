@@ -1,5 +1,5 @@
-import { doc, getDoc, onSnapshot, setDoc } from "firebase/firestore";
-import { db } from "../config/firebase";
+import { supabase } from "../config/supabase";
+import { assinarTabela } from "./suportesStore";
 
 /**
  * metricasConfigService.js — configuração das métricas, em `config/metricas`.
@@ -15,7 +15,7 @@ import { db } from "../config/firebase";
  * depois que ela já tinha sido fechada".
  */
 
-const CAMINHO = ["config", "metricas"];
+const CHAVE = "metricas";
 const MAX_LOG = 200;
 
 export const CONFIG_METRICAS_PADRAO = {
@@ -57,19 +57,30 @@ export function normalizarConfigMetricas(data = {}) {
 }
 
 export function subscribeConfigMetricas(onData, onError) {
-  return onSnapshot(
-    doc(db, ...CAMINHO),
-    (snap) => onData(normalizarConfigMetricas(snap.exists() ? snap.data() : {})),
-    (error) => {
+  return assinarTabela({
+    tabela: "config",
+    consulta: (qb) => qb.eq("chave", CHAVE),
+    mapear: (linha) => ({ id: linha.chave, valor: linha.valor }),
+    predicado: (registro) => registro.id === CHAVE,
+    // Sem a linha (ainda não configurado, ou apagada) vale o padrão.
+    onData: (lista) => onData(normalizarConfigMetricas(lista[0]?.valor || {})),
+    onError: (error) => {
       console.error("[Métricas] Erro ao ler a configuração:", error);
       onError?.(error);
     }
-  );
+  });
 }
 
 async function lerAtual() {
-  const snap = await getDoc(doc(db, ...CAMINHO));
-  return normalizarConfigMetricas(snap.exists() ? snap.data() : {});
+  const { data, error } = await supabase.from("config").select("valor").eq("chave", CHAVE).maybeSingle();
+  if (error) throw error;
+  return normalizarConfigMetricas(data?.valor || {});
+}
+
+/** Grava só as chaves enviadas e preserva as outras (o `merge: true` do Firestore). */
+async function mesclar(valor) {
+  const { error } = await supabase.rpc("mesclar_config", { p_chave: CHAVE, p_valor: valor });
+  if (error) throw new Error(error.message);
 }
 
 function entradaLog(acao, date, nota, por) {
@@ -82,13 +93,9 @@ function entradaLog(acao, date, nota, por) {
   };
 }
 
-/** Expediente e escala da semana. `merge: true` cria o documento na primeira vez. */
+/** Expediente e escala da semana. cria a linha na primeira vez. */
 export function salvarHorarioComercial({ bhStart, bhEnd, workDays }) {
-  return setDoc(
-    doc(db, ...CAMINHO),
-    { bhStart, bhEnd, workDays, updatedAt: new Date().toISOString() },
-    { merge: true }
-  );
+  return mesclar({ bhStart, bhEnd, workDays, updatedAt: new Date().toISOString() });
 }
 
 /**
@@ -109,7 +116,7 @@ export async function adicionarDiaNaoTrabalhado(date, nota, { por } = {}) {
     { date, nota: String(nota || "").slice(0, 120), addedAt: new Date().toISOString(), por: por || "" }
   ];
   const diasLog = [...atual.diasLog, entradaLog("informado", date, nota, por)].slice(-MAX_LOG);
-  return setDoc(doc(db, ...CAMINHO), { diasNaoTrab, diasLog }, { merge: true });
+  return mesclar({ diasNaoTrab, diasLog });
 }
 
 export async function removerDiaNaoTrabalhado(date, { por } = {}) {
@@ -117,5 +124,5 @@ export async function removerDiaNaoTrabalhado(date, { por } = {}) {
   const alvo = atual.diasNaoTrab.find((d) => d.date === date);
   const diasNaoTrab = atual.diasNaoTrab.filter((d) => d.date !== date);
   const diasLog = [...atual.diasLog, entradaLog("removido", date, alvo?.nota, por)].slice(-MAX_LOG);
-  return setDoc(doc(db, ...CAMINHO), { diasNaoTrab, diasLog }, { merge: true });
+  return mesclar({ diasNaoTrab, diasLog });
 }

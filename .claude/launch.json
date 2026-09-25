@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--prefix", "src/frontend/web"],
       "port": 5173
+    },
+    {
+      "name": "cadastro-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "src/frontend/cadastro"],
+      "port": 5174
     }
   ]
 }

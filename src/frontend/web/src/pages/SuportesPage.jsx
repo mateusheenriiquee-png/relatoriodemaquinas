@@ -4,7 +4,7 @@ import AppHeader from "../components/AppHeader";
 import SupportCard from "../components/SupportCard";
 import SupportDrawer from "../components/SupportDrawer";
 import ConfirmModal from "../components/modals/ConfirmModal";
-import ConcluirVendaModal from "../components/modals/ConcluirVendaModal";
+import ConcluirSuporteModal from "../components/modals/ConcluirSuporteModal";
 import ReagendarModal from "../components/modals/ReagendarModal";
 import TextoModal from "../components/modals/TextoModal";
 import ChangeTecnicoModal from "../components/modals/ChangeTecnicoModal";
@@ -48,8 +48,6 @@ const STAT_CARDS = [
   { status: "EM ABERTO", label: "Em aberto", chave: "abertos" },
   { status: "EM ANDAMENTO", label: "Em andamento", chave: "andamento" },
   { status: "FINALIZADO", label: "Finalizados", chave: "finalizados" },
-  { status: "SEM RETORNO", label: "Sem Retorno", chave: "semRetorno" },
-  { status: "REAGENDADO", label: "Reagendado", chave: "reagendado" },
   { status: "todos", label: "Total", chave: "total" }
 ];
 
@@ -318,8 +316,8 @@ export default function SuportesPage() {
     if (ok) setDrawerItem(null);
   }
 
-  async function handleConcluir(item, vendaExtras = {}) {
-    const extras = { ...vendaExtras };
+  async function handleConcluir(item, dadosFinalizacao = {}) {
+    const extras = { ...dadosFinalizacao };
     const motivo = pendentesIndevido[item.id];
     if (motivo) {
       extras.statusAbertura = "INDEVIDO";
@@ -384,7 +382,7 @@ export default function SuportesPage() {
     },
     onNotas: (item) => setModal({ tipo: "notas", item }),
     onAssociar: handleAssociar,
-    onConcluir: (item) => setModal({ tipo: "concluir-venda", item }),
+    onConcluir: (item) => setModal({ tipo: "concluir", item }),
     onReagendar: (item) => {
       if (item.status === "REAGENDADO" && item.dataReagendamento) {
         toast.info(`Reagendado para ${formatDate(item.dataReagendamento)}`, 5000);
@@ -661,16 +659,11 @@ export default function SuportesPage() {
         }}
       />
 
-      <ConcluirVendaModal
-        open={modal.tipo === "concluir-venda"}
+      <ConcluirSuporteModal
+        open={modal.tipo === "concluir"}
         item={modal.item}
         onClose={fecharModal}
-        onConfirm={(vendaStatus, valorVenda) =>
-          handleConcluir(modal.item, {
-            ...(vendaStatus ? { vendaStatus } : {}),
-            ...(valorVenda ? { valorVenda } : {})
-          })
-        }
+        onConfirm={(dados) => handleConcluir(modal.item, dados)}
       />
 
       <TextoModal

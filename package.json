@@ -14,13 +14,18 @@
     "web:preview": "npm run preview --prefix src/frontend/web",
     "web:test": "npm run test --prefix src/frontend/web",
     "test:backend": "node --test \"src/backend/__tests__/*.test.mjs\"",
+    "cadastro:install": "npm install --prefix src/frontend/cadastro",
+    "cadastro:dev": "npm run dev --prefix src/frontend/cadastro",
+    "cadastro:build": "npm run build --prefix src/frontend/cadastro",
+    "cadastro:test": "npm run test --prefix src/frontend/cadastro",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "test": "npm run test:backend && npm run web:test"
+    "test": "npm run test:backend && npm run web:test && npm run cadastro:test"
   },
   "devDependencies": {
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.0.0",
+    "pg": "^8.23.0",
     "prettier": "^3.0.0",
     "wrangler": "^4.124.0"
   },
