@@ -11,7 +11,7 @@
  * um cliente que não atende não é trabalho da equipe, e deixar isso na média
  * distorce o número de todo mundo (ver `duracaoAtendimento` em dashboardService).
  *
- * Este módulo é só cálculo — não toca no Firestore nem no React.
+ * Este módulo é só cálculo — não toca no banco nem no React.
  */
 
 export const TOTAL_FOLLOWUPS = 3;
@@ -39,7 +39,7 @@ function paraData(valor) {
 }
 
 /**
- * Normaliza a lista vinda do Firestore: ordena por `ordem` e descarta o que
+ * Normaliza a lista vinda do banco: ordena por `ordem` e descarta o que
  * não dá para interpretar. Dados de importação e edições manuais chegam
  * torto com mais frequência do que se imagina.
  */

@@ -4,6 +4,7 @@ import Brand from "../components/Brand";
 import ThemeToggle from "../components/ThemeToggle";
 import { IconDashboard, IconSupport } from "../components/Icons";
 import ConfirmModal from "../components/modals/ConfirmModal";
+import PalavrasChaveEditor from "../components/PalavrasChaveEditor";
 import { useToast } from "../components/ToastProvider";
 import { useAuth } from "../contexts/AuthContext";
 import {
@@ -19,6 +20,7 @@ import {
 const ABAS = [
   { id: "usuarios", label: "Usuários" },
   { id: "novo", label: "Novo usuário" },
+  { id: "palavras", label: "Palavras-chave do chat" },
   { id: "config", label: "Configurações" }
 ];
 
@@ -33,7 +35,7 @@ function formatarData(valor) {
 /**
  * Painel de administrador — substitui admin.html + js/pages/admin-panel.js.
  *
- * A lista vem do Firestore em tempo real; criar, alterar cargo e excluir vão
+ * A lista vem do banco em tempo real; criar, alterar cargo e excluir vão
  * pela API do Worker, que é quem tem privilégio de Admin SDK.
  */
 export default function AdminPage() {
@@ -274,6 +276,12 @@ export default function AdminPage() {
               {salvando ? "Criando..." : "Criar usuário"}
             </button>
           </form>
+        </section>
+      ) : null}
+
+      {aba === "palavras" ? (
+        <section className="admin-section">
+          <PalavrasChaveEditor />
         </section>
       ) : null}
 

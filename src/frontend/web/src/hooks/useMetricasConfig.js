@@ -11,7 +11,7 @@ import { useAuth } from "../contexts/AuthContext";
 /**
  * Configuração de métricas em tempo real.
  *
- * Começa com o padrão em memória e só troca quando o Firestore responde: assim
+ * Começa com o padrão em memória e só troca quando o banco responde: assim
  * o dashboard já calcula tempo útil no primeiro render, em vez de piscar "—"
  * enquanto a configuração viaja. Se a leitura falhar, o padrão continua valendo
  * — métrica aproximada é melhor do que tela vazia.

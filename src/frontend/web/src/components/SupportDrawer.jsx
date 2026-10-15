@@ -12,16 +12,20 @@ import {
   IconClose,
   IconCopy,
   IconEdit,
+  IconExternalLink,
   IconInfo,
   IconNotes,
   IconReturn,
   IconTrash,
   IconWhatsApp
 } from "./Icons";
+import { buscarLeadDeVendas } from "../services/suportesService";
+import { chamadoParado } from "../utils/chamadoParado";
 import {
   buildWhatsAppPhone,
   formatDate,
   getWhatsAppMessageForType,
+  mensagemPrimeiroContato,
   statusClass
 } from "../utils/format";
 
@@ -66,7 +70,7 @@ function ActionButton({ className, title, onClick, carregando, children }) {
 }
 
 export default function SupportDrawer({ item, open, onClose, actions }) {
-  const { isAdmin, displayName } = useAuth();
+  const { isAdmin, displayName, getIdToken } = useAuth();
   const toast = useToast();
   const [visible, setVisible] = useState(false);
   // Nome da ação que acabou de ser clicada, só para o botão mostrar um
@@ -80,6 +84,24 @@ export default function SupportDrawer({ item, open, onClose, actions }) {
   useEffect(() => {
     setAcaoEmCurso(null);
   }, [item?.id, open]);
+
+  // Lead do cliente no "01 - Funil de vendas". O id gravado no chamado é o do
+  // lead em que a conversa estava, que pode ser de outro funil (cobranças,
+  // pós-venda...). Resolvido ao abrir o painel, para o botão já estar pronto.
+  const [leadVendas, setLeadVendas] = useState(null);
+  const kommoLeadId = item?.kommoLeadId;
+  useEffect(() => {
+    setLeadVendas(null);
+    if (!open || !kommoLeadId || !getIdToken) return undefined;
+    let ativo = true;
+    buscarLeadDeVendas(item, { getIdToken }).then((id) => {
+      if (ativo) setLeadVendas(id);
+    });
+    return () => {
+      ativo = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, item?.id, kommoLeadId, getIdToken]);
 
   useEffect(() => {
     if (!open) {
@@ -116,6 +138,47 @@ export default function SupportDrawer({ item, open, onClose, actions }) {
     }
   }
 
+  // Conta específica deste projeto — não tem como descobrir isso por conta
+  // própria (não é dado que venha em nenhum campo do chamado).
+  const KOMMO_SUBDOMINIO = "certifybrasil.kommo.com";
+
+  /**
+   * Abre o lead direto no Kommo, na aba de conversa — confirmado com o
+   * usuário que `/leads/detail/{id}` já cai ali, sem precisar do prefixo
+   * `/chats/{algo}/` que aparece quando se navega pela lista de conversas.
+   *
+   * Ao contrário do WhatsApp, o Kommo não tem um jeito de pré-preencher o
+   * texto da mensagem por URL — o técnico digita na hora, manualmente.
+   */
+  async function abrirNoKommo() {
+    const url = (id) => `https://${KOMMO_SUBDOMINIO}/leads/detail/${id}`;
+    if (leadVendas) {
+      window.open(url(leadVendas), "_blank");
+      return;
+    }
+    // Clicou antes de o lead de vendas chegar: abre a aba já (o navegador só
+    // permite no clique) e aponta para o lead certo quando a resposta vier.
+    const aba = window.open("about:blank", "_blank");
+    const id = (await buscarLeadDeVendas(item, { getIdToken })) || item.kommoLeadId;
+    if (aba) aba.location.href = url(id);
+    else window.open(url(id), "_blank");
+  }
+
+  /**
+   * Chama o cliente no WhatsApp com a primeira mensagem pronta (saudação pelo
+   * horário). Usa o link wa.me: abre o aplicativo do WhatsApp quando está
+   * instalado e, senão, o WhatsApp Web. Só abre a conversa — quem envia é o
+   * técnico.
+   */
+  function chamarNoWhatsApp() {
+    const phone = buildWhatsAppPhone(item.contato);
+    if (!phone) {
+      toast.error("Número inválido para WhatsApp.");
+      return;
+    }
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(mensagemPrimeiroContato(displayName))}`, "_blank");
+  }
+
   function abrirWhatsApp() {
     const phone = buildWhatsAppPhone(item.contato);
     if (!phone) {
@@ -138,6 +201,7 @@ export default function SupportDrawer({ item, open, onClose, actions }) {
   }
 
   const encerrado = item.status === "FINALIZADO" || item.status === "SEM RETORNO";
+  const parado = chamadoParado(item);
   const podeVerInfo = item.statusAbertura !== "INDEVIDO" || isAdmin;
 
   const CopyBtn = ({ value }) => (
@@ -174,6 +238,38 @@ export default function SupportDrawer({ item, open, onClose, actions }) {
         </div>
 
         <div className="drawer-body">
+          {/* Aberto como possível duplicado (09/10): o sistema não juntou com o
+              outro chamado porque é outro contato no Kommo — o técnico decide. */}
+          {item.possivelDuplicadoDe ? (
+            <div className="drawer-aviso" role="note">
+              <span>
+                <strong>Possível duplicado.</strong> Há outro chamado aberto com o mesmo telefone, documento ou
+                protocolo, mas de outro contato no Kommo.
+              </span>
+              <div className="drawer-aviso-acoes">
+                <button type="button" className="btn btn-tonal btn-small" onClick={() => actions.onAbrirDuplicado(item.possivelDuplicadoDe)}>
+                  Abrir o outro chamado
+                </button>
+                <button type="button" className="btn btn-ghost btn-small" onClick={() => actions.onNaoEDuplicado(item)}>
+                  Não é o mesmo cliente
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {parado?.nivel === "sem-retorno" ? (
+            <div className="drawer-aviso drawer-aviso-sem-retorno" role="note">
+              <span>
+                <strong>Sem mensagem do cliente</strong> — {parado.texto.replace("parado ", "")}. Marcar como sem retorno?
+              </span>
+              <div className="drawer-aviso-acoes">
+                <button type="button" className="btn btn-ghost btn-small" onClick={() => actions.onSemRetorno(item)}>
+                  Marcar sem retorno
+                </button>
+              </div>
+            </div>
+          ) : null}
+
           <div className="drawer-section">
             <h4 className="drawer-section-title">Identificação</h4>
             <Field label="Protocolo">
@@ -190,19 +286,41 @@ export default function SupportDrawer({ item, open, onClose, actions }) {
               {item.cpfCnpj || "-"} {item.cpfCnpj ? <CopyBtn value={item.cpfCnpj} /> : null}
             </Field>
             <Field label="Contato">
-              {item.contato || "-"}{" "}
-              {item.contato ? (
+              {item.contato || "-"} {item.contato ? <CopyBtn value={item.contato} /> : null}{" "}
+              {/* Com lead no Kommo, abre a conversa lá (sem mensagem pronta — o
+                  Kommo não tem esse recurso). Sem lead vinculado, cai no
+                  WhatsApp de sempre, que já escreve a mensagem pronta. */}
+              {item.kommoLeadId ? (
                 <>
-                  <CopyBtn value={item.contato} />{" "}
                   <button
                     type="button"
                     className="btn btn-ghost btn-small"
-                    title="Abrir no WhatsApp"
-                    onClick={abrirWhatsApp}
+                    title="Abrir conversa no Kommo"
+                    onClick={abrirNoKommo}
                   >
-                    <IconWhatsApp size={14} />
+                    <IconExternalLink size={14} />
                   </button>
+                  {item.contato ? (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-small"
+                      title="Chamar no WhatsApp (mensagem pronta)"
+                      aria-label="Chamar no WhatsApp com mensagem pronta"
+                      onClick={chamarNoWhatsApp}
+                    >
+                      <IconWhatsApp size={14} />
+                    </button>
+                  ) : null}
                 </>
+              ) : item.contato ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-small"
+                  title="Abrir no WhatsApp"
+                  onClick={abrirWhatsApp}
+                >
+                  <IconWhatsApp size={14} />
+                </button>
               ) : null}
             </Field>
           </div>
@@ -211,6 +329,7 @@ export default function SupportDrawer({ item, open, onClose, actions }) {
             <h4 className="drawer-section-title">Atendimento</h4>
             <Field label="Tipo">{item.tipo || "-"}</Field>
             <Field label="AC">{item.ac || "-"}</Field>
+            {item.descricao ? <Field label="Descrição">{item.descricao}</Field> : null}
             <Field label="Sit. Atendimento">
               <span className={`status-pill ${statusClass(item.status)}`}>{item.status}</span>
             </Field>
@@ -244,6 +363,7 @@ export default function SupportDrawer({ item, open, onClose, actions }) {
                 {item.comprouOutroProduto === true ? "Sim" : item.comprouOutroProduto === false ? "Não" : "-"}
               </Field>
               <Field label="Protocolo do certificado">{item.protocoloCertificado || "-"}</Field>
+              <Field label="CPF">{item.cpf || "-"}</Field>
               <Field label="Tipo de certificado">{item.tipoCertificado || "-"}</Field>
               <Field label="Emissão / vencimento">
                 {formatarDia(item.dataEmissao)} → {formatarDia(item.dataVencimento)}
@@ -251,6 +371,11 @@ export default function SupportDrawer({ item, open, onClose, actions }) {
               <Field label="Valor">
                 {item.valorVenda
                   ? item.valorVenda.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+                  : "-"}
+              </Field>
+              <Field label="Valor V.E">
+                {typeof item.valorVE === "number"
+                  ? item.valorVE.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
                   : "-"}
               </Field>
               <Field label="Validade estendida">{item.validadeEstendida || "-"}</Field>

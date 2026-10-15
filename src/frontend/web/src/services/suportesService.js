@@ -57,11 +57,15 @@ export function mapDadosParaRegistro(id, data = {}) {
     id,
     protocolo: norm(data.protocolo || data.idSuporte || ""),
     responsavelAbertura: norm(data.responsavelAbertura || data.responsavel || data.cliente || ""),
+    // Lead vinculado no Kommo (chamados abertos pelas automações). Usado para
+    // abrir a conversa direto no Kommo, em vez do WhatsApp — ver SupportDrawer.
+    kommoLeadId: norm(data.kommoLeadId || ""),
     // Nome do cliente final (Kommo: "Nome completo", com fallback pro "Lead
     // título" sem prefixo — ver importExportService). Distinto de
     // `responsavelAbertura`, que no Kommo é quem tratou o lead, não o cliente.
     nomeCliente: norm(data.nomeCliente || ""),
     cpfCnpj: norm(data.cpfCnpj || data.cpf_cnpj || ""),
+    cpf: norm(data.cpf || ""),
     contato: norm(data.contato || data.telefone || ""),
     tipo: norm(data.tipo || ""),
     ac: norm(data.ac || data.AC || ""),
@@ -70,6 +74,8 @@ export function mapDadosParaRegistro(id, data = {}) {
     status: normStatus(data.status || data.situacao || data.situacaoAtendimento || "EM ABERTO"),
     statusAbertura: norm(data.statusAbertura || ""),
     anotacoes: norm(data.anotacoes || data.anotacao || ""),
+    // Descrição do ocorrido (ex.: escrita pela IA na automação do chat do Kommo).
+    descricao: norm(data.descricao || ""),
     motivo: norm(data.motivo || data.motivoSemRetorno || ""),
     motivoIndevido: norm(data.motivoIndevido || ""),
     /* Classificação do chamado — base das métricas por motivo / uso / plataforma.
@@ -104,13 +110,18 @@ export function mapDadosParaRegistro(id, data = {}) {
     tipoCertificado: norm(data.tipoCertificado || ""),
     validadeEstendida: norm(data.validadeEstendida || ""),
     sistema: norm(data.sistema || ""),
-    valorVenda: Number(data.valorVenda) || 0
+    valorVenda: Number(data.valorVenda) || 0,
+    // null = não informado (V.E é opcional); 0 seria "vendeu por zero".
+    valorVE: data.valorVE === null || data.valorVE === undefined || data.valorVE === "" ? null : Number(data.valorVE),
+    // Bolinha do card: quantas mensagens o cliente mandou enquanto o chamado
+    // já estava EM ANDAMENTO. Zerada ao abrir o chamado (ver SuportesPage).
+    mensagensNaoLidas: Number(data.mensagensNaoLidas) || 0,
+    // Quando o cliente escreveu pela última vez (ordena a lista "Em andamento").
+    ultimaMensagemClienteEm: resolverDateTime(data.ultimaMensagemClienteEm),
+    // Aberto como possível duplicado de outro chamado (outro contato do Kommo
+    // com o mesmo telefone/documento/protocolo) — o técnico decide (09/10).
+    possivelDuplicadoDe: norm(data.possivel_duplicado_de || "")
   };
-}
-
-/** Compatível com o formato antigo: qualquer coisa com `id` e `data()`. */
-export function mapDocToRegistro(docSnap) {
-  return mapDadosParaRegistro(docSnap.id, docSnap.data() || {});
 }
 
 /** Linha da tabela `suportes` -> registro da tela. */
@@ -137,14 +148,26 @@ export function isRegistroSoluti(record) {
 /** Marca "apagar este campo" (o `deleteField()` do Firestore). Vira NULL/'' no banco. */
 const deleteField = () => null;
 
-const inicioIso = (dia) => new Date(`${dia}T00:00:00Z`).toISOString();
-const fimIso = (dia) => new Date(`${dia}T23:59:59Z`).toISOString();
+// Dia do filtro no horário LOCAL (Brasília). Com "Z" (UTC) o dia ia das 21h
+// da véspera às 20h59 — chamado aberto às 22h caía no dia seguinte (14/10).
+const inicioIso = (dia) => new Date(`${dia}T00:00:00`).toISOString();
+const fimIso = (dia) => new Date(`${dia}T23:59:59.999`).toISOString();
+
+/** AC do chamado para o filtro: o campo AC ou, vazio, o Sistema (maiúsculo). */
+export function acDoRegistro(registro) {
+  return String(registro?.ac || registro?.sistema || "").trim().toUpperCase();
+}
 
 /** Aplica os filtros da tela à consulta do banco. */
 export function aplicarFiltros(qb, filtros = {}) {
   let q = qb;
   if (filtros.status && filtros.status !== "todos") q = q.eq("status", filtros.status);
-  if (filtros.ac && filtros.ac !== "todos") q = q.eq("ac", filtros.ac);
+  // AC: o campo `ac` quase sempre fica vazio; o sistema de verdade é o
+  // "Sistema" gravado ao finalizar. Vale qualquer um dos dois (14/10).
+  if (filtros.ac && filtros.ac !== "todos") {
+    const ac = String(filtros.ac).replace(/[,()%_*\\]/g, "");
+    q = q.or(`ac.ilike.${ac},sistema.ilike.${ac}`);
+  }
   if (filtros.tecnico && filtros.tecnico !== "todos") {
     q = q.eq("tecnico", titleCaseName(filtros.tecnico));
   }
@@ -161,7 +184,9 @@ export function aplicarFiltros(qb, filtros = {}) {
  */
 export function registroPassaNosFiltros(registro, filtros = {}) {
   if (filtros.status && filtros.status !== "todos" && registro.status !== filtros.status) return false;
-  if (filtros.ac && filtros.ac !== "todos" && registro.ac !== filtros.ac) return false;
+  if (filtros.ac && filtros.ac !== "todos" && acDoRegistro(registro) !== String(filtros.ac).toUpperCase()) {
+    return false;
+  }
   if (
     filtros.tecnico &&
     filtros.tecnico !== "todos" &&
@@ -237,9 +262,17 @@ export function subscribeSuportesEmAberto(onData, onError) {
   return assinarRegistros({ filtros: { status: "EM ABERTO" }, onData, onError, rotulo: " EM ABERTO" });
 }
 
-export async function contarPorStatus() {
+/**
+ * Contagem dos cards. Segue os filtros da tela (AC, técnico, período e status
+ * da abertura) — antes contava o banco inteiro e os números não mudavam ao
+ * filtrar (14/10). O status de cada card substitui o filtro de status.
+ */
+export async function contarPorStatus(filtros = {}) {
+  const { statusAbertura, ...resto } = filtros;
+  delete resto.status;
   const contar = async (status) => {
-    let q = supabase.from(TABELA).select("id", { count: "exact", head: true });
+    let q = aplicarFiltros(supabase.from(TABELA).select("id", { count: "exact", head: true }), resto);
+    if (statusAbertura && statusAbertura !== "todos") q = q.ilike("status_abertura", statusAbertura);
     if (status) q = q.eq("status", status);
     const { count, error } = await q;
     if (error) throw error;
@@ -303,7 +336,14 @@ async function comFeedbackOtimista(id, patch, gravar, opcoes) {
 
 function lancarSeErro({ error }) {
   if (error) {
-    const e = new Error(error.message || "Falha ao gravar no banco.");
+    // Dois chamados abertos para o mesmo lead: o banco recusa (um lead que
+    // voltou ao suporte já abriu um novo chamado).
+    const duplicado = error.code === "23505" && /suportes_lead_aberto_uk/.test(error.message || "");
+    const e = new Error(
+      duplicado
+        ? "Já existe outro suporte aberto para este lead do Kommo. Finalize aquele antes de reabrir este."
+        : error.message || "Falha ao gravar no banco."
+    );
     e.code = error.code;
     throw e;
   }
@@ -533,7 +573,7 @@ export async function associarTecnico(item, { getIdToken, displayName }) {
     });
     const data = await response.json();
     if (!response.ok || !data.ok) throw new Error(data.error || "Erro ao associar técnico.");
-    return data.tecnico;
+    return { tecnico: data.tecnico };
   } catch (err) {
     console.warn("[Suportes] associarTecnico via API falhou, usando fallback:", err?.message || err);
     const tecnico = titleCaseName(displayName || "Desconhecido");
@@ -545,7 +585,150 @@ export async function associarTecnico(item, { getIdToken, displayName }) {
       texto: `Atendimento assumido por ${tecnico}`,
       por: tecnico
     });
-    return tecnico;
+    return { tecnico };
+  }
+}
+
+/**
+ * Ao finalizar um suporte, grava os dados da finalização nos campos do lead e
+ * do contato no Kommo (e o email no contato, se ele não tiver nenhum). Chamar
+ * só DEPOIS de a finalização estar gravada no banco — o Worker lê os campos
+ * de lá. Não mexe na etapa do lead (desde 2026-10-01). Sem lead do Kommo, nem
+ * chama a rota.
+ *
+ * Devolve `{ acao, camposGravados, camposIgnorados, emailGravado }`; lança se a
+ * chamada falhar — quem chama decide como avisar.
+ */
+export async function enviarFinalizacaoAoKommo(item, { getIdToken }) {
+  if (!item.kommoLeadId) return { acao: "sem-lead" };
+
+  const token = await getIdToken();
+  const response = await fetch(`${getApiBaseUrl()}/api/admin/supports/${item.id}/kommo-etapa`, {
+    method: "POST",
+    mode: "cors",
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  const data = await response.json();
+  if (!response.ok || !data.ok) throw new Error(data.error || "Erro ao enviar a finalização ao Kommo.");
+  return data;
+}
+
+/**
+ * "Não é o mesmo cliente": tira só o aviso de possível duplicado. Função própria
+ * no banco porque atualizar_suporte troca o extras inteiro (09/10).
+ */
+export async function descartarAvisoDuplicado(id, { por } = {}) {
+  lancarSeErro(await supabase.rpc("descartar_aviso_duplicado", { p_id: id, p_por: por || "" }));
+}
+
+/** Um chamado pelo id, direto do banco (para abrir um que não está na lista carregada). */
+export async function lerRegistro(id) {
+  const { data, error } = await supabase.from(TABELA).select("*").eq("id", id).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data ? mapLinhaParaRegistro(data) : null;
+}
+
+/**
+ * "Novo suporte" pelo lead: o Worker lê o Kommo e a conversa (IA do n8n) e
+ * devolve o formulário preenchido — ou `existente`, quando o cliente já tem
+ * chamado. Não cria nada. Lança com a mensagem do Worker em caso de erro
+ * (lead inválido, não encontrado, Kommo fora).
+ */
+export async function gerarSuportePorLead(lead, { getIdToken }) {
+  const token = await getIdToken();
+  const response = await fetch(`${getApiBaseUrl()}/api/admin/supports/novo-por-lead`, {
+    method: "POST",
+    mode: "cors",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ lead })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data.ok) throw new Error(data.error || "Não foi possível ler o lead no Kommo.");
+  return data;
+}
+
+/**
+ * Id do lead do cliente no "01 - Funil de vendas" (o Worker procura pelo
+ * contato quando o lead do chamado é de outro funil). Em qualquer falha,
+ * devolve o id gravado no chamado — o botão continua abrindo algo.
+ */
+export async function buscarLeadDeVendas(item, { getIdToken }) {
+  if (!item?.kommoLeadId) return null;
+  try {
+    const token = await getIdToken();
+    const response = await fetch(`${getApiBaseUrl()}/api/admin/supports/${item.id}/lead-vendas`, {
+      mode: "cors",
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const data = await response.json();
+    return (response.ok && data.ok && data.leadId) || item.kommoLeadId;
+  } catch (err) {
+    console.warn("[Suportes] Lead de vendas indisponível:", err?.message || err);
+    return item.kommoLeadId;
+  }
+}
+
+/**
+ * Sugestões para a tela de finalizar lidas do Kommo (lead + contato) e do
+ * texto da conversa: `{ chave: { valor, fonte, sugerido } }`. Rápido (~1 s).
+ * Sem lead do Kommo, ou em qualquer falha, `{}` — a tela só fica com menos
+ * campos preenchidos.
+ */
+export async function carregarPrefill(item, { getIdToken }) {
+  if (!item?.kommoLeadId) return {};
+  try {
+    const token = await getIdToken();
+    const response = await fetch(`${getApiBaseUrl()}/api/admin/supports/${item.id}/prefill`, {
+      mode: "cors",
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const data = await response.json();
+    return response.ok && data.ok ? data.campos || {} : {};
+  } catch (err) {
+    console.warn("[Suportes] Pré-preenchimento indisponível:", err?.message || err);
+    return {};
+  }
+}
+
+/**
+ * Segunda camada, lenta (até ~25 s): IA do n8n lendo a conversa, fotos e PDFs.
+ * `jaPreenchidos` são as chaves que a tela já tem — a IA não procura por elas.
+ */
+export async function carregarPrefillIA(item, jaPreenchidos, { getIdToken }) {
+  if (!item?.kommoLeadId) return {};
+  try {
+    const token = await getIdToken();
+    const response = await fetch(`${getApiBaseUrl()}/api/admin/supports/${item.id}/prefill-ia`, {
+      method: "POST",
+      mode: "cors",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ jaPreenchidos })
+    });
+    const data = await response.json();
+    return response.ok && data.ok ? data.campos || {} : {};
+  } catch (err) {
+    console.warn("[Suportes] Leitura da conversa pela IA indisponível:", err?.message || err);
+    return {};
+  }
+}
+
+/**
+ * Opções reais das listas do Kommo para a tela de finalizar:
+ * `{ sistema?: [...], validade_estendida?: [...], tipo_certificado?: [...] }`.
+ * Campo sem opções (ou falha) = a tela usa texto livre / a lista padrão.
+ */
+export async function carregarOpcoesFinalizacao({ getIdToken }) {
+  try {
+    const token = await getIdToken();
+    const response = await fetch(`${getApiBaseUrl()}/api/admin/kommo/campos-finalizacao`, {
+      mode: "cors",
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const data = await response.json();
+    return response.ok && data.ok ? data.opcoes || {} : {};
+  } catch (err) {
+    console.warn("[Suportes] Opções do Kommo indisponíveis:", err?.message || err);
+    return {};
   }
 }
 

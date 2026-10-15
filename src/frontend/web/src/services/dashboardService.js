@@ -2,6 +2,8 @@ import { linhaParaDados } from "../../../../shared/suporte-row.mjs";
 import { norm, normKey, normStatus } from "../utils/format";
 import { classificarMotivo, classificarUso } from "../utils/catalogos";
 import { isRegistroSoluti } from "./suportesService";
+import { msReagendadoEntre } from "../utils/reagendado";
+import { normalizarTipo } from "../../../../shared/prefill-finalizacao.mjs";
 import { assinarTabela } from "./suportesStore";
 
 const TABELA = "suportes";
@@ -34,9 +36,34 @@ function normStatusAbertura(v) {
   return s ? "OUTRO" : "NAO INFORMADO";
 }
 
+/**
+ * Sistema (autoridade certificadora) do chamado: o da tela de finalizar e,
+ * sem ele, o AC do cadastro. Os nomes variam ("CONSULTI", "consultibrasil")
+ * e viram os três da Certify (09/10).
+ */
+export function normalizarSistema(sistema, ac = "") {
+  // O da finalização vence o do cadastro; só sem ele vale o AC.
+  for (const valor of [sistema, ac]) {
+    const t = String(valor || "").toLowerCase();
+    if (/consulti/.test(t)) return "Consulti";
+    if (/valid/.test(t)) return "Valid";
+    if (/soluti/.test(t)) return "Soluti";
+  }
+  return "Não informado";
+}
+
+/** "A1 PJ", "A1 CNPJ", "e-CNPJ A1" -> "PJ A1"; vazio -> "Não informado". */
+export function normalizarTipoCertificado(tipo) {
+  const t = String(tipo || "").trim();
+  if (!t) return "Não informado";
+  return normalizarTipo(t.replace(/(^|[^a-z-])cnpj(?![a-z])/i, "$1PJ").replace(/(^|[^a-z-])cpf(?![a-z])/i, "$1PF")) || t;
+}
+
 export function mapDashboardDoc(id, data) {
   return {
     id,
+    sistema: normalizarSistema(data.sistema, data.ac || data.AC),
+    tipoCertificado: normalizarTipoCertificado(data.tipoCertificado),
     protocolo: norm(data.protocolo || data.idSuporte || ""),
     responsavelAbertura:
       norm(data.responsavelAbertura || data.responsavel || data.cliente || "") || "Não informado",
@@ -55,6 +82,8 @@ export function mapDashboardDoc(id, data) {
     // Marcado ao registrar o 3º follow-up por ligação: o chamado deixa de
     // contar nas médias de tempo (ver duracaoAtendimento abaixo).
     foraDaMedia: Boolean(data.foraDaMedia),
+    // Tempo em REAGENDADO, descontado da fila, do atendimento e da conclusão.
+    periodosReagendado: Array.isArray(data.periodosReagendado) ? data.periodosReagendado : [],
     // Exclusão manual da média, sempre acompanhada de justificativa.
     excluirDaMedia: Boolean(data.excluirDaMedia),
     justificativaMedia: norm(data.justificativaMedia || ""),
@@ -70,7 +99,9 @@ export function mapDashboardDoc(id, data) {
     // Resultado da venda ligada ao chamado — vem do Kommo (status_id de
     // ganho/perdido) ou é informado manualmente ao concluir o suporte.
     vendaStatus: norm(data.vendaStatus || "").toUpperCase(),
-    valorVenda: Number(data.valorVenda) || 0
+    // Informados na tela de finalizar (e enviados ao Kommo).
+    valorVenda: Number(data.valorVenda) || 0,
+    valorVE: Number(data.valorVE) || 0
   };
 }
 
@@ -92,11 +123,22 @@ export function mapDashboardDoc(id, data) {
  */
 export function duracaoAtendimento(registro) {
   if (!isSuporteEncerrado(registro.status)) return null;
+  if (emReagendamento(registro)) return null;
   if (registro.foraDaMedia) return null;
   const inicio = registro.dataInicioAtendimento || registro.dataAbertura;
   const fim = registro.dataFinalizacao || registro.dataAtualizacao;
   if (!inicio || !fim) return null;
-  return horasEntre(inicio, fim);
+  return semReagendado(registro, inicio, fim);
+}
+
+/**
+ * Horas entre dois instantes, menos o tempo em que o chamado ficou REAGENDADO
+ * dentro deles (o cliente pediu para esperar — não é demora da equipe).
+ */
+function semReagendado(registro, inicio, fim) {
+  const horas = horasEntre(inicio, fim);
+  if (horas === null) return null;
+  return Math.max(0, horas - msReagendadoEntre(registro, inicio, fim) / 3600000);
 }
 
 /** True quando os dois carimbos exatos existem (associação e finalização). */
@@ -104,10 +146,20 @@ export function duracaoEhPrecisa(registro) {
   return Boolean(registro.dataInicioAtendimento && registro.dataFinalizacao);
 }
 
+/**
+ * Chamado parado em REAGENDADO (o cliente pediu para ser atendido depois): não
+ * entra nos tempos — fila, atendimento e conclusão — enquanto não voltar para
+ * EM ABERTO. Ao voltar, deixa de ser reagendado e conta normalmente.
+ */
+export function emReagendamento(registro) {
+  return registro?.status === "REAGENDADO";
+}
+
 /** Tempo na fila: da abertura até alguém se associar. */
 export function tempoDeFila(registro) {
+  if (emReagendamento(registro)) return null;
   if (!registro.dataInicioAtendimento || !registro.dataAbertura) return null;
-  return horasEntre(registro.dataAbertura, registro.dataInicioAtendimento);
+  return semReagendado(registro, registro.dataAbertura, registro.dataInicioAtendimento);
 }
 
 /**
@@ -116,10 +168,11 @@ export function tempoDeFila(registro) {
  */
 export function tempoDeAtendimento(registro) {
   if (registro.foraDaMedia) return null;
+  if (emReagendamento(registro)) return null;
   if (!registro.dataInicioAtendimento) return null;
   const fim = registro.dataFinalizacao;
   if (!fim) return null;
-  return horasEntre(registro.dataInicioAtendimento, fim);
+  return semReagendado(registro, registro.dataInicioAtendimento, fim);
 }
 
 /**
@@ -302,6 +355,32 @@ export function media(valores) {
 export function percent(parte, total) {
   if (!total) return "0%";
   return `${Math.round((parte / total) * 100)}%`;
+}
+
+/**
+ * Contagem cruzada (ex.: motivo × sistema): { linhas, colunas, valor(l, c), total(l) }.
+ * Linhas e colunas na ordem do total, maiores primeiro.
+ */
+export function cruzarContagem(lista, linhaFn, colunaFn) {
+  const mapa = new Map();
+  const totLinha = new Map();
+  const totColuna = new Map();
+  for (const r of lista) {
+    const l = linhaFn(r);
+    const c = colunaFn(r);
+    if (!l || !c) continue;
+    const k = l + "|" + c;
+    mapa.set(k, (mapa.get(k) || 0) + 1);
+    totLinha.set(l, (totLinha.get(l) || 0) + 1);
+    totColuna.set(c, (totColuna.get(c) || 0) + 1);
+  }
+  const ordem = (m) => [...m.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k);
+  return {
+    linhas: ordem(totLinha),
+    colunas: ordem(totColuna),
+    valor: (l, c) => mapa.get(l + "|" + c) || 0,
+    total: (l) => totLinha.get(l) || 0
+  };
 }
 
 export function agruparContagem(lista, chaveFn) {

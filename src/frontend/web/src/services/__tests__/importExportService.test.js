@@ -1,11 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 // Só a leitura/mapeamento de planilha é testada aqui; a gravação em lote é a
-// parte que fala com o Firestore e fica de fora.
-vi.mock("../../config/firebase", () => ({
-  db: {},
-  getApiBaseUrl: () => ""
-}));
+// parte que fala com o banco e fica de fora.
+vi.mock("../../config/supabase", () => ({ supabase: {}, getApiBaseUrl: () => "" }));
 
 const { diagnosticarRegistros, lerArquivo, lerCsv } = await import("../importExportService");
 

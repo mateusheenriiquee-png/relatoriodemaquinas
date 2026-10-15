@@ -1,7 +1,7 @@
 /**
  * metricasService.js — o sistema de métricas do painel "Central de Chamados".
  *
- * Só cálculo: nada aqui toca Firestore nem React, para que as mesmas contas
+ * Só cálculo: nada aqui toca o banco nem o React, para que as mesmas contas
  * possam ser testadas e reaproveitadas fora da tela.
  *
  * Três medidas de duração convivem de propósito, porque respondem a perguntas
@@ -19,10 +19,15 @@
  *
  * Chamados fora da média (3 follow-ups sem resposta, ou exclusão manual com
  * justificativa) saem das três: esperar cliente não é trabalho da equipe.
+ *
+ * Pelo mesmo motivo, o tempo em que o chamado ficou REAGENDADO (o cliente pediu
+ * para ser atendido depois) sai da ajustada e da útil. A corrida continua sendo
+ * o relógio de parede, sem desconto nenhum.
  */
 
 import { MOTIVOS, USOS } from "../utils/catalogos";
 import { STATUS_OPTIONS } from "../utils/format";
+import { msReagendadoEntre } from "../utils/reagendado";
 
 const DIA_MS = 86400000;
 
@@ -159,6 +164,8 @@ export function ehDataFutura(registro, agora = Date.now()) {
  */
 export function foraDaMedia(registro) {
   if (!registro) return false;
+  // Parado em REAGENDADO: fora dos tempos até voltar para EM ABERTO.
+  if (registro.status === "REAGENDADO") return true;
   if (registro.excluirDaMedia || registro.foraDaMedia) return true;
   return Array.isArray(registro.followups) && registro.followups.length >= 3;
 }
@@ -262,6 +269,7 @@ export function duracaoAjustada(registro, config) {
       Math.min(fim.getTime(), termino) - Math.max(inicio.getTime(), comeco)
     );
   });
+  duracao -= msReagendadoEntre(registro, inicio, fim);
   return Math.max(0, duracao);
 }
 
@@ -270,7 +278,8 @@ export function duracaoUtil(registro, config) {
   const inicio = abertoEm(registro);
   const fim = encerradoEm(registro);
   if (!inicio || !fim || fim < inicio) return null;
-  return msUteisEntre(inicio, fim, config);
+  const reagendado = msReagendadoEntre(registro, inicio, fim, (de, ate) => msUteisEntre(de, ate, config));
+  return Math.max(0, msUteisEntre(inicio, fim, config) - reagendado);
 }
 
 /** "45 min", "3h 20min", "2d 4h" — a escala muda com a grandeza. */
@@ -432,18 +441,23 @@ export function metricasDoPeriodo(lista, intervalo, config) {
     mapa[r.usoPlat] = (mapa[r.usoPlat] || 0) + 1;
   });
 
-  // Venda ganha/perdida só faz sentido para o que já foi decidido — mesmo
-  // critério de data usado por taxa de sucesso e tempos (encerramento).
-  const porVenda = { GANHO: 0, PERDIDO: 0, "NAO INFORMADO": 0 };
+  // Venda ganha: conta o VALOR informado na tela de finalizar (o mesmo que vai
+  // para o Kommo). "Perdido" saiu (pedido do usuário em 2026-09-29): ninguém
+  // marca mais venda perdida — ou o chamado tem valor, ou não foi informado.
+  // O status antigo "GANHO" (import do Kommo) continua valendo. Mesmo
+  // critério de data das outras métricas de encerrados.
+  const porVenda = { GANHO: 0, "NAO INFORMADO": 0 };
   let valorGanho = 0;
-  let valorPerdido = 0;
+  let valorVE = 0;
   encerrados.forEach((r) => {
-    const v = r.vendaStatus === "GANHO" || r.vendaStatus === "PERDIDO" ? r.vendaStatus : "NAO INFORMADO";
-    porVenda[v] += 1;
-    if (v === "GANHO") valorGanho += r.valorVenda || 0;
-    if (v === "PERDIDO") valorPerdido += r.valorVenda || 0;
+    const ganho = (r.valorVenda || 0) > 0 || r.vendaStatus === "GANHO";
+    porVenda[ganho ? "GANHO" : "NAO INFORMADO"] += 1;
+    if (ganho) {
+      valorGanho += r.valorVenda || 0;
+      valorVE += r.valorVE || 0;
+    }
   });
-  const totalVenda = porVenda.GANHO + porVenda.PERDIDO;
+  const totalVenda = encerrados.length;
   const reincidencia = calcularReincidencia(encerrados, lista);
 
   return {
@@ -461,7 +475,7 @@ export function metricasDoPeriodo(lista, intervalo, config) {
     plataformas,
     porVenda,
     valorGanho,
-    valorPerdido,
+    valorVE,
     taxaVenda: totalVenda ? Math.round((porVenda.GANHO / totalVenda) * 100) : 0,
     reincidencia
   };

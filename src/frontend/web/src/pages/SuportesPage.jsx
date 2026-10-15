@@ -9,6 +9,7 @@ import ReagendarModal from "../components/modals/ReagendarModal";
 import TextoModal from "../components/modals/TextoModal";
 import ChangeTecnicoModal from "../components/modals/ChangeTecnicoModal";
 import SuporteFormModal from "../components/modals/SuporteFormModal";
+import NovoPorLeadModal from "../components/modals/NovoPorLeadModal";
 import ImportarModal from "../components/modals/ImportarModal";
 import ExportarModal from "../components/modals/ExportarModal";
 import { useToast } from "../components/ToastProvider";
@@ -26,7 +27,10 @@ import {
   definirForaDaMedia,
   definirIndevido,
   excluirSuporte,
+  lerRegistro,
+  descartarAvisoDuplicado,
   marcarSemRetorno,
+  enviarFinalizacaoAoKommo,
   processarReagendadosVencidos,
   reagendarSuporte,
   registrarFollowup,
@@ -47,6 +51,7 @@ import {
 const STAT_CARDS = [
   { status: "EM ABERTO", label: "Em aberto", chave: "abertos" },
   { status: "EM ANDAMENTO", label: "Em andamento", chave: "andamento" },
+  { status: "REAGENDADO", label: "Reagendados", chave: "reagendado" },
   { status: "FINALIZADO", label: "Finalizados", chave: "finalizados" },
   { status: "todos", label: "Total", chave: "total" }
 ];
@@ -63,7 +68,7 @@ export default function SuportesPage() {
     const vindos = {};
     // `protocolo` entra aqui para os alertas do dashboard (data futura, duração
     // fora do padrão) abrirem direto no chamado apontado.
-    ["status", "ac", "tecnico", "statusAbertura", "protocolo"].forEach((campo) => {
+    ["status", "ac", "tecnico", "statusAbertura", "protocolo", "dataInicio", "dataFim"].forEach((campo) => {
       const valor = searchParams.get(campo);
       if (valor) vindos[campo] = valor;
     });
@@ -100,6 +105,20 @@ export default function SuportesPage() {
   );
 
   const [drawerItem, setDrawerItem] = useState(null);
+
+  /**
+   * Abre o chamado e, se ele tinha a bolinha de mensagem nova, zera em
+   * segundo plano — é o "abrir = já vi". Sem toast, sem entrar no histórico:
+   * é só contagem para a lista, não um evento do atendimento.
+   */
+  const abrirChamado = useCallback((item) => {
+    setDrawerItem(item);
+    if (item.mensagensNaoLidas > 0) {
+      atualizarSuporte(item.id, { mensagensNaoLidas: 0 }).catch((err) =>
+        console.error("[Suportes] Falha ao zerar mensagens não lidas:", err)
+      );
+    }
+  }, []);
   // `?id=` vindo dos alertas do dashboard. Guardado numa ref para abrir o
   // painel UMA vez: sem isso, fechar o drawer o reabriria no próximo render,
   // já que o parâmetro continua na URL.
@@ -166,7 +185,7 @@ export default function SuportesPage() {
     if (!idParaAbrir.current) return;
     const alvo = buscarRegistro(idParaAbrir.current);
     if (alvo) {
-      setDrawerItem(alvo);
+      abrirChamado(alvo);
       idParaAbrir.current = "";
     }
   }, [buscarRegistro]);
@@ -180,14 +199,13 @@ export default function SuportesPage() {
   /**
    * Dispara a ação e devolve o controle na hora, sem esperar o servidor.
    *
-   * O Firestore já grava no cache local antes de falar com a rede, e o
-   * `onSnapshot` da tela dispara com essa escrita pendente — ou seja, a lista e
-   * o painel JÁ mostram o resultado imediatamente. O que fazia a tela parecer
+   * O suportesStore aplica a escrita na tela antes de falar com a rede — ou
+   * seja, a lista e o painel JÁ mostram o resultado imediatamente. O que fazia a tela parecer
    * travada em conexão ruim era só o `await`: o modal ficava aberto e o botão
    * girando até o servidor responder, muito depois de o dado estar na tela.
    *
    * O sucesso continua sendo avisado só depois da confirmação — dizer "salvo"
-   * antes de estar salvo seria mentira. Se a escrita falhar, o Firestore desfaz
+   * antes de estar salvo seria mentira. Se a escrita falhar, o suportesStore desfaz
    * a alteração local sozinho (a lista volta ao que era) e o toast de erro
    * explica o que houve.
    *
@@ -228,6 +246,8 @@ export default function SuportesPage() {
     // Gravado mesmo vazio (e não pelo `put`): na edição, apagar o nome precisa
     // apagá-lo de fato — junto com a chave de busca, que o serviço deriva daqui.
     payload.nomeCliente = norm(form.nomeCliente);
+    // Mesma regra: limpar a descrição na edição precisa apagá-la.
+    payload.descricao = norm(form.descricao);
     if (form.tecnico) {
       payload.tecnico = titleCaseName(form.tecnico);
       payload.tecnicoKey = normKey(payload.tecnico);
@@ -244,6 +264,18 @@ export default function SuportesPage() {
     if (modo === "adicionar") {
       put("responsavelAbertura", form.responsavelAbertura);
       put("statusAbertura", form.statusAbertura);
+
+      // Aberto pelo lead (NovoPorLeadModal): liga o chamado ao lead, ao contato
+      // e à conversa do Kommo — é isso que faz funcionar a bolinha, o
+      // pré-preenchimento da finalização, a verificação de pagamento e a regra
+      // de não duplicar. `dados` traz colunas que o formulário não mostra
+      // (email, tipo do certificado), e `extras` vai para o jsonb extras.
+      const doLead = modal.preenchido;
+      if (doLead?.leadId) {
+        payload.kommoLeadId = String(doLead.leadId);
+        payload.origemIntegracao = "kommo-painel";
+        Object.assign(payload, doLead.dados || {}, doLead.extras || {});
+      }
 
       /*
        * Abertura retroativa (só admin). A checagem é refeita aqui, e não só no
@@ -271,7 +303,9 @@ export default function SuportesPage() {
             por: displayName,
             nota: retroativa
               ? `abertura retroativa para ${retroativa.toLocaleString("pt-BR")}`
-              : ""
+              : modal.preenchido?.leadId
+                ? `a partir do lead #${modal.preenchido.leadId} do Kommo`
+                : ""
           }),
         "Suporte adicionado com sucesso."
       );
@@ -309,11 +343,23 @@ export default function SuportesPage() {
   }
 
   async function handleAssociar(item) {
-    const ok = await executar(
-      () => associarTecnico(item, { getIdToken, displayName }),
-      "Técnico associado com sucesso."
-    );
+    const ok = await executar(async () => {
+      await associarTecnico(item, { getIdToken, displayName });
+    }, "Técnico associado com sucesso.");
     if (ok) setDrawerItem(null);
+  }
+
+  /** Resultado da sincronização da finalização com o Kommo. */
+  function avisarKommoConcluir(resultado) {
+    const partes = [];
+    if (resultado.camposGravados) partes.push(`${resultado.camposGravados} campo(s) preenchido(s)`);
+    if (resultado.emailGravado) partes.push("email gravado no contato");
+    if (partes.length) toast.info(`Kommo: ${partes.join(", ")}.`, 5000);
+
+    if (resultado.camposIgnorados?.length) {
+      // Cada item já traz o motivo ("Sistema: opção "X" não existe (opções: ...)").
+      toast.warning(`Kommo — não preenchidos (preencha no lead): ${resultado.camposIgnorados.join(" · ")}`, 12000);
+    }
   }
 
   async function handleConcluir(item, dadosFinalizacao = {}) {
@@ -323,10 +369,15 @@ export default function SuportesPage() {
       extras.statusAbertura = "INDEVIDO";
       extras.motivoIndevido = motivo;
     }
-    const ok = await executar(
-      () => concluirSuporte(item.id, extras, { por: displayName, statusAnterior: item.status }),
-      "Suporte marcado como finalizado."
-    );
+    const ok = await executar(async () => {
+      await concluirSuporte(item.id, extras, { por: displayName, statusAnterior: item.status });
+      // Só depois de gravado: o Worker lê os dados da finalização do banco
+      // para preencher o lead. Best-effort — o suporte já está finalizado de
+      // qualquer forma; uma falha no Kommo não desfaz nem trava nada.
+      enviarFinalizacaoAoKommo(item, { getIdToken })
+        .then(avisarKommoConcluir)
+        .catch((err) => toast.warning(`Kommo não foi atualizado: ${err?.message || err}`, 8000));
+    }, "Suporte marcado como finalizado.");
     if (ok) {
       setPendentesIndevido((atual) => {
         const copia = { ...atual };
@@ -391,6 +442,23 @@ export default function SuportesPage() {
       setModal({ tipo: "reagendar", item });
     },
     onSemRetorno: (item) => setModal({ tipo: "sem-retorno", item }),
+    // Possível duplicado (09/10): abre o outro chamado, ou tira o aviso.
+    onAbrirDuplicado: async (id) => {
+      try {
+        const outro = buscarRegistro(id) || (await lerRegistro(id));
+        if (outro) abrirChamado(outro);
+        else toast.error("O outro chamado não foi encontrado (pode ter sido excluído).");
+      } catch (err) {
+        toast.error(err?.message || "Não foi possível abrir o outro chamado.");
+      }
+    },
+    onNaoEDuplicado: async (item) => {
+      const ok = await executar(
+        () => descartarAvisoDuplicado(item.id, { por: displayName }),
+        "Aviso de possível duplicado retirado."
+      );
+      if (ok) setDrawerItem(null);
+    },
     onVoltarEmAberto: async (item) => {
       const ok = await executar(
         () => voltarParaEmAberto(item.id, { por: displayName, statusAnterior: item.status }),
@@ -426,13 +494,14 @@ export default function SuportesPage() {
   return (
     <div className="container">
       <AppHeader
-        onNovoSuporte={() => setModal({ tipo: "form-adicionar", item: null })}
+        onNovoSuporte={() => setModal({ tipo: "novo-lead", item: null })}
         onAtualizar={() => {
           atualizarContagens();
           toast.info("Lista sincronizada.", 1500);
         }}
         onImportar={() => setImportExport("importar")}
         onExportar={() => setImportExport("exportar")}
+        onAbrirChamado={abrirChamado}
       />
 
       <section className="toolbar">
@@ -489,11 +558,11 @@ export default function SuportesPage() {
         </div>
 
         <div className="field">
-          <label htmlFor="filtroProtocolo">Protocolo / CPF / Contato / Nome</label>
+          <label htmlFor="filtroProtocolo">Protocolo / CPF / Telefone / Nome / Nº do lead</label>
           <input
             id="filtroProtocolo"
             type="text"
-            placeholder="Protocolo, CPF/CNPJ, contato ou nome do cliente"
+            placeholder="Protocolo, CPF/CNPJ, telefone, nome ou nº do lead"
             value={buscaLocal}
             onChange={(e) => setBuscaLocal(e.target.value)}
           />
@@ -586,7 +655,7 @@ export default function SuportesPage() {
         ) : (
           <div className="cards-grid" aria-live="polite">
             {registros.map((item) => (
-              <SupportCard key={item.id} item={item} onClick={setDrawerItem} />
+              <SupportCard key={item.id} item={item} onClick={abrirChamado} />
             ))}
           </div>
         )}
@@ -599,6 +668,23 @@ export default function SuportesPage() {
         actions={acoesDrawer}
       />
 
+      <NovoPorLeadModal
+        open={modal.tipo === "novo-lead"}
+        getIdToken={getIdToken}
+        onClose={fecharModal}
+        onPreenchido={(resultado) => setModal({ tipo: "form-adicionar", item: null, preenchido: resultado })}
+        onAbrirExistente={async (existente) => {
+          fecharModal();
+          try {
+            const item = buscarRegistro(existente.id) || (await lerRegistro(existente.id));
+            if (item) abrirChamado(item);
+            else toast.error("Não foi possível abrir o chamado existente.");
+          } catch (err) {
+            toast.error(err?.message || "Não foi possível abrir o chamado existente.");
+          }
+        }}
+      />
+
       <SuporteFormModal
         open={
           modal.tipo === "form-adicionar" ||
@@ -608,6 +694,7 @@ export default function SuportesPage() {
         modo={modal.tipo === "form-editar" ? "editar" : "adicionar"}
         item={modal.tipo === "form-editar" ? modal.item : null}
         clienteBase={modal.tipo === "form-cliente" ? modal.item : null}
+        preenchido={modal.tipo === "form-adicionar" ? modal.preenchido || null : null}
         responsavelPadrao={displayName}
         onClose={fecharModal}
         isAdmin={isAdmin}
@@ -664,6 +751,7 @@ export default function SuportesPage() {
         item={modal.item}
         onClose={fecharModal}
         onConfirm={(dados) => handleConcluir(modal.item, dados)}
+        getIdToken={getIdToken}
       />
 
       <TextoModal

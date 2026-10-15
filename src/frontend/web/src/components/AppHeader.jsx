@@ -1,6 +1,8 @@
 import { Link, useNavigate } from "react-router-dom";
 import Brand from "./Brand";
 import ThemeToggle from "./ThemeToggle";
+import AvisoToggle from "./AvisoToggle";
+import DescartadasBotao from "./DescartadasBotao";
 import { useAuth } from "../contexts/AuthContext";
 import {
   IconAdmin,
@@ -11,7 +13,7 @@ import {
   IconRefresh
 } from "./Icons";
 
-export default function AppHeader({ onNovoSuporte, onAtualizar, onImportar, onExportar }) {
+export default function AppHeader({ onNovoSuporte, onAtualizar, onImportar, onExportar, onAbrirChamado }) {
   const { isAdmin, displayName, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -25,34 +27,34 @@ export default function AppHeader({ onNovoSuporte, onAtualizar, onImportar, onEx
       <Brand subtitulo="Atendimentos" />
 
       <div className="actions">
-        <Link to="/dashboard" className="btn btn-tonal">
+        <Link to="/dashboard" className="btn btn-tonal" title="Dashboard">
           <IconDashboard />
-          Dashboard
+          <span className="btn-rotulo">Dashboard</span>
         </Link>
 
         {isAdmin ? (
-          <Link to="/admin" className="btn btn-tonal">
+          <Link to="/admin" className="btn btn-tonal" title="Admin">
             <IconAdmin />
-            Admin
+            <span className="btn-rotulo">Admin</span>
           </Link>
         ) : null}
 
-        <button type="button" className="btn btn-ghost" onClick={onAtualizar}>
+        <button type="button" className="btn btn-ghost" onClick={onAtualizar} title="Atualizar">
           <IconRefresh />
-          Atualizar
+          <span className="btn-rotulo">Atualizar</span>
         </button>
 
-        <button type="button" className="btn btn-ghost" onClick={onExportar}>
+        <button type="button" className="btn btn-ghost" onClick={onExportar} title="Exportar">
           <IconExport />
-          Exportar
+          <span className="btn-rotulo">Exportar</span>
         </button>
 
         {/* Importar pode apagar a base inteira no modo "substituir" — fica com
             quem já tem permissão para excluir registros. */}
         {isAdmin ? (
-          <button type="button" className="btn btn-ghost" onClick={onImportar}>
+          <button type="button" className="btn btn-ghost" onClick={onImportar} title="Importar">
             <IconImport />
-            Importar
+            <span className="btn-rotulo">Importar</span>
           </button>
         ) : null}
 
@@ -61,6 +63,8 @@ export default function AppHeader({ onNovoSuporte, onAtualizar, onImportar, onEx
           Novo Suporte
         </button>
 
+        <DescartadasBotao onAbrirChamado={onAbrirChamado} />
+        <AvisoToggle />
         <ThemeToggle />
 
         <span className="user-info">

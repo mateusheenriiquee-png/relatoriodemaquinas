@@ -9,6 +9,7 @@ import ConfigMetricasPanel from "../components/dashboard/ConfigMetricasPanel";
 import HeatmapSuportes from "../components/dashboard/HeatmapSuportes";
 import PeriodoSelector from "../components/dashboard/PeriodoSelector";
 import ThemeToggle from "../components/ThemeToggle";
+import AvisoToggle from "../components/AvisoToggle";
 import { useToast } from "../components/ToastProvider";
 import { useAuth } from "../contexts/AuthContext";
 import { useTheme } from "../contexts/ThemeContext";
@@ -22,6 +23,7 @@ import { useDashboard } from "../hooks/useDashboard";
 import { useMetricasConfig } from "../hooks/useMetricasConfig";
 import {
   agruparContagem,
+  cruzarContagem,
   agruparPorTecnico,
   duracaoAtendimento,
   duracaoEhPrecisa,
@@ -136,18 +138,28 @@ export default function DashboardPage() {
     navigate("/login", { replace: true });
   }
 
-  /** Drill-down: abre a lista já filtrada, herdando os filtros do dashboard. */
+  /**
+   * Drill-down: abre a lista já filtrada, herdando os filtros do dashboard —
+   * inclusive o período (antes ia sem data e a lista mostrava todo o histórico,
+   * com números bem maiores que o do gráfico).
+   */
   const abrirLista = useCallback(
     (extra = {}) => {
       const params = new URLSearchParams({ status: "todos" });
-      if (ac !== "todos") params.set("ac", ac);
+      if (ac !== "todos" && ac !== "Não informado") params.set("ac", ac);
       if (tecnico !== "todos") params.set("tecnico", tecnico);
+      const dia = (ms) => {
+        const d = new Date(ms);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      };
+      if (intervaloA && Number.isFinite(intervaloA[0])) params.set("dataInicio", dia(intervaloA[0]));
+      if (intervaloA && Number.isFinite(intervaloA[1])) params.set("dataFim", dia(intervaloA[1] - 1));
       Object.entries(extra).forEach(([chave, valor]) => {
         if (valor) params.set(chave, valor);
       });
       navigate(`/?${params.toString()}`);
     },
-    [ac, tecnico, navigate]
+    [ac, tecnico, intervaloA, navigate]
   );
 
   /** Clique numa barra/fatia abre a lista filtrada por aquele valor. */
@@ -156,7 +168,8 @@ export default function DashboardPage() {
       const indice = elementos?.[0]?.index;
       if (indice === undefined) return;
       const valor = labels[indice];
-      if (valor) abrirLista({ [campo]: valor });
+      // "Não informado" não é um valor que a lista saiba filtrar.
+      if (valor && valor !== "Não informado") abrirLista({ [campo]: valor });
     },
     [abrirLista]
   );
@@ -262,7 +275,6 @@ export default function DashboardPage() {
   const breakdownVenda = useMemo(
     () => [
       ["GANHO", metricasA.porVenda.GANHO],
-      ["PERDIDO", metricasA.porVenda.PERDIDO],
       ["NAO INFORMADO", metricasA.porVenda["NAO INFORMADO"]]
     ],
     [metricasA]
@@ -291,8 +303,19 @@ export default function DashboardPage() {
 
   const porTecnico = useMemo(() => agruparPorTecnico(dados), [dados]);
   const porStatus = useMemo(() => agruparContagem(dados, (r) => r.status), [dados]);
-  const porAc = useMemo(() => agruparContagem(dados, (r) => r.ac).slice(0, 6), [dados]);
   const porTipo = useMemo(() => agruparContagem(dados, (r) => r.tipo).slice(0, 6), [dados]);
+  // De onde vem o suporte (09/10): sistema (AC) e tipo do certificado, e quais
+  // motivos se repetem em cada sistema — aponta onde o passo a passo enviado
+  // na emissão precisa melhorar.
+  const porSistema = useMemo(() => agruparContagem(dados, (r) => r.sistema), [dados]);
+  const porTipoCertificado = useMemo(
+    () => agruparContagem(dados, (r) => r.tipoCertificado).slice(0, 8),
+    [dados]
+  );
+  const motivoPorSistema = useMemo(
+    () => cruzarContagem(dados, (r) => r.motivoCat || "Outros", (r) => r.sistema),
+    [dados]
+  );
 
   /** Média de duração por técnico, só sobre atendimentos mensuráveis. */
   const tempoPorTecnico = useMemo(() => {
@@ -409,7 +432,7 @@ export default function DashboardPage() {
    * Vai pelos dois caminhos de propósito: `id` abre o painel do chamado direto
    * quando ele está entre os carregados, e `protocolo` deixa a lista filtrada —
    * que é o único caminho possível para os 185 chamados importados sem
-   * protocolo, cujo `id` a busca do Firestore não indexa.
+   * protocolo, cujo `id` a busca do banco não indexa.
    */
   const abrirChamado = useCallback(
     (registro) => {
@@ -437,6 +460,7 @@ export default function DashboardPage() {
           </div>
 
           <div className="actions dashboard-actions">
+            <AvisoToggle />
             <ThemeToggle />
             <span className="user-info">
               <span>
@@ -814,24 +838,6 @@ export default function DashboardPage() {
                 </p>
               </ChartCard>
 
-              <ChartCard titulo="Por AC" meta={`top ${porAc.length}`}>
-                <div className="chart-wrap chart-wrap-bar-h">
-                  <ChartCanvas
-                    type="bar"
-                    data={{
-                      labels: porAc.map(([k]) => k),
-                      datasets: [{ label: "Suportes", ...barraUnica(porAc.map(([, v]) => v)) }]
-                    }}
-                    options={{
-                      ...semLegenda,
-                      indexAxis: "y",
-                      onClick: cliqueNoGrafico("ac", porAc.map(([k]) => k)),
-                      scales: { x: { beginAtZero: true } }
-                    }}
-                  />
-                </div>
-              </ChartCard>
-
               {reparticaoDoTempo.amostra > 0 ? (
                 <ChartCard
                   titulo="Onde o tempo é gasto"
@@ -902,6 +908,78 @@ export default function DashboardPage() {
                 </div>
               </ChartCard>
 
+              <ChartCard titulo="Por sistema" meta="Consulti · Valid · Soluti">
+                <div className="chart-wrap chart-wrap-bar-h">
+                  <ChartCanvas
+                    type="bar"
+                    data={{
+                      labels: porSistema.map(([k]) => k),
+                      datasets: [{ label: "Suportes", ...barraUnica(porSistema.map(([, v]) => v)) }]
+                    }}
+                    options={{
+                      ...semLegenda,
+                      indexAxis: "y",
+                      onClick: cliqueNoGrafico("ac", porSistema.map(([k]) => k)),
+                      scales: { x: { beginAtZero: true } }
+                    }}
+                  />
+                </div>
+              </ChartCard>
+
+              <ChartCard titulo="Por tipo de certificado" meta={`top ${porTipoCertificado.length}`}>
+                <div className="chart-wrap chart-wrap-bar-h">
+                  <ChartCanvas
+                    type="bar"
+                    data={{
+                      labels: porTipoCertificado.map(([k]) => k),
+                      datasets: [{ label: "Suportes", ...barraUnica(porTipoCertificado.map(([, v]) => v)) }]
+                    }}
+                    options={{ ...semLegenda, indexAxis: "y", scales: { x: { beginAtZero: true } } }}
+                  />
+                </div>
+              </ChartCard>
+
+              <ChartCard titulo="Motivo × sistema" meta="quais motivos se repetem em cada sistema" largura="span-full">
+                {motivoPorSistema.linhas.length ? (
+                  <div className="tabela-cruzada-wrap">
+                    <table className="tabela-cruzada">
+                      <thead>
+                        <tr>
+                          <th scope="col">Motivo</th>
+                          {motivoPorSistema.colunas.map((c) => (
+                            <th key={c} scope="col">{c}</th>
+                          ))}
+                          <th scope="col">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {motivoPorSistema.linhas.map((l) => {
+                          const total = motivoPorSistema.total(l);
+                          return (
+                            <tr key={l}>
+                              <th scope="row">{l}</th>
+                              {motivoPorSistema.colunas.map((c) => {
+                                const v = motivoPorSistema.valor(l, c);
+                                // Tom da célula pela fatia do motivo naquele sistema.
+                                const peso = total ? v / total : 0;
+                                return (
+                                  <td key={c} style={{ "--peso": peso.toFixed(2) }} className={v ? "tem-valor" : ""}>
+                                    {v || "–"}
+                                  </td>
+                                );
+                              })}
+                              <td className="tabela-cruzada-total">{total}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="chart-nota">Sem chamados no período.</p>
+                )}
+              </ChartCard>
+
               <ChartCard
                 titulo="Devido / Indevido por responsável"
                 meta={`top ${devidoIndevido.responsaveis.length}`}
@@ -969,12 +1047,14 @@ export default function DashboardPage() {
                 <BreakdownList itens={breakdownUso} subItens={metricasA.plataformas} />
               </ChartCard>
 
-              <ChartCard titulo="Venda ganha/perdida" meta={`${metricasA.taxaVenda}% de taxa de ganho`}>
+              <ChartCard titulo="Venda ganha" meta={`${metricasA.taxaVenda}% dos encerrados com valor`}>
                 <BreakdownList itens={breakdownVenda} />
                 <p className="chart-nota">
-                  {metricasA.valorGanho.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}{" "}
-                  ganhos · {metricasA.valorPerdido.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}{" "}
-                  perdidos
+                  {metricasA.valorGanho.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} em vendas
+                  {metricasA.valorVE > 0
+                    ? ` · ${metricasA.valorVE.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} em validade estendida`
+                    : ""}
+                  . Conta o valor informado ao finalizar o suporte.
                 </p>
               </ChartCard>
             </div>

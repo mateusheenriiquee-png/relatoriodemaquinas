@@ -1,6 +1,5 @@
 /**
- * supabase-rest.mjs — o acesso do Worker ao Supabase (substitui firestore-rest,
- * identity-rest e verify-id-token).
+ * supabase-rest.mjs — o acesso do Worker ao Supabase.
  *
  * Fala direto com a API REST (PostgREST) e a de Auth por `fetch`, sem SDK: o
  * Worker é pequeno e o supabase-js traria de volta o peso que ele não precisa.
@@ -123,6 +122,40 @@ export async function upsertRecords({ env, records }) {
     });
   }
   return linhas.length;
+}
+
+const ABERTOS = "(%22EM%20ABERTO%22,%22EM%20ANDAMENTO%22,REAGENDADO)";
+
+/**
+ * Chamado ABERTO ligado a um lead do Kommo, ou null. Um lead pode ter vários
+ * chamados ao longo do tempo (cada volta ao suporte abre um novo — desde
+ * 2026-10-02), mas só um aberto por vez: o banco garante (suportes_lead_aberto_uk).
+ */
+export async function lerSuportePorLead(env, leadId) {
+  const linhas = await pedir(
+    env,
+    `/rest/v1/suportes?select=*&kommo_lead_id=eq.${encodeURIComponent(leadId)}&status=in.${ABERTOS}&order=created_at.desc&limit=1`
+  );
+  return linhas?.[0] || null;
+}
+
+/**
+ * Chamado ABERTO do mesmo cliente pelas pistas de sempre (conversa, contato
+ * do Kommo, telefone, CPF/CNPJ, protocolo) — a mesma função que as automações
+ * usam para não duplicar (migração 20260929000100). Devolve o id ou null.
+ */
+export async function acharChamadoAberto(env, { talkId = "", contactId = "", contato = "", cpfCnpj = "", protocolo = "" }) {
+  const id = await pedir(env, "/rest/v1/rpc/achar_chamado_aberto", {
+    metodo: "POST",
+    corpo: {
+      p_kommo_talk_id: String(talkId || ""),
+      p_kommo_contact_id: String(contactId || ""),
+      p_contato: contato,
+      p_cpf_cnpj: cpfCnpj,
+      p_protocolo: protocolo
+    }
+  });
+  return id || null;
 }
 
 export async function lerSuporte(env, id) {

@@ -171,6 +171,34 @@ export function getWhatsAppMessageForType(userDisplayName, supportType, protocol
   return `*[${userDisplayName} | Suporte Técnico]*\nBom dia, tudo certo?\n${typeMessage}\n\nPedido: #${protocolNumber}`;
 }
 
+/**
+ * Saudação pelo horário de Brasília (e não pelo relógio da máquina de quem
+ * clica): das 8h às 12h "Bom dia", das 12h às 18h "Boa tarde". Fora dessa
+ * janela o texto não pode ser "Bom dia" (pedido do usuário): das 18h em
+ * diante "Boa noite" e antes das 8h um "Olá" neutro.
+ */
+export function saudacaoDoDia(agora = new Date()) {
+  const hora = Number(
+    new Intl.DateTimeFormat("pt-BR", {
+      hour: "numeric",
+      hourCycle: "h23",
+      timeZone: "America/Sao_Paulo"
+    }).format(agora)
+  );
+  if (hora >= 8 && hora < 12) return "Bom dia";
+  if (hora >= 12 && hora < 18) return "Boa tarde";
+  if (hora >= 18) return "Boa noite";
+  return "Olá";
+}
+
+/** Primeira mensagem ao cliente, com a saudação do momento (botão do WhatsApp no painel). */
+export function mensagemPrimeiroContato(nomeDoUsuario, agora = new Date()) {
+  const nome = String(nomeDoUsuario || "").trim();
+  const apresentacao = nome ? `Aqui é o ${nome} da equipe técnica da Certify` : "Aqui é da equipe técnica da Certify";
+  return `${saudacaoDoDia(agora)}, tudo certo?
+${apresentacao}, pode me explicar melhor sua situação?`;
+}
+
 export function buildWhatsAppPhone(raw) {
   let digits = String(raw || "").replace(/\D/g, "");
   if (!digits) return "";

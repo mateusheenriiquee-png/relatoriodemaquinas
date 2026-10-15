@@ -14,6 +14,9 @@ export const COLUNAS = {
   nomeCliente: "nome_cliente",
   responsavelAbertura: "responsavel_abertura",
   cpfCnpj: "cpf_cnpj",
+  // CPF da pessoa (sócio/titular), separado do Doc. Cliente — num PJ aquele é
+  // o CNPJ. Gravado no campo "CPF" do lead e do contato no Kommo.
+  cpf: "cpf",
   contato: "contato",
   tipo: "tipo",
   ac: "ac",
@@ -48,6 +51,8 @@ export const COLUNAS = {
   kommoPipelineId: "kommo_pipeline_id",
   kommoStatusId: "kommo_status_id",
   kommoResponsibleId: "kommo_responsible_id",
+  // Bolinha de mensagem nova do cliente (só conta com o chamado EM ANDAMENTO).
+  mensagensNaoLidas: "mensagens_nao_lidas",
   // Dados pedidos ao finalizar o suporte (ConcluirSuporteModal).
   emailCliente: "email_cliente",
   comprouOutroProduto: "comprou_outro_produto",
@@ -56,20 +61,28 @@ export const COLUNAS = {
   dataVencimento: "data_vencimento",
   tipoCertificado: "tipo_certificado",
   validadeEstendida: "validade_estendida",
-  sistema: "sistema"
+  sistema: "sistema",
+  // Valor da validade estendida — opcional, null = não informado.
+  valorVE: "valor_ve",
+  // Períodos em REAGENDADO [{ de, ate }] — mantidos por gatilho no banco
+  // (migração 20261005000000); o dashboard desconta esse tempo das médias.
+  periodosReagendado: "periodos_reagendado",
+  // Última mensagem do cliente com o chamado EM ANDAMENTO (gravada por
+  // registrar_mensagem_cliente): ordena a lista "Em andamento".
+  ultimaMensagemClienteEm: "ultima_mensagem_cliente_em"
 };
 
 /** Campos que o banco calcula: quem os enviar é ignorado (o front antigo os gravava à mão). */
 const DERIVADOS = new Set(["id", "tecnicoKey", "nomeClienteKey", "createdAt", "updatedAt"]);
 
-const COLUNA_DATA = new Set(["data_abertura", "data_inicio_atendimento", "data_finalizacao", "data_reagendamento"]);
+const COLUNA_DATA = new Set(["data_abertura", "data_inicio_atendimento", "data_finalizacao", "data_reagendamento", "ultima_mensagem_cliente_em"]);
 const COLUNA_BOOL = new Set(["excluir_da_media", "fora_da_media"]);
 // Sim/não em que "não perguntado" (chamado antigo) é diferente de "não".
 const COLUNA_BOOL_NULAVEL = new Set(["comprou_outro_produto"]);
 // Datas sem hora (colunas `date`): viajam como "AAAA-MM-DD", sem fuso — um
 // certificado emitido dia 23 não pode virar dia 22 por causa do UTC-3.
 const COLUNA_DIA = new Set(["data_emissao", "data_vencimento"]);
-const COLUNA_JSON = new Set(["historico", "followups"]);
+const COLUNA_JSON = new Set(["historico", "followups", "periodos_reagendado"]);
 // Colunas que aceitam NULL de verdade; as demais de texto são NOT NULL DEFAULT ''.
 const COLUNA_NULAVEL_TEXTO = new Set(["venda_status", "idempotency_key", "kommo_lead_id", "kommo_pipeline_id", "kommo_status_id", "kommo_responsible_id"]);
 
@@ -119,8 +132,12 @@ function valorDaColuna(coluna, valor) {
   if (COLUNA_BOOL.has(coluna)) return Boolean(valor);
   if (COLUNA_BOOL_NULAVEL.has(coluna)) return valor === null || valor === "" ? null : Boolean(valor);
   if (COLUNA_JSON.has(coluna)) return Array.isArray(valor) ? valor : [];
-  if (coluna === "followups_importados") return Number(valor) || 0;
+  if (coluna === "followups_importados" || coluna === "mensagens_nao_lidas") return Number(valor) || 0;
   if (coluna === "valor_venda") return Number(valor) || 0;
+  if (coluna === "valor_ve") {
+    const n = valor === null || valor === "" ? NaN : Number(valor);
+    return Number.isFinite(n) ? n : null;
+  }
   if (COLUNA_NULAVEL_TEXTO.has(coluna)) {
     const t = valor === null || valor === undefined ? "" : String(valor).trim();
     return t === "" ? null : t;

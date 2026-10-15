@@ -1,38 +1,30 @@
-import { afterEach, before, describe, it } from "node:test";
+import { afterEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { processKommoWebhookPost } from "../webhook-kommo.mjs";
 import { MAX_RECORDS_POR_REQUISICAO } from "../../shared/webhook-shared.js";
-import { gerarServiceAccount, mockFetch, respostaJson, rotasGoogle } from "./helpers.mjs";
+import { envSupabase, mockFetch, respostaJson, SUPABASE_URL } from "./helpers.mjs";
 
 const TOKEN = "segredo-do-webhook";
 const KOMMO_URL = "https://conta-teste.kommo.com";
-let serviceAccount;
 let fetchMock;
-
-before(async () => {
-  serviceAccount = await gerarServiceAccount();
-});
 
 afterEach(() => fetchMock?.restaurar());
 
-const ENV = () => ({
-  WEBHOOK_TOKEN: TOKEN,
-  FIREBASE_SERVICE_ACCOUNT: serviceAccount,
-  KOMMO_BASE_URL: KOMMO_URL,
-  KOMMO_ACCESS_TOKEN: "token-kommo"
-});
+const ENV = () =>
+  envSupabase({
+    WEBHOOK_TOKEN: TOKEN,
+    KOMMO_BASE_URL: KOMMO_URL,
+    KOMMO_ACCESS_TOKEN: "token-kommo"
+  });
 
-/** Kommo e Firestore falsos. `lead` responde o GET do lead; null faz o Kommo falhar. */
+/** Kommo e Supabase falsos. `lead` responde o GET do lead; null faz o Kommo falhar. */
 function comServicos({ lead = null, erroKommo = "" } = {}) {
   fetchMock = mockFetch([
-    ...rotasGoogle(),
-    // config/kommo ausente: o mapper roda com config vazia.
-    [(url, init) => url.includes("/documents/config/kommo") && !init.method, () => respostaJson(404, {})],
-    [(url, init) => url.includes("firestore.googleapis.com") && init.method === "PATCH", () => respostaJson(200, {})],
-    [
-      KOMMO_URL,
-      () => (lead ? respostaJson(200, lead) : new Response(erroKommo || "erro", { status: 500 }))
-    ]
+    // config "kommo" ausente: o mapper roda com config vazia.
+    [(url) => url.startsWith(`${SUPABASE_URL}/rest/v1/config`), () => respostaJson(200, [])],
+    [(url) => url.startsWith(`${SUPABASE_URL}/rest/v1/suportes?select=id,extras`), () => respostaJson(200, [])],
+    [(url, init) => url.startsWith(`${SUPABASE_URL}/rest/v1/suportes`) && init.method === "POST", () => new Response(null, { status: 201 })],
+    [KOMMO_URL, () => (lead ? respostaJson(200, lead) : new Response(erroKommo || "erro", { status: 500 }))]
   ]);
   return fetchMock;
 }
@@ -75,14 +67,15 @@ describe("webhook /webhook/kommo", () => {
     assert.equal(mock.chamadas.length, 0);
   });
 
-  it("busca o lead completo no Kommo e grava no documento kommo_lead_<id>", async () => {
+  it("busca o lead completo no Kommo e grava a linha kommo_lead_<id>", async () => {
     const mock = comServicos({ lead: { id: 555, name: "Gilmar", price: 85, status_id: 142 } });
 
     const r = await chamar({ corpo: MUDANCA });
 
     assert.equal(r.statusCode, 201);
-    const gravacao = mock.chamadas.find((c) => c.method === "PATCH");
-    assert.ok(gravacao.url.includes("/suportes_tecnicos/kommo_lead_555"));
+    const gravacao = mock.chamadas.find((c) => c.method === "POST" && c.url.includes("/rest/v1/suportes"));
+    assert.ok(gravacao, "não gravou no banco");
+    assert.ok(JSON.parse(gravacao.body).some((l) => l.id === "kommo_lead_555"), gravacao.body);
   });
 
   it("entende o formato form-urlencoded clássico do amoCRM", async () => {

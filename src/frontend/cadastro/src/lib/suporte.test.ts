@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatContato, formatCpfCnpj, formatProtocolo, paraDatetimeLocal } from "./formatacao";
-import { FORMULARIO_VAZIO, faltaIdentificacao, montarSuporte } from "./suporte";
+import { FORMULARIO_VAZIO, faltaContato, montarSuporte } from "./suporte";
 
 describe("formatação", () => {
   it("protocolo de 9 dígitos ganha os traços; o resto fica como veio", () => {
@@ -31,11 +31,11 @@ describe("formatação", () => {
 describe("montarSuporte", () => {
   const agora = new Date("2026-09-15T12:00:00.000Z");
 
-  it("exige protocolo ou CPF/CNPJ", () => {
-    expect(faltaIdentificacao(FORMULARIO_VAZIO)).toBe(true);
-    expect(faltaIdentificacao({ ...FORMULARIO_VAZIO, protocolo: "102005389" })).toBe(false);
-    expect(faltaIdentificacao({ ...FORMULARIO_VAZIO, cpfCnpj: "12345678901" })).toBe(false);
-    expect(faltaIdentificacao({ ...FORMULARIO_VAZIO, protocolo: "   " })).toBe(true);
+  it("exige contato — protocolo e CPF/CNPJ são opcionais", () => {
+    expect(faltaContato(FORMULARIO_VAZIO)).toBe(true);
+    expect(faltaContato({ ...FORMULARIO_VAZIO, protocolo: "102005389", cpfCnpj: "12345678901" })).toBe(true);
+    expect(faltaContato({ ...FORMULARIO_VAZIO, contato: "85999998888" })).toBe(false);
+    expect(faltaContato({ ...FORMULARIO_VAZIO, contato: "   " })).toBe(true);
   });
 
   it("grava formatado, com os mesmos valores fixos da versão anterior", () => {
@@ -58,19 +58,24 @@ describe("montarSuporte", () => {
     });
   });
 
+  it("tipo é sempre 'Suporte tecnico' — o formulário não pergunta mais", () => {
+    const doc = montarSuporte({ ...FORMULARIO_VAZIO, contato: "85999998888" }, "Henrique", agora);
+    expect(doc.tipo).toBe("Suporte tecnico");
+  });
+
   it("não grava campo vazio como string vazia", () => {
-    const doc = montarSuporte({ ...FORMULARIO_VAZIO, protocolo: "102005389" }, "Henrique", agora);
+    const doc = montarSuporte({ ...FORMULARIO_VAZIO, contato: "85999998888" }, "Henrique", agora);
     expect(doc).not.toHaveProperty("cpfCnpj");
-    expect(doc).not.toHaveProperty("contato");
+    expect(doc).not.toHaveProperty("protocolo");
   });
 
   it("não grava técnico — o cadastro rápido não atribui ninguém", () => {
-    const doc = montarSuporte({ ...FORMULARIO_VAZIO, protocolo: "102005389" }, "Henrique", agora);
+    const doc = montarSuporte({ ...FORMULARIO_VAZIO, contato: "85999998888" }, "Henrique", agora);
     expect(doc).not.toHaveProperty("tecnico");
   });
 
   it("abre a linha do tempo no formato do painel principal", () => {
-    const doc = montarSuporte({ ...FORMULARIO_VAZIO, protocolo: "102005389", ac: "VALID" }, "Henrique", agora);
+    const doc = montarSuporte({ ...FORMULARIO_VAZIO, contato: "85999998888", ac: "VALID" }, "Henrique", agora);
     expect(doc.historico).toEqual([
       { em: "2026-09-15T12:00:00.000Z", texto: "Chamado aberto · Suporte tecnico · VALID · pelo cadastro rápido", por: "Henrique" }
     ]);

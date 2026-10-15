@@ -1,0 +1,55 @@
+-- registrar_mensagem_cliente passa a ligar o chamado à conversa do chat.
+--
+-- A tela "Finalizar suporte" lê a conversa (texto, fotos e PDFs) para vir
+-- preenchida, e para isso precisa de `extras.kommo_talk_id`. Até aqui só os
+-- chamados abertos pela IA do chat tinham esse dado; os abertos pela "Etapa
+-- de suporte" (n8n) ou à mão ficavam sem. Esta função já roda a cada mensagem
+-- do cliente, com lead e conversa em mãos — é o lugar natural para gravar.
+--
+-- Guarda sempre a conversa MAIS RECENTE do lead (um cliente pode abrir outra
+-- conversa depois), em qualquer status do chamado, e só escreve quando muda —
+-- não vira uma escrita por mensagem. A contagem da bolinha não muda.
+create or replace function public.registrar_mensagem_cliente(
+  p_kommo_lead_id text default '',
+  p_kommo_talk_id text default ''
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_lead text := nullif(btrim(coalesce(p_kommo_lead_id, '')), '');
+  v_talk text := nullif(btrim(coalesce(p_kommo_talk_id, '')), '');
+  v_id   text;
+  v_novo integer;
+begin
+  if v_lead is null and v_talk is null then
+    raise exception 'informe kommo_lead_id ou kommo_talk_id.' using errcode = '22023';
+  end if;
+
+  if v_lead is not null and v_talk is not null then
+    update public.suportes
+       set extras = coalesce(extras, '{}'::jsonb) || jsonb_build_object('kommo_talk_id', v_talk)
+     where kommo_lead_id = v_lead
+       and extras->>'kommo_talk_id' is distinct from v_talk;
+  end if;
+
+  update public.suportes
+     set mensagens_nao_lidas = mensagens_nao_lidas + 1
+   where status = 'EM ANDAMENTO'
+     and (
+       (v_lead is not null and kommo_lead_id = v_lead)
+       or (v_lead is null and extras->>'kommo_talk_id' = v_talk)
+     )
+  returning id, mensagens_nao_lidas into v_id, v_novo;
+
+  if v_id is null then
+    return jsonb_build_object('acao', 'ignorado');
+  end if;
+  return jsonb_build_object('acao', 'contado', 'id', v_id, 'mensagens_nao_lidas', v_novo);
+end;
+$$;
+
+grant execute on function public.registrar_mensagem_cliente(text, text) to anon;
+revoke execute on function public.registrar_mensagem_cliente(text, text) from public;

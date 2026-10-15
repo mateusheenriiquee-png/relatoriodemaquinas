@@ -6,11 +6,13 @@ export const ACS = ["CONSULTI", "VALID"] as const;
 export type Tipo = (typeof TIPOS)[number];
 export type Ac = (typeof ACS)[number];
 
+/** O cadastro rápido não pergunta mais o tipo — sempre nasce como suporte técnico. */
+export const TIPO_PADRAO: Tipo = "Suporte tecnico";
+
 export interface FormularioSuporte {
   protocolo: string;
   cpfCnpj: string;
   contato: string;
-  tipo: Tipo;
   ac: Ac;
 }
 
@@ -18,7 +20,6 @@ export const FORMULARIO_VAZIO: FormularioSuporte = {
   protocolo: "",
   cpfCnpj: "",
   contato: "",
-  tipo: "Suporte tecnico",
   ac: "CONSULTI"
 };
 
@@ -43,11 +44,13 @@ export interface NovoSuporte {
 }
 
 /**
- * Sem protocolo e sem CPF/CNPJ o chamado não tem por onde ser achado depois —
- * a busca do painel procura exatamente por esses campos.
+ * Só o contato é obrigatório agora — é o único jeito garantido de alcançar o
+ * cliente. Protocolo e CPF/CNPJ ajudam a busca do painel, mas o técnico pode
+ * completar depois; exigir os três na hora do cadastro rápido travava quem
+ * está só anotando um pedido por telefone.
  */
-export function faltaIdentificacao(form: FormularioSuporte): boolean {
-  return !norm(form.protocolo) && !norm(form.cpfCnpj);
+export function faltaContato(form: FormularioSuporte): boolean {
+  return !norm(form.contato);
 }
 
 /**
@@ -63,12 +66,12 @@ export function montarSuporte(form: FormularioSuporte, responsavel: string, agor
     statusAbertura: "DEVIDO",
     dataAbertura: agora.toISOString(),
     responsavelAbertura: norm(responsavel) || "Responsavel",
-    tipo: form.tipo,
+    tipo: TIPO_PADRAO,
     ac: form.ac,
     historico: [
       {
         em: agora.toISOString(),
-        texto: `Chamado aberto · ${form.tipo} · ${form.ac} · pelo cadastro rápido`,
+        texto: `Chamado aberto · ${TIPO_PADRAO} · ${form.ac} · pelo cadastro rápido`,
         por: norm(responsavel)
       }
     ]

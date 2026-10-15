@@ -29,7 +29,23 @@ const VAZIO = {
   motivoCat: "",
   motivoDetalhe: "",
   usoCat: "",
-  usoPlat: ""
+  usoPlat: "",
+  // O que aconteceu com o cliente — preenchido pela IA quando o chamado nasce
+  // de um lead do Kommo; a equipe lê antes de atender.
+  descricao: ""
+};
+
+/** Nomes dos campos para o aviso "preenchido pela IA — confira". */
+const ROTULOS = {
+  tipo: "Tipo",
+  motivoCat: "Motivo",
+  motivoDetalhe: "Detalhe do motivo",
+  descricao: "Descrição",
+  usoCat: "Motivo da utilização",
+  usoPlat: "Plataforma",
+  protocolo: "Protocolo",
+  cpfCnpj: "CPF/CNPJ",
+  ac: "AC"
 };
 
 /** Agrupamento visual dos campos — o formulário tem treze deles. */
@@ -56,6 +72,9 @@ export default function SuporteFormModal({
   // reaproveitados — protocolo, técnico, status e datas nascem limpos, porque
   // são deste atendimento, não do anterior.
   clienteBase = null,
+  // Resultado do "Novo suporte" pelo lead (NovoPorLeadModal): campos já
+  // preenchidos a partir do Kommo e da conversa, mais de onde veio cada um.
+  preenchido = null,
   responsavelPadrao = "",
   isAdmin = false,
   onClose,
@@ -86,7 +105,9 @@ export default function SuporteFormModal({
         nomeCliente: item.nomeCliente || "",
         cpfCnpj: item.cpfCnpj || "",
         tipo: item.tipo || TIPOS[0],
-        ac: item.ac || ACS[0],
+        // Vazio continua vazio: antes mostrava CONSULTI e gravava sem ninguém
+        // escolher, só por abrir e salvar a edição (14/10).
+        ac: item.ac || "",
         contato: item.contato || "",
         tecnico: item.tecnico || "",
         status: item.status || "EM ABERTO",
@@ -95,7 +116,8 @@ export default function SuporteFormModal({
         motivoCat: item.motivoCat || "",
         motivoDetalhe: item.motivoDetalhe || "",
         usoCat: item.usoCat || "",
-        usoPlat: item.usoPlat || ""
+        usoPlat: item.usoPlat || "",
+        descricao: item.descricao || ""
       });
     } else {
       setForm({
@@ -108,10 +130,11 @@ export default function SuporteFormModal({
               cpfCnpj: clienteBase.cpfCnpj || "",
               contato: clienteBase.contato || ""
             }
-          : {})
+          : {}),
+        ...(preenchido?.campos || {})
       });
     }
-  }, [open, modo, item, responsavelPadrao, clienteBase]);
+  }, [open, modo, item, responsavelPadrao, clienteBase, preenchido]);
 
   const set = (campo) => (e) => setForm((atual) => ({ ...atual, [campo]: e.target.value }));
 
@@ -159,6 +182,26 @@ export default function SuporteFormModal({
       title={editando ? "Editar Suporte" : "Novo Suporte"}
     >
       <form className="modal-form modal-form-largo" onSubmit={handleSubmit}>
+        {preenchido && !editando ? (
+          <div className="form-origem-lead">
+            Preenchido a partir do lead <strong>#{preenchido.leadId}</strong> do Kommo.
+            {(() => {
+              const daIA = Object.entries(preenchido.fontes || {})
+                .filter(([, fonte]) => fonte === "ia")
+                .map(([campo]) => ROTULOS[campo])
+                .filter(Boolean);
+              return daIA.length ? <> A IA leu a conversa e preencheu: {daIA.join(", ")} — confira antes de salvar.</> : null;
+            })()}
+            {preenchido.avisos?.length ? (
+              <ul>
+                {preenchido.avisos.map((a) => (
+                  <li key={a}>{a}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
+
         {clienteBase && !editando ? (
           <p className="form-aviso">
             Novo chamado para <strong>{clienteBase.nomeCliente || "este cliente"}</strong> — os
@@ -263,6 +306,7 @@ export default function SuporteFormModal({
           <div className="field">
             <label htmlFor="ac">AC</label>
             <select id="ac" value={form.ac} onChange={set("ac")}>
+              <option value="">Não informado</option>
               {ACS.map((a) => (
                 <option key={a} value={a}>
                   {a}
@@ -364,6 +408,18 @@ export default function SuporteFormModal({
               />
             </div>
           ) : null}
+
+          <div className="field field-span-2">
+            <label htmlFor="descricao">Descrição</label>
+            <textarea
+              id="descricao"
+              rows={3}
+              maxLength={1000}
+              placeholder="O que aconteceu com o cliente (opcional)"
+              value={form.descricao}
+              onChange={set("descricao")}
+            />
+          </div>
         </Secao>
 
         <div className="modal-actions">

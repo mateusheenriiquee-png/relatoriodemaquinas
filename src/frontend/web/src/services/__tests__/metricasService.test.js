@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   calcularReincidencia,
+  duracaoAjustada,
   duracaoCorrida,
   duracaoUtil,
   foraDaMedia,
@@ -10,9 +11,9 @@ import {
   temDatasInconsistentes
 } from "../metricasService";
 
-// metricasConfigService fala com o Firestore no import; aqui só interessa a
+// metricasConfigService fala com o Supabase no import; aqui só interessa a
 // constante do expediente padrão.
-vi.mock("../../config/firebase", () => ({ db: {}, getApiBaseUrl: () => "" }));
+vi.mock("../../config/supabase", () => ({ supabase: {}, getApiBaseUrl: () => "" }));
 const { CONFIG_METRICAS_PADRAO } = await import("../metricasConfigService");
 
 const HORA = 3600000;
@@ -134,6 +135,11 @@ describe("foraDaMedia", () => {
     expect(foraDaMedia({ excluirDaMedia: true })).toBe(true);
   });
 
+  it("chamado REAGENDADO fica fora da média até voltar para EM ABERTO", () => {
+    expect(foraDaMedia({ status: "REAGENDADO" })).toBe(true);
+    expect(foraDaMedia({ status: "EM ABERTO" })).toBe(false);
+  });
+
   it("marca automaticamente a partir do 3º follow-up sem resposta", () => {
     expect(foraDaMedia({ followups: [1, 2] })).toBe(false);
     expect(foraDaMedia({ followups: [1, 2, 3] })).toBe(true);
@@ -214,5 +220,50 @@ describe("metricasDoPeriodo", () => {
 
   it("expõe a reincidência junto com o resto do período", () => {
     expect(m.reincidencia).toEqual({ total: 0, reincidentes: 0, taxa: 0 }); // nenhum tem CPF
+  });
+});
+
+describe("venda ganha (valor informado ao finalizar)", () => {
+  const intervalo = [new Date("2026-09-01T00:00:00").getTime(), new Date("2026-10-01T00:00:00").getTime()];
+  const fechado = (extra) => ({ ...chamado({ abertura: "2026-09-24T09:00:00", fim: "2026-09-24T11:00:00" }), ...extra });
+  const m = metricasDoPeriodo(
+    [
+      fechado({ valorVenda: 80, valorVE: 49.9 }),
+      fechado({ valorVenda: 109.9 }),
+      fechado({ valorVenda: 0, vendaStatus: "GANHO" }), // import antigo do Kommo
+      fechado({ valorVenda: 0, vendaStatus: "PERDIDO" }), // "perdido" deixou de existir
+      fechado({})
+    ],
+    intervalo,
+    CONFIG
+  );
+
+  it("chamado com valor conta como venda ganha; sem valor, não informado; não há mais 'perdido'", () => {
+    expect(m.porVenda).toEqual({ GANHO: 3, "NAO INFORMADO": 2 });
+    expect(m.taxaVenda).toBe(60);
+  });
+
+  it("soma o valor das vendas e o da validade estendida separados", () => {
+    expect(m.valorGanho).toBeCloseTo(189.9);
+    expect(m.valorVE).toBeCloseTo(49.9);
+  });
+});
+
+describe("tempo reagendado nas durações", () => {
+  // aberto segunda 10h, reagendado das 11h às 15h, finalizado às 16h (horário local)
+  const r = {
+    status: "FINALIZADO",
+    dataAbertura: new Date(2026, 9, 5, 10),
+    dataFinalizacao: new Date(2026, 9, 5, 16),
+    periodosReagendado: [{ de: new Date(2026, 9, 5, 11).toISOString(), ate: new Date(2026, 9, 5, 15).toISOString() }]
+  };
+
+  it("corrida é o relógio de parede, sem desconto", () => {
+    expect(duracaoCorrida(r)).toBe(6 * HORA);
+  });
+
+  it("ajustada e útil descontam o tempo reagendado", () => {
+    expect(duracaoAjustada(r, CONFIG)).toBe(2 * HORA);
+    expect(duracaoUtil(r, CONFIG)).toBe(2 * HORA);
   });
 });

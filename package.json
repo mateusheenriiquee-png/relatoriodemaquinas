@@ -1,12 +1,8 @@
 {
   "name": "suportetecnico-api",
   "version": "1.0.0",
-  "description": "Painel web + API webhook para registro de suportes tecnicos",
-  "main": "src/api/server.js",
+  "description": "Painel web + Worker (Cloudflare) + Supabase para registro de suportes técnicos",
   "scripts": {
-    "start": "node src/api/server.js",
-    "dev": "node src/api/server.js",
-    "pages:dev": "wrangler pages dev src/frontend/public",
     "cf:deploy": "node scripts/cf-pages-deploy.js",
     "web:install": "npm install --prefix src/frontend/web",
     "web:dev": "npm run dev --prefix src/frontend/web",
@@ -43,12 +39,5 @@
   "bugs": {
     "url": "https://github.com/mateusheenriiquee-png/relatoriodemaquinas/issues"
   },
-  "homepage": "https://github.com/mateusheenriiquee-png/relatoriodemaquinas#readme",
-  "dependencies": {
-    "cors": "^2.8.5",
-    "express": "^5.1.0",
-    "firebase": "^12.12.1",
-    "firebase-admin": "^13.10.0",
-    "xlsx": "^0.18.5"
-  }
+  "homepage": "https://github.com/mateusheenriiquee-png/relatoriodemaquinas#readme"
 }

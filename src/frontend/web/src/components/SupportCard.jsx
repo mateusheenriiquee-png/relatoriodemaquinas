@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { formatDate, idadeAtendimento, statusClass } from "../utils/format";
+import { chamadoParado } from "../utils/chamadoParado";
 
 /** Atendimentos encerrados não envelhecem — a idade só interessa na fila. */
 const STATUS_ENCERRADOS = new Set(["FINALIZADO", "SEM RETORNO"]);
@@ -16,6 +17,7 @@ export default function SupportCard({ item, onClick }) {
   const idade = STATUS_ENCERRADOS.has(item.status)
     ? null
     : idadeAtendimento(item.dataAbertura, agora);
+  const parado = chamadoParado(item, agora);
 
   return (
     <div
@@ -30,6 +32,16 @@ export default function SupportCard({ item, onClick }) {
         }
       }}
     >
+      {/* Só em EM ANDAMENTO: o cliente respondeu enquanto o técnico não estava
+          olhando. Zera sozinha quando o chamado é aberto (ver SuportesPage). */}
+      {item.status === "EM ANDAMENTO" && item.mensagensNaoLidas > 0 ? (
+        <span
+          className="card-badge-mensagens"
+          title={`${item.mensagensNaoLidas} mensagem${item.mensagensNaoLidas > 1 ? "ns" : ""} nova${item.mensagensNaoLidas > 1 ? "s" : ""} do cliente`}
+        >
+          {item.mensagensNaoLidas > 99 ? "99+" : item.mensagensNaoLidas}
+        </span>
+      ) : null}
       <div className="card-top">
         <div>
           <div className="card-time">
@@ -67,6 +79,23 @@ export default function SupportCard({ item, onClick }) {
       </div>
       <div className="card-status">
         <span className={`status-pill ${statusClass(item.status)}`}>{item.status}</span>
+        {parado ? (
+          <span
+            className={`card-sinal card-sinal-${parado.nivel}`}
+            title={
+              parado.nivel === "sem-retorno"
+                ? "Sem mensagem do cliente há muito tempo — considere marcar como sem retorno"
+                : "Sem mensagem nova do cliente desde então"
+            }
+          >
+            {parado.texto}
+          </span>
+        ) : null}
+        {item.possivelDuplicadoDe ? (
+          <span className="card-sinal card-sinal-duplicado" title="Mesmo telefone, documento ou protocolo de outro chamado aberto, mas outro contato no Kommo">
+            possível duplicado
+          </span>
+        ) : null}
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 /**
- * webhook-shared.js — monta os registros do webhook prontos para o Firestore.
+ * webhook-shared.js — monta os registros do webhook prontos para o banco.
  *
  * Vivia em src/api (a API Express). O Worker é quem está publicado e importava
  * daqui, o que prendia o backend inteiro a uma pasta que já não é usada: por
@@ -22,7 +22,7 @@ const { getIdempotencyDocId, stripEmptyFields } = require("./support-id");
  * Nenhuma integração real manda mais que uma dúzia de linhas por vez — é
  * disparo por evento (um formulário enviado, um lead mudando de etapa), não
  * lote. O número existe para o caso do token vazar: sem ele, um payload de
- * 50 mil "registros" viraria 50 mil escritas no Firestore numa chamada só,
+ * 50 mil "registros" viraria 50 mil escritas no banco numa chamada só,
  * o que pesa no billing antes de qualquer coisa quebrar. 100 dá folga
  * generosa para qualquer uso legítimo e ainda limita o pior caso.
  */

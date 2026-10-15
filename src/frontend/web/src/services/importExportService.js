@@ -6,7 +6,7 @@ import { classificarMotivo, classificarUso } from "../utils/catalogos";
 /**
  * importExportService.js — importação de planilha e exportação CSV.
  *
- * Porte de src/frontend/public/js/services/import-export.js. As regras de
+ * Veio do painel antigo (multi-página, já removido). As regras de
  * leitura (apelidos de coluna, datas em serial do Excel, ID determinístico)
  * foram mantidas como estavam: elas existem por causa das planilhas reais que
  * a equipe usa, e mudá-las quebraria importações que hoje funcionam. O que saiu
@@ -672,7 +672,7 @@ export function diagnosticarRegistros(registros = []) {
     ["aviso", semDataAbertura, "sem data de abertura — não entram em nenhum período"],
     ["aviso", semProtocolo, "sem protocolo"],
     ["aviso", semTipo, "sem tipo — o gráfico \"Por tipo\" fica com uma barra só"],
-    ["aviso", semAc, "sem AC — o gráfico \"Por AC\" fica com uma barra só"],
+    ["aviso", semAc, "sem AC — entram como \"Não informado\" no gráfico \"Por sistema\""],
     ["aviso", semTecnico, "sem técnico — não entram no ranking por técnico"],
     ["aviso", semMotivo, "sem motivo classificado"],
     ["ok", cpfResgatado, "com CPF/CNPJ reconhecido"]

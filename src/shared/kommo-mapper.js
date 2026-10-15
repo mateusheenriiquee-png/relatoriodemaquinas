@@ -8,7 +8,7 @@
  * camelCase que o dashboard espera.
  *
  * O mapeamento de status_id -> status interno e de tags -> técnico/turno vem
- * de config/kommo (Firestore), não é hardcoded: os IDs de estágio são
+ * da linha "kommo" da tabela config, não é hardcoded: os IDs de estágio são
  * específicos de cada conta Kommo.
  */
 

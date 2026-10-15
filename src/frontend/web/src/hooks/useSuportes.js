@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   buscarRegistrosNoServidor,
+  acDoRegistro,
   contarPorStatus,
+  registroPassaNosFiltros,
   subscribeRegistros,
   subscribeSuportesEmAberto
 } from "../services/suportesService";
-import { normKey, normalizeSearchText, toComparableDate } from "../utils/format";
+import { normKey, normalizeSearchText } from "../utils/format";
+import { ordenarSuportes } from "../utils/ordemLista";
+import { combinaComBusca } from "../utils/buscaLocal";
 
 export const FILTROS_INICIAIS = {
   status: "EM ABERTO",
@@ -27,7 +31,7 @@ const CONTAGEM_INICIAL = {
 };
 
 /**
- * Centraliza os listeners do Firestore, os filtros e as contagens da tela de suportes.
+ * Centraliza as assinaturas em tempo real do banco, os filtros e as contagens da tela de suportes.
  * A busca por protocolo/CPF/contato e o filtro de status da abertura são aplicados
  * no cliente, como no projeto original.
  */
@@ -41,7 +45,7 @@ export function useSuportes(filtrosIniciais = null) {
   const [erro, setErro] = useState("");
   const [truncado, setTruncado] = useState(null);
 
-  // Resultado da consulta direta ao Firestore, usada quando o filtro local
+  // Resultado da consulta direta ao banco, usada quando o filtro local
   // (que só enxerga o que o listener carregou) não encontra nada.
   const [buscaServidor, setBuscaServidor] = useState({
     termo: "",
@@ -89,13 +93,44 @@ export function useSuportes(filtrosIniciais = null) {
     return unsubscribe;
   }, []);
 
+  // Filtros que valem para as contagens e para a lista EM ABERTO (tudo menos
+  // o status, que é o próprio card, e a busca por texto).
+  const filtrosContagem = useMemo(
+    () => ({
+      ac: filtros.ac,
+      tecnico: filtros.tecnico,
+      dataInicio: filtros.dataInicio,
+      dataFim: filtros.dataFim,
+      statusAbertura: filtros.statusAbertura
+    }),
+    [filtros.ac, filtros.tecnico, filtros.dataInicio, filtros.dataFim, filtros.statusAbertura]
+  );
+  const chaveContagem = JSON.stringify(filtrosContagem);
+
+  // A resposta de um filtro antigo não pode sobrescrever a do atual.
+  const contagemAtual = useRef(0);
   const atualizarContagens = useCallback(async () => {
+    const pedido = ++contagemAtual.current;
     try {
-      setContagens(await contarPorStatus());
+      const resultado = await contarPorStatus(filtrosContagem);
+      if (pedido === contagemAtual.current) setContagens(resultado);
     } catch (error) {
       console.warn("[Suportes] Falha ao contar registros:", error);
     }
-  }, []);
+    // `chaveContagem` (texto) em vez do objeto: só recria quando o filtro muda.
+  }, [chaveContagem]);
+
+  // EM ABERTO com os mesmos filtros da tela (AC, técnico, período, abertura).
+  const emAbertoFiltrados = useMemo(
+    () =>
+      emAberto.filter(
+        (item) =>
+          registroPassaNosFiltros(item, filtrosContagem) &&
+          (filtrosContagem.statusAbertura === "todos" ||
+            (item.statusAbertura || "").toUpperCase() === filtrosContagem.statusAbertura.toUpperCase())
+      ),
+    [emAberto, filtrosContagem]
+  );
 
   // Recontagem quando as listas mudam, com debounce para evitar leituras excessivas.
   const timerRef = useRef(null);
@@ -107,26 +142,21 @@ export function useSuportes(filtrosIniciais = null) {
 
   const registrosLocais = useMemo(() => {
     const busca = filtros.protocolo ? normalizeSearchText(filtros.protocolo) : "";
-    const combina = (item) =>
-      normalizeSearchText(item.protocolo).includes(busca) ||
-      normalizeSearchText(item.cpfCnpj).includes(busca) ||
-      normalizeSearchText(item.contato).includes(busca) ||
-      // Quem liga se apresenta pelo nome, não pelo protocolo. Aqui a busca é
-      // por trecho (não por prefixo, como a do servidor), então "ramos" acha
-      // "Bruno Ramos" também.
-      normalizeSearchText(item.nomeCliente).includes(busca);
+    // Texto (protocolo, documento, CPF, contato, nome, nº do lead) ou número
+    // em qualquer formato — ver utils/buscaLocal.js.
+    const combina = (item) => combinaComBusca(item, filtros.protocolo);
 
-    // EM ABERTO tem lista própria e ignora os demais filtros (regra do projeto original).
-    // A busca é a exceção: quem digita um protocolo quer achá-lo, e antes o
-    // termo era simplesmente ignorado nesta aba.
+    // EM ABERTO tem lista própria (sempre carregada inteira); desde 14/10 ela
+    // também respeita AC, técnico, período e status da abertura, como o card.
     if (filtros.status === "EM ABERTO") {
-      const abertos = busca ? emAberto.filter(combina) : emAberto;
-      return [...abertos].sort(
-        (a, b) => toComparableDate(b.dataAbertura) - toComparableDate(a.dataAbertura)
-      );
+      const abertos = busca ? emAbertoFiltrados.filter(combina) : emAbertoFiltrados;
+      // Do mais antigo para o mais novo (ver utils/ordemLista.js).
+      return ordenarSuportes(abertos, "EM ABERTO");
     }
 
-    let dados = registros.filter((item) => item.status !== "EM ABERTO");
+    // Em "Total" (status todos) os EM ABERTO também entram — antes eram
+    // tirados aqui e a lista mostrava menos que o número do card (14/10).
+    let dados = registros;
 
     if (busca) {
       dados = dados.filter(combina);
@@ -142,16 +172,15 @@ export function useSuportes(filtrosIniciais = null) {
       dados = dados.filter((item) => normKey(item.tecnico) === chave);
     }
 
-    return dados.sort(
-      (a, b) => toComparableDate(b.dataAbertura) - toComparableDate(a.dataAbertura)
-    );
-  }, [registros, emAberto, filtros]);
+    // "Em andamento" é dinâmica: mensagem nova do cliente sobe o chamado.
+    return ordenarSuportes(dados, filtros.status);
+  }, [registros, emAbertoFiltrados, filtros]);
 
   /* ------------------------------------------- busca com fallback no servidor */
 
   /**
    * O filtro acima só enxerga o que o listener carregou (teto de 500 docs).
-   * Quando ele não acha nada, vamos ao Firestore: é isso que faz um protocolo
+   * Quando ele não acha nada, vamos ao banco: é isso que faz um protocolo
    * de seis meses atrás aparecer. Sem isso a tela dizia "nenhum suporte
    * encontrado" sem ter olhado o banco.
    */
@@ -215,7 +244,9 @@ export function useSuportes(filtrosIniciais = null) {
   }, [termoBusca, semResultadoLocal, buscaServidor]);
 
   const opcoesAc = useMemo(() => {
-    const todos = [...registros, ...emAberto].map((r) => r.ac).filter(Boolean);
+    // As da Certify sempre aparecem: as carregadas dependem da aba (em
+    // andamento quase nunca tem AC/Sistema) e a lista ficava vazia.
+    const todos = ["CONSULTI", "VALID", ...[...registros, ...emAberto].map(acDoRegistro)].filter(Boolean);
     return [...new Set(todos)].sort((a, b) =>
       a.localeCompare(b, "pt-BR", { sensitivity: "base" })
     );
@@ -236,8 +267,8 @@ export function useSuportes(filtrosIniciais = null) {
   }, [registros, emAberto]);
 
   const estatisticas = useMemo(
-    () => ({ ...contagens, abertos: emAberto.length }),
-    [contagens, emAberto.length]
+    () => ({ ...contagens, abertos: emAbertoFiltrados.length }),
+    [contagens, emAbertoFiltrados.length]
   );
 
   const alterarFiltro = useCallback((campo, valor) => {

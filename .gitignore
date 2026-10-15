@@ -3,7 +3,7 @@
 *.tgz
 .yarn-integrity
 
-# Ferramentas legadas (template Firebase)
+# Ferramentas legadas
 lib-cov/
 .grunt/
 bower_components/

@@ -5,7 +5,7 @@ import { prepareWebhookRecords } from "../../shared/webhook-shared.js";
 
 /* ------------------------------------------------------------ kommo-mapper */
 
-// Mesmo formato do doc config/kommo no Firestore. 142/143 são os estágios
+// Mesmo formato da config "kommo" no banco. 142/143 são os estágios
 // fixos de ganho/perda em qualquer conta Kommo; o resto é específico da conta.
 const CONFIG = {
   statusMap: { 55: "EM ANDAMENTO", 56: "FINALIZADO" },

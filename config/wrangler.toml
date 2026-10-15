@@ -4,6 +4,20 @@ compatibility_date = "2024-11-12"
 compatibility_flags = ["nodejs_compat"]
 keep_vars = true
 
+# --- Variáveis que NÃO são segredo -------------------------------------------
+# Só endereços. Ficam aqui (e não só no painel da Cloudflare) para o deploy
+# não avisar que "a configuração local difere da remota", e para um valor
+# errado no painel ser corrigido a cada deploy.
+#
+# Segredos NUNCA entram aqui (este arquivo vai para o git): ficam só como
+# Secret, via `wrangler secret put` — SUPABASE_SERVICE_ROLE_KEY,
+# KOMMO_ACCESS_TOKEN, WEBHOOK_TOKEN, N8N_PREFILL_TOKEN.
+[vars]
+KOMMO_BASE_URL = "https://certifybrasil.kommo.com"
+SUPABASE_URL = "https://mhuawoaglnlzbrgpooog.supabase.co"
+# Webhook do ramo "Preencher finalização" do workflow do n8n (não o do chat).
+N8N_PREFILL_URL = "https://n8n.certifybrasil.com/webhook/b3f1c2d4-7a8e-4f60-9d21-5c4e8a7b6f13"
+
 # --- Cron Triggers -----------------------------------------------------------
 # Reabre os suportes cujo reagendamento venceu (handler `scheduled` em
 # src/backend/index.mjs).
@@ -28,19 +42,10 @@ crons = ["*/5 * * * *"]
 # exist in the remote environment.
 
 # --- Front-end servido pelo Worker -------------------------------------------
-# Hoje publica o front antigo (multi-página) de src/frontend/public.
-#
-# Para publicar a versão React, rode `npm run web:build` e troque a linha
-# `directory` abaixo por:
-#
-#     directory = "./src/frontend/web/dist"
-#
-# Só faça a troca quando o painel admin e o import/export estiverem migrados —
-# hoje essas telas só existem no front antigo.
+# O painel React (src/frontend/web), depois de `npm run web:build`.
 #
 # `not_found_handling` já está ligado: sem ele, abrir /dashboard direto ou dar
-# F5 em qualquer rota do React devolve 404. Não afeta o front antigo, onde cada
-# tela é um arquivo .html de verdade.
+# F5 em qualquer rota do React devolve 404.
 [assets]
 directory = "../src/frontend/web/dist"
 binding = "ASSETS"

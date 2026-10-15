@@ -2,7 +2,7 @@
  * Registra um erro interno no log do Worker e devolve um código curto de
  * referência para a resposta.
  *
- * A resposta HTTP nunca leva a mensagem original: "FIREBASE_SERVICE_ACCOUNT
+ * A resposta HTTP nunca leva a mensagem original: "SUPABASE_SERVICE_ROLE_KEY
  * nao configurada" ou o texto do parser de JSON contam a quem está sondando
  * como o backend é montado. O detalhe completo fica no log (`wrangler tail` ou
  * painel da Cloudflare), e o `ref` liga as duas pontas — quem reportar o erro

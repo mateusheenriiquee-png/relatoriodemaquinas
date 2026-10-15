@@ -6,26 +6,20 @@ import Notificacao, { type NotificacaoDados } from "../components/Notificacao";
 import ThemeToggle from "../components/ThemeToggle";
 import { bloqueia, type Duplicado } from "../lib/duplicidade";
 import { paraDatetimeLocal } from "../lib/formatacao";
-import {
-  ACS,
-  FORMULARIO_VAZIO,
-  TIPOS,
-  faltaIdentificacao,
-  montarSuporte,
-  type FormularioSuporte
-} from "../lib/suporte";
+import { ACS, FORMULARIO_VAZIO, faltaContato, montarSuporte, type FormularioSuporte } from "../lib/suporte";
 import { buscarDuplicados, criarSuporte } from "../services/suportesService";
 
 export default function NovoSuportePage() {
   const { nome, sair } = useAuth();
   const [form, setForm] = useState<FormularioSuporte>(FORMULARIO_VAZIO);
-  const [erroIdentificacao, setErroIdentificacao] = useState(false);
+  const [erroContato, setErroContato] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [notificacao, setNotificacao] = useState<NotificacaoDados | null>(null);
   const [duplicados, setDuplicados] = useState<Duplicado[]>([]);
   // Só para exibição: o carimbo real é o instante do clique em salvar.
   const [agora, setAgora] = useState(() => new Date());
   const protocoloRef = useRef<HTMLInputElement>(null);
+  const contatoRef = useRef<HTMLInputElement>(null);
 
   const fecharNotificacao = useCallback(() => setNotificacao(null), []);
 
@@ -41,12 +35,12 @@ export default function NovoSuportePage() {
 
   function alterar<K extends keyof FormularioSuporte>(campo: K, valor: FormularioSuporte[K]) {
     setForm((atual) => ({ ...atual, [campo]: valor }));
-    if (campo === "protocolo" || campo === "cpfCnpj") setErroIdentificacao(false);
+    if (campo === "contato") setErroContato(false);
   }
 
   function limpar() {
     setForm(FORMULARIO_VAZIO);
-    setErroIdentificacao(false);
+    setErroContato(false);
     setAgora(new Date());
     protocoloRef.current?.focus();
   }
@@ -55,10 +49,10 @@ export default function NovoSuportePage() {
     e.preventDefault();
     if (salvando) return;
 
-    if (faltaIdentificacao(form)) {
-      setErroIdentificacao(true);
-      setNotificacao({ mensagem: "Informe o Protocolo ou o CPF/CNPJ antes de salvar.", tipo: "error" });
-      protocoloRef.current?.focus();
+    if (faltaContato(form)) {
+      setErroContato(true);
+      setNotificacao({ mensagem: "Informe o contato antes de salvar.", tipo: "error" });
+      contatoRef.current?.focus();
       return;
     }
 
@@ -107,7 +101,7 @@ export default function NovoSuportePage() {
     }
   }
 
-  const classeCampoIdentificacao = `field${erroIdentificacao ? " required-error" : ""}`;
+  const classeCampoContato = `field${erroContato ? " required-error" : ""}`;
 
   return (
     <div className="container novo-suporte-page">
@@ -131,20 +125,15 @@ export default function NovoSuportePage() {
 
       <section className="novo-suporte-card">
         <form className="novo-suporte-form" onSubmit={aoEnviar} noValidate>
-          <div className={classeCampoIdentificacao}>
-            <label htmlFor="protocolo">Protocolo</label>
+          <div className="field">
+            <label htmlFor="protocolo">Protocolo (opcional)</label>
             <input
               id="protocolo"
               ref={protocoloRef}
               maxLength={80}
               value={form.protocolo}
-              aria-invalid={erroIdentificacao || undefined}
-              aria-describedby={erroIdentificacao ? "erro-identificacao" : undefined}
               onChange={(e) => alterar("protocolo", e.target.value)}
             />
-            <div className="error-note" id="erro-identificacao">
-              Preencha Protocolo ou CPF/CNPJ
-            </div>
           </div>
 
           <div className="field">
@@ -153,48 +142,40 @@ export default function NovoSuportePage() {
           </div>
 
           <div className="form-grid-2">
-            <div className={classeCampoIdentificacao}>
-              <label htmlFor="cpfCnpj">CPF/CNPJ</label>
+            <div className="field">
+              <label htmlFor="cpfCnpj">CPF/CNPJ (opcional)</label>
               <input
                 id="cpfCnpj"
                 maxLength={32}
                 value={form.cpfCnpj}
-                aria-invalid={erroIdentificacao || undefined}
                 onChange={(e) => alterar("cpfCnpj", e.target.value)}
               />
-              <div className="error-note">Preencha Protocolo ou CPF/CNPJ</div>
             </div>
-            <div className="field">
+            <div className={classeCampoContato}>
               <label htmlFor="contato">Contato ou grupo</label>
-              <input id="contato" value={form.contato} onChange={(e) => alterar("contato", e.target.value)} />
+              <input
+                id="contato"
+                ref={contatoRef}
+                value={form.contato}
+                aria-invalid={erroContato || undefined}
+                aria-describedby={erroContato ? "erro-contato" : undefined}
+                onChange={(e) => alterar("contato", e.target.value)}
+              />
+              <div className="error-note" id="erro-contato">
+                Informe o contato
+              </div>
             </div>
           </div>
 
-          <div className="form-grid-2">
-            <div className="field">
-              <label htmlFor="tipo">Tipo</label>
-              <select
-                id="tipo"
-                value={form.tipo}
-                onChange={(e) => alterar("tipo", e.target.value as FormularioSuporte["tipo"])}
-              >
-                {TIPOS.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="ac">AC</label>
-              <select id="ac" value={form.ac} onChange={(e) => alterar("ac", e.target.value as FormularioSuporte["ac"])}>
-                {ACS.map((a) => (
-                  <option key={a} value={a}>
-                    {a}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div className="field">
+            <label htmlFor="ac">AC</label>
+            <select id="ac" value={form.ac} onChange={(e) => alterar("ac", e.target.value as FormularioSuporte["ac"])}>
+              {ACS.map((a) => (
+                <option key={a} value={a}>
+                  {a}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="form-grid-2">

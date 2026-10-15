@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { normalizeSearchText } from "../../utils/format";
 
-vi.mock("../../config/firebase", () => ({ db: {}, getApiBaseUrl: () => "" }));
+vi.mock("../../config/supabase", () => ({ supabase: {}, getApiBaseUrl: () => "" }));
 
 const { chaveNomeCliente } = await import("../suportesService");
 const { lerArquivo } = await import("../importExportService");
@@ -11,12 +11,12 @@ function arquivoCsv(texto, nome = "planilha.csv") {
 }
 
 describe("chaveNomeCliente", () => {
-  it("tira acento e caixa alta para o Firestore poder casar por prefixo", () => {
+  it("tira acento e caixa alta para o banco poder casar por prefixo", () => {
     expect(chaveNomeCliente("Afrânio Ribeiro")).toBe("afranio ribeiro");
     expect(chaveNomeCliente("DÉLIA CRISTINA")).toBe("delia cristina");
   });
 
-  it("colapsa espaço extra, que o Firestore trataria como outro nome", () => {
+  it("colapsa espaço extra, que o banco trataria como outro nome", () => {
     expect(chaveNomeCliente("  Bruno   Ramos  ")).toBe("bruno ramos");
   });
 

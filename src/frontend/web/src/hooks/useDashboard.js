@@ -68,9 +68,11 @@ export function useDashboard() {
     return registros.filter((r) => normKey(r.tecnico) === chave);
   }, [registros, isAdmin, displayName]);
 
+  // "AC" filtra pelo sistema normalizado (Sistema da finalização ou, sem ele,
+  // o AC): o campo AC sozinho fica vazio em quase todo chamado (14/10).
   const opcoesAc = useMemo(
     () =>
-      [...new Set(registrosVisiveis.map((r) => r.ac).filter(Boolean))].sort((a, b) =>
+      [...new Set(registrosVisiveis.map((r) => r.sistema).filter(Boolean))].sort((a, b) =>
         a.localeCompare(b, "pt-BR", { sensitivity: "base" })
       ),
     [registrosVisiveis]
@@ -102,7 +104,7 @@ export function useDashboard() {
    */
   const filtrados = useMemo(() => {
     let lista = registrosVisiveis;
-    if (ac !== "todos") lista = lista.filter((r) => r.ac === ac);
+    if (ac !== "todos") lista = lista.filter((r) => r.sistema === ac);
     if (tecnico !== "todos") {
       const chave = normKey(tecnico);
       lista = lista.filter((r) => normKey(r.tecnico) === chave);

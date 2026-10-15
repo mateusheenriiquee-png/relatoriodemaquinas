@@ -4,6 +4,7 @@ import { AuthProvider } from "./contexts/AuthContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { ToastProvider } from "./components/ToastProvider";
 import ProtectedRoute from "./components/ProtectedRoute";
+import AvisoChamadoNovo from "./components/AvisoChamadoNovo";
 import LoginPage from "./pages/LoginPage";
 
 /*
@@ -22,6 +23,8 @@ export default function App() {
       <ThemeProvider>
         <AuthProvider>
           <ToastProvider>
+            {/* Som/notificação de chamado novo, em qualquer tela (só com sessão). */}
+            <AvisoChamadoNovo />
             <Suspense fallback={<p className="dashboard-loading">Carregando...</p>}>
               <Routes>
                 <Route path="/login" element={<LoginPage />} />

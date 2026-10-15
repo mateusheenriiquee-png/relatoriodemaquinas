@@ -152,6 +152,15 @@ export const IconMoon = (p) => (
   </Svg>
 );
 
+/** Link externo — usado para abrir o lead direto no Kommo. */
+export const IconExternalLink = (p) => (
+  <Svg {...p}>
+    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+    <path d="M15 3h6v6" />
+    <path d="M10 14 21 3" />
+  </Svg>
+);
+
 export const IconWhatsApp = (p) => (
   <Svg {...p}>
     <path d="M21 12.2c0 4.5-3.6 8.1-8.1 8.1-1.4 0-2.7-.4-3.9-1.1L3 21l1.9-5.9A8.1 8.1 0 0 1 3 12.2C3 7.7 6.6 4.1 11.1 4.1c4.5 0 8.1 3.6 8.1 8.1z" />
@@ -183,5 +192,31 @@ export const IconExport = (p) => (
     <path d="M12 17V5" />
     <path d="M8 9l4-4 4 4" />
     <path d="M4 19h16" />
+  </Svg>
+);
+
+/** Aviso de chamado novo ligado. */
+export const IconBell = (p) => (
+  <Svg {...p}>
+    <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+    <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+  </Svg>
+);
+
+/** Aviso de chamado novo desligado. */
+export const IconBellOff = (p) => (
+  <Svg {...p}>
+    <path d="M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5" />
+    <path d="M17 17H3s3-2 3-9a4.67 4.67 0 0 1 .3-1.7" />
+    <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+    <path d="M2 2l20 20" />
+  </Svg>
+);
+
+/** Caixa de entrada: "possíveis pedidos de suporte" descartados pelo chat. */
+export const IconInbox = (p) => (
+  <Svg {...p}>
+    <path d="M22 12h-6l-2 3h-4l-2-3H2" />
+    <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
   </Svg>
 );

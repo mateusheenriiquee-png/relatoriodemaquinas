@@ -6,8 +6,8 @@ import pg from 'pg';
  * Acesso ao Supabase para os scripts de migração.
  *
  * Lê credentials/supabase.env (fora do git) ou as variáveis de ambiente — as
- * de ambiente vencem, para o CI poder injetar sem arquivo. Mesma ideia de
- * scripts/lib/firebase-admin.mjs: a chave é resolvida num lugar só.
+ * de ambiente vencem, para o CI poder injetar sem arquivo. A chave é
+ * resolvida num lugar só.
  */
 
 function lerEnv() {

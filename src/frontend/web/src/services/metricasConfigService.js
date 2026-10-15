@@ -4,8 +4,8 @@ import { assinarTabela } from "./suportesStore";
 /**
  * metricasConfigService.js — configuração das métricas, em `config/metricas`.
  *
- * Um documento só, lido por todo mundo e escrito só por admin (as regras do
- * Firestore já garantem isso em `match /config/{document=**}`). Está no banco,
+ * Um documento só, lido por todo mundo e escrito só por admin (a RLS da tabela
+ * `config` no Supabase garante isso). Está no banco,
  * e não no localStorage, porque expediente e feriado são da EQUIPE: se cada
  * navegador guardasse o seu, dois técnicos veriam tempos médios diferentes para
  * o mesmo chamado e nenhum dos dois estaria errado.

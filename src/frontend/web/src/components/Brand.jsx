@@ -1,13 +1,8 @@
 /**
- * Identidade do painel: monograma em CSS + nome.
- * Substituiu o antigo logo.png — nenhum arquivo de imagem é usado.
+ * Identidade do painel: logo da Certify (public/logo-certify.jpg) + nome.
  */
 export default function Brand({ subtitulo = "Painel operacional", markOnly = false }) {
-  const mark = (
-    <div className="brand-mark" aria-hidden="true">
-      ST
-    </div>
-  );
+  const mark = <img className="brand-mark" src="/logo-certify.jpg" alt="" aria-hidden="true" />;
 
   if (markOnly) return mark;
 

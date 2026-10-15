@@ -270,20 +270,15 @@ h4 {
   min-width: 0;
 }
 
-/* Monograma — substituiu o arquivo de logo */
+/* Logo da Certify (public/logo-certify.jpg) */
 .brand-mark {
-  display: grid;
-  place-items: center;
+  display: block;
   width: 44px;
   height: 44px;
   flex-shrink: 0;
-  border-radius: 14px;
-  background: linear-gradient(145deg, var(--accent), var(--accent-strong));
-  color: var(--accent-ink);
-  font-weight: 800;
-  font-size: 0.95rem;
-  letter-spacing: 0.06em;
+  object-fit: contain;
   box-shadow: 0 6px 18px var(--accent-soft);
+  border-radius: 10px;
 }
 
 .brand-text h1 {
@@ -552,6 +547,106 @@ h4 {
   box-shadow: var(--ring);
 }
 
+/* Possíveis pedidos de suporte (DescartadasBotao, 09/10). */
+.descartadas-botao {
+  position: relative;
+}
+
+.descartadas-contador {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 18px;
+  text-align: center;
+}
+
+.descartadas-explica,
+.descartadas-vazio {
+  margin: 0 0 12px;
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+
+.descartadas-lista {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.descartadas-item {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+
+.descartadas-topo {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.descartadas-meta {
+  font-size: 0.78rem;
+  color: var(--faint);
+}
+
+.descartadas-mensagem {
+  margin: 8px 0;
+  padding-left: 10px;
+  border-left: 3px solid var(--accent-line);
+  white-space: pre-wrap;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.descartadas-ia {
+  margin: 0 0 8px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.descartadas-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Sino do aviso de chamado novo (AvisoToggle). */
+.aviso-toggle {
+  position: relative;
+}
+
+.aviso-toggle.aviso-desligado {
+  opacity: 0.6;
+}
+
+/* Ligado, mas o navegador ainda não deu permissão de notificação. */
+.aviso-toggle.aviso-pendente::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--surface-2);
+}
+
 /* -------------------------------------------------------------- campos */
 
 .field {
@@ -780,6 +875,7 @@ input[type="color"] {
 }
 
 .card {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -792,6 +888,34 @@ input[type="color"] {
   transition: background var(--t-fast), border-color var(--t-fast);
   /* Mesmo motivo do `.container`: nada de transform preenchido para sempre. */
   animation: card-in 220ms ease backwards;
+}
+
+/* Bolinha de mensagem nova do cliente — só em EM ANDAMENTO. Fica por cima da
+   borda superior direita do card, como uma notificação de app de chat. */
+.card-badge-mensagens {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-pill);
+  background: var(--st-andamento);
+  color: var(--bg);
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 0 0 2px var(--surface-2);
+  animation: card-badge-in 200ms ease backwards;
+}
+
+@keyframes card-badge-in {
+  from {
+    transform: scale(0.5);
+    opacity: 0;
+  }
 }
 
 .card:hover {
@@ -861,6 +985,68 @@ input[type="color"] {
 /* A borda esquerda repete o sinal para quem varre a lista de relance. */
 .card:has(.card-idade-critico) {
   border-left-color: var(--st-aberto);
+}
+
+/* Sinais ao lado do status (09/10): chamado parado e possível duplicado.
+   Mesma pílula da idade, na mesma linha do status — o card não cresce. */
+.card-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.card-sinal {
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  font-size: 0.7rem;
+  font-weight: 700;
+  white-space: nowrap;
+  border: 1px solid currentColor;
+}
+
+.card-sinal-parado {
+  color: var(--st-reagendado);
+  background: var(--st-reagendado-bg);
+}
+
+.card-sinal-sem-retorno {
+  color: var(--st-sem-retorno);
+  background: var(--st-sem-retorno-bg);
+}
+
+.card-sinal-duplicado {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.card:has(.card-sinal-duplicado) {
+  border-left-color: var(--accent);
+}
+
+/* Faixas de aviso no topo do painel lateral (possível duplicado, parado). */
+.drawer-aviso {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  font-size: 0.86rem;
+  color: var(--text);
+}
+
+.drawer-aviso-sem-retorno {
+  border-color: var(--st-sem-retorno);
+  background: var(--st-sem-retorno-bg);
+}
+
+.drawer-aviso-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .card-type {
@@ -1073,10 +1259,18 @@ input[type="color"] {
   border-top: 1px solid var(--border);
 }
 
+/* Uma linha só (pedido do usuário, 2026-10-09): até 10 botões dividem a
+   largura do painel em vez de quebrar para a linha de baixo. */
 .drawer-actions-row {
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.drawer-actions-row .btn-icon {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 42px;
 }
 
 
@@ -2275,6 +2469,56 @@ tbody tr:hover td {
 
 /* ---------------------------------------------------------- responsivo */
 
+/* Cabeçalho da lista numa linha só (pedido do usuário, 2026-10-09). Em tela
+   larga cabe tudo com rótulo; entre 1025 e 1300 px os botões secundários
+   (Dashboard, Admin, Atualizar, Exportar, Importar) ficam só com ícone — o
+   nome aparece ao passar o mouse. Abaixo de 1024 px vale o empilhamento de
+   sempre. */
+@media (min-width: 1025px) {
+  .header .actions {
+    flex-wrap: nowrap;
+    gap: 8px;
+  }
+
+  .header .actions .btn {
+    padding: 9px 13px;
+    white-space: nowrap;
+  }
+
+  .brand-text h1 {
+    white-space: nowrap;
+  }
+
+  /* A marca não encolhe: com o título sem quebra, encolher fazia o texto
+     invadir o primeiro botão (13/10). */
+  .header .brand {
+    flex-shrink: 0;
+  }
+}
+
+/* Entre 1301 e 1420 px (ex.: tela de 1366) não cabe tudo com nome desde que
+   entrou o botão de possíveis pedidos: Atualizar/Exportar/Importar ficam só
+   com ícone; Dashboard e Admin mantêm o nome (13/10). */
+@media (min-width: 1301px) and (max-width: 1420px) {
+  .header .actions .btn-ghost .btn-rotulo {
+    display: none;
+  }
+
+  .header .actions .btn-ghost:has(.btn-rotulo) {
+    padding: 9px 11px;
+  }
+}
+
+@media (min-width: 1025px) and (max-width: 1300px) {
+  .header .actions .btn-rotulo {
+    display: none;
+  }
+
+  .header .actions .btn:has(.btn-rotulo) {
+    padding: 9px 11px;
+  }
+}
+
 @media (max-width: 1024px) {
   .dashboard-tables {
     grid-template-columns: 1fr;
@@ -2945,4 +3189,207 @@ tbody tr:hover td {
 .field-erro-texto {
   font-size: 0.78rem;
   color: var(--danger);
+}
+
+/* Origem de um campo preenchido automaticamente ("Kommo", "foto · confira"). */
+.fonte-dado {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--muted);
+  background: var(--surface-hover);
+  vertical-align: 1px;
+}
+
+/* Deduzido ou lido por IA: o técnico precisa conferir. */
+.fonte-dado-sugerido {
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+}
+
+.prefill-aviso {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+/* "Novo suporte" pelo lead: o cliente já tem chamado. */
+.novo-lead-existente {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  font-size: 0.86rem;
+}
+
+.novo-lead-existente small {
+  color: var(--muted);
+}
+
+/* Formulário aberto a partir do lead: de onde vieram os dados. */
+.form-origem-lead {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-hover);
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.form-origem-lead ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+/* Motivo × sistema no dashboard (09/10): tabela pequena em vez de barras
+   empilhadas — são 5 motivos e a paleta validada tem 3 cores. O tom da célula
+   é a fatia do motivo naquele sistema (--peso, de 0 a 1). */
+.tabela-cruzada-wrap {
+  overflow-x: auto;
+}
+
+.tabela-cruzada {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.86rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.tabela-cruzada th,
+.tabela-cruzada td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.tabela-cruzada thead th {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.tabela-cruzada tbody th {
+  text-align: left;
+  font-size: 0.86rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text);
+}
+
+.tabela-cruzada td {
+  color: var(--faint);
+}
+
+.tabela-cruzada td.tem-valor {
+  color: var(--text-strong);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--viz-1) calc(var(--peso) * 45%), transparent);
+}
+
+.tabela-cruzada-total {
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+/* Palavras-chave do chat (Admin e lista de possíveis pedidos, 13/10). */
+.palavras-editor {
+  display: grid;
+  gap: 12px;
+}
+
+.palavras-dica {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.palavras-form {
+  display: flex;
+  gap: 8px;
+}
+
+.palavras-form input {
+  flex: 1;
+  min-width: 0;
+}
+
+.palavras-topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.palavras-topo input {
+  flex: 1 1 220px;
+  max-width: 320px;
+}
+
+.palavras-meta {
+  font-size: 0.78rem;
+  color: var(--faint);
+}
+
+.palavras-lista {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 55vh;
+  overflow-y: auto;
+}
+
+.palavras-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  font-size: 0.82rem;
+  color: var(--text);
+}
+
+.palavras-chip button {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--faint);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.palavras-chip button:hover:not(:disabled) {
+  background: var(--st-aberto-bg);
+  color: var(--st-aberto);
+}
+
+.palavras-compacto {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
 }
